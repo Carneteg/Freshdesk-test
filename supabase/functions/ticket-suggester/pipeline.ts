@@ -7,6 +7,7 @@
 import { Claude, Freshdesk, type Ticket } from "./clients.ts";
 import { analysePrompt, draftPrompt, PROMPT_VERSION, type SourceDoc, verifyPrompt } from "./prompts.ts";
 import {
+  type BugGuidance,
   classifyUsage,
   type Confidence,
   extractJSON,
@@ -23,6 +24,8 @@ import {
 
 interface Analysis {
   language: string;
+  ticket_type: string;
+  keywords: string[];
   questions_asked: string[];
   search_queries: string[];
 }
@@ -38,6 +41,8 @@ interface Draft {
   claims: string[];
   rationale: string;
   coverage: Coverage[];
+  follow_up_questions: string[];
+  bug_guidance: BugGuidance;
 }
 
 interface VerifyClaim {
@@ -48,6 +53,12 @@ interface VerifyClaim {
 
 interface VerifyResult {
   claims: VerifyClaim[];
+}
+
+const TICKET_TYPES = ["question", "howto", "bug", "unclear"];
+
+function strList(v: unknown): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
 }
 
 // ── Pipeline ──────────────────────────────────────────────────────────────────
@@ -64,6 +75,8 @@ export interface Suggestion {
   trigger_message_id: string;
   subject: string;
   language: string;
+  ticket_type: string;
+  keywords: string[];
   confidence: Confidence;
   draft: string | null;
   questions: string[];
@@ -71,6 +84,8 @@ export interface Suggestion {
   sources: SourceDoc[];
   verify: VerifyResult | null;
   rationale: string | null;
+  follow_up_questions: string[];
+  bug_guidance: BugGuidance;
   qa_answered: number;
   qa_total: number;
   used: "used" | "partly" | "not" | null;
@@ -84,12 +99,14 @@ export interface Suggestion {
 
 async function analyse(deps: PipelineDeps, subject: string, customerText: string): Promise<Analysis> {
   const { system, user } = analysePrompt(subject, customerText);
-  const out = await deps.claude.complete(system, [{ role: "user", content: user }], { maxTokens: 600 });
+  const out = await deps.claude.complete(system, [{ role: "user", content: user }], { maxTokens: 700 });
   const j = extractJSON<Partial<Analysis>>(out);
   return {
     language: j.language ?? "other",
-    questions_asked: Array.isArray(j.questions_asked) ? j.questions_asked : [],
-    search_queries: Array.isArray(j.search_queries) ? j.search_queries : [],
+    ticket_type: TICKET_TYPES.includes(j.ticket_type ?? "") ? j.ticket_type! : "question",
+    keywords: strList(j.keywords),
+    questions_asked: strList(j.questions_asked),
+    search_queries: strList(j.search_queries),
   };
 }
 
@@ -131,16 +148,23 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
 
 async function draftReply(
   deps: PipelineDeps,
-  input: { subject: string; language: string; questions: string[]; sources: SourceDoc[] },
+  input: {
+    subject: string;
+    language: string;
+    ticketType: string;
+    questions: string[];
+    customerText: string;
+    sources: SourceDoc[];
+  },
 ): Promise<Draft> {
   const { system, user } = draftPrompt(input);
-  const out = await deps.claude.complete(system, [{ role: "user", content: user }], { maxTokens: 1500 });
+  const out = await deps.claude.complete(system, [{ role: "user", content: user }], { maxTokens: 1800 });
   const j = extractJSON<Partial<Draft>>(out);
   const confidence: Confidence = j.confidence === "high" || j.confidence === "low" ? j.confidence : "none";
   return {
     confidence,
     reply: typeof j.reply === "string" ? j.reply : "",
-    claims: Array.isArray(j.claims) ? j.claims : [],
+    claims: strList(j.claims),
     rationale: typeof j.rationale === "string" ? j.rationale : "",
     coverage: Array.isArray(j.coverage)
       ? j.coverage.filter((c) => c && typeof c.question === "string").map((c) => ({
@@ -148,6 +172,11 @@ async function draftReply(
         answered: c.answered === true,
       }))
       : [],
+    follow_up_questions: strList(j.follow_up_questions),
+    bug_guidance: {
+      repro_steps: strList(j.bug_guidance?.repro_steps),
+      customer_steps: strList(j.bug_guidance?.customer_steps),
+    },
   };
 }
 
@@ -169,7 +198,9 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   let draft = await draftReply(deps, {
     subject: ticket.subject,
     language: a.language,
+    ticketType: a.ticket_type,
     questions: a.questions_asked,
+    customerText,
     sources,
   });
 
@@ -205,6 +236,9 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     confidence: draft.confidence,
     draft: draft.reply,
     rationale: draft.rationale,
+    ticketType: a.ticket_type,
+    followUpQuestions: draft.follow_up_questions,
+    bugGuidance: draft.bug_guidance,
     promptVersion: PROMPT_VERSION,
     searchQueries: a.search_queries,
     sources,
@@ -218,6 +252,8 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     trigger_message_id: triggerId,
     subject: ticket.subject,
     language: a.language,
+    ticket_type: a.ticket_type,
+    keywords: a.keywords,
     confidence: draft.confidence,
     draft: draft.reply || null,
     questions: a.questions_asked,
@@ -225,6 +261,8 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     sources,
     verify,
     rationale: draft.rationale || null,
+    follow_up_questions: draft.follow_up_questions,
+    bug_guidance: draft.bug_guidance,
     qa_answered: qaAnswered,
     qa_total: qaTotal,
     used: null, // filled later by usage reconciliation / replay
@@ -246,6 +284,8 @@ export function toRow(
     trigger_message_id: s.trigger_message_id,
     subject: s.subject,
     language: s.language,
+    ticket_type: s.ticket_type,
+    keywords: s.keywords,
     confidence: s.confidence,
     draft: s.draft,
     note_id: extra.noteId ?? null,
@@ -254,6 +294,8 @@ export function toRow(
     sources: s.sources,
     verify: s.verify,
     rationale: s.rationale,
+    follow_up_questions: s.follow_up_questions,
+    bug_guidance: s.bug_guidance,
     qa_answered: s.qa_answered,
     qa_total: s.qa_total,
     used: extra.used ?? s.used,

@@ -168,3 +168,41 @@ Deno.test("classifyUsage: thresholds map to used / partly / not", () => {
   assertEquals(classifyUsage(0.4), "partly");
   assertEquals(classifyUsage(0.1), "not");
 });
+
+Deno.test("renderNote: unclear ticket shows type and follow-up questions", () => {
+  const html = renderNote({
+    confidence: "none",
+    draft: "",
+    ticketType: "unclear",
+    followUpQuestions: ["Which payroll run?", "What error do you see?"],
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 0,
+  });
+  assertStringIncludes(html, "Type: unclear");
+  assertStringIncludes(html, "Suggested follow-up questions");
+  assertStringIncludes(html, "Which payroll run?");
+});
+
+Deno.test("renderNote: bug ticket shows repro and customer steps", () => {
+  const html = renderNote({
+    confidence: "low",
+    draft: "Try clearing the cache.",
+    ticketType: "bug",
+    bugGuidance: {
+      repro_steps: ["Open the report", "Click export"],
+      customer_steps: ["Clear cache", "Retry"],
+    },
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+  });
+  assertStringIncludes(html, "Reproduction (for you):");
+  assertStringIncludes(html, "Click export");
+  assertStringIncludes(html, "Steps for the customer:");
+  assertStringIncludes(html, "Clear cache");
+});

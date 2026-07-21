@@ -12,6 +12,8 @@ create table if not exists suggestions (
   trigger_message_id text   not null,
   subject            text,
   language           text,            -- detected: no | sv | en | da | fi | other
+  ticket_type        text,            -- question | howto | bug | unclear
+  keywords           jsonb,           -- topic tags for traceability (internal only, §3)
 
   -- what it produced
   confidence         text   not null, -- high | low | none
@@ -24,6 +26,8 @@ create table if not exists suggestions (
   sources            jsonb,           -- retrieved KB solutions / past tickets
   verify             jsonb,           -- per-claim verdict from Claude call 3
   rationale          text,            -- short "why this answer is right" shown in the note
+  follow_up_questions jsonb,          -- clarifying questions when the request is unclear
+  bug_guidance       jsonb,           -- { repro_steps, customer_steps } for bug tickets
 
   -- Q/A score: how many of the customer's questions the draft answered (§12).
   qa_answered        integer,

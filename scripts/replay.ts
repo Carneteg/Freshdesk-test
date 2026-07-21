@@ -71,9 +71,10 @@ for (const t of tickets) {
     console.log(bar);
     console.log(`#${t.id}  ${t.subject}`);
     console.log(
-      `confidence=${s.confidence}  Q/A=${s.qa_answered}/${s.qa_total}  ` +
+      `type=${s.ticket_type}  confidence=${s.confidence}  Q/A=${s.qa_answered}/${s.qa_total}  ` +
         `language=${s.language}  ${s.latency_ms}ms`,
     );
+    if (s.keywords.length) console.log(`keywords: ${s.keywords.join(", ")}`);
     console.log(`usage: ${used} (similarity ${sim} vs the agent's real reply)`);
     if (s.sources.length) {
       console.log("sources:");
@@ -83,6 +84,15 @@ for (const t of tickets) {
     }
     console.log("\nSUGGESTED:\n" + (s.draft ?? "(no confident answer)"));
     if (s.rationale) console.log("\nWHY (rationale):\n" + s.rationale);
+    if (s.follow_up_questions.length) {
+      console.log("\nFOLLOW-UP QUESTIONS:\n  - " + s.follow_up_questions.join("\n  - "));
+    }
+    if (s.bug_guidance.repro_steps.length) {
+      console.log("\nREPRO (agent):\n  - " + s.bug_guidance.repro_steps.join("\n  - "));
+    }
+    if (s.bug_guidance.customer_steps.length) {
+      console.log("\nCUSTOMER STEPS:\n  - " + s.bug_guidance.customer_steps.join("\n  - "));
+    }
     console.log("\nACTUALLY SENT BY AGENT:\n" + (actual || "(none found)"));
     console.log("");
   } catch (err) {

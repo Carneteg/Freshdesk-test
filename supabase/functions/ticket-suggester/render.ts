@@ -6,6 +6,11 @@ import type { SourceDoc } from "./prompts.ts";
 
 export type Confidence = "high" | "low" | "none";
 
+export interface BugGuidance {
+  repro_steps: string[]; // for the agent, to confirm the reported problem
+  customer_steps: string[]; // safe step-by-step for the customer to try
+}
+
 // Parse the first JSON object out of a model response. Models sometimes wrap it
 // in prose or ```json fences — grab the outermost { ... }.
 export function extractJSON<T = unknown>(text: string): T {
@@ -120,6 +125,9 @@ export interface NoteData {
   confidence: Confidence;
   draft: string;
   rationale?: string;
+  ticketType?: string;
+  followUpQuestions?: string[];
+  bugGuidance?: BugGuidance;
   promptVersion: string;
   searchQueries: string[];
   sources: SourceDoc[];
@@ -139,21 +147,25 @@ const BADGE: Record<Confidence, string> = {
 // URL could be built.
 function renderSource(s: SourceDoc): string {
   const label = s.kind === "kb" ? `KB article #${s.id}` : `Ticket #${s.id}`;
-  const name = s.url
-    ? `<a href="${esc(s.url)}">${esc(s.title)}</a>`
-    : esc(s.title);
+  const name = s.url ? `<a href="${esc(s.url)}">${esc(s.title)}</a>` : esc(s.title);
   return `<li>${name} — ${esc(label)}</li>`;
 }
 
+function renderList(items: string[], ordered: boolean): string {
+  const tag = ordered ? "ol" : "ul";
+  return `<${tag}>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</${tag}>`;
+}
+
 // Render the private note. Always posted, including at confidence "none" —
-// silence is ambiguous (CLAUDE.md §2). The header carries the Confidence and
-// Q/A score; low/none notes state what was searched and what was missing, which
-// doubles as a knowledge-base gap report.
+// silence is ambiguous (CLAUDE.md §2). The header carries the ticket type,
+// Confidence, and Q/A score; low/none notes state what was searched and what was
+// missing, which doubles as a knowledge-base gap report.
 export function renderNote(r: NoteData): string {
   const out: string[] = [];
+  const typePart = r.ticketType ? `Type: ${esc(r.ticketType)} · ` : "";
   out.push(
     `<p><strong>AI suggested reply</strong><br>` +
-      `Confidence: ${esc(BADGE[r.confidence])} · ` +
+      `${typePart}Confidence: ${esc(BADGE[r.confidence])} · ` +
       `Q/A: answers ${r.qaAnswered} of ${r.qaTotal} question(s) · ` +
       `<em>${esc(r.promptVersion)}</em></p>`,
   );
@@ -167,6 +179,24 @@ export function renderNote(r: NoteData): string {
     out.push(
       "<p>No grounded answer was found in the knowledge base or past resolved tickets.</p>",
     );
+  }
+
+  // When the customer's request is unclear, suggest what to ask them.
+  if (r.followUpQuestions && r.followUpQuestions.length) {
+    out.push(`<p><strong>Suggested follow-up questions:</strong></p>`);
+    out.push(renderList(r.followUpQuestions, false));
+  }
+
+  // Bug reports: reproduction for the agent, safe steps for the customer.
+  if (r.bugGuidance) {
+    if (r.bugGuidance.repro_steps.length) {
+      out.push(`<p><strong>Reproduction (for you):</strong></p>`);
+      out.push(renderList(r.bugGuidance.repro_steps, true));
+    }
+    if (r.bugGuidance.customer_steps.length) {
+      out.push(`<p><strong>Steps for the customer:</strong></p>`);
+      out.push(renderList(r.bugGuidance.customer_steps, true));
+    }
   }
 
   if (r.searchQueries.length) {
