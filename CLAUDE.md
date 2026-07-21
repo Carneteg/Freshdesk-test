@@ -276,3 +276,13 @@ The `MY_AGENT_ID` env var is authoritative; both the poll filter and the
 `responder_id` re-check use it. At startup, call `GET /api/v2/agents/me` once
 and assert it equals `MY_AGENT_ID`; on mismatch, refuse to run and log an error
 rather than risk suggesting on the wrong agent's tickets.
+
+**Agent identity.** The single monitored agent is **Tobias Carneteg**. As a
+second, defensive check the startup routine also verifies the name returned by
+`/agents/me` matches (env `EXPECTED_AGENT_NAME`, default `Tobias Carneteg`); a
+mismatch is warned, an id mismatch is fatal.
+
+**DPA — cleared for Gate 1.** Per Tobias (2026-07-21) the DPA position on
+Anthropic and Supabase is confirmed OK, so replaying real closed tickets is
+permitted. The "flag rather than proceed" rule in Section 11 is satisfied for
+Gate 1; it still applies to any *new* data source or a move to live/production.
