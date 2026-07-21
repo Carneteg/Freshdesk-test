@@ -2,6 +2,7 @@
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import {
   classifyUsage,
+  deriveTags,
   esc,
   extractJSON,
   lastAgentReply,
@@ -167,6 +168,17 @@ Deno.test("classifyUsage: thresholds map to used / partly / not", () => {
   assertEquals(classifyUsage(0.9), "used");
   assertEquals(classifyUsage(0.4), "partly");
   assertEquals(classifyUsage(0.1), "not");
+});
+
+Deno.test("deriveTags: caps at 3 single-word lowercase tags, deduped", () => {
+  assertEquals(
+    deriveTags(["Payroll run", "vacation", "payroll", "Sick leave", "bonus"]),
+    ["payroll", "vacation", "sick"],
+  );
+});
+
+Deno.test("deriveTags: strips punctuation, keeps Nordic letters, drops empties", () => {
+  assertEquals(deriveTags(["Fastlønn!", "fastlønn", "   ", "a"]), ["fastlønn"]);
 });
 
 Deno.test("renderNote: unclear ticket shows type and follow-up questions", () => {

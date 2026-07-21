@@ -1,8 +1,8 @@
 // Freshdesk + Claude API clients.
 //
 // Every outbound call has an explicit timeout and 429/Retry-After handling
-// (CLAUDE.md §7, §12). The ONLY write to any external system is postPrivateNote().
-// Everything else is read-only — that is what keeps the security review narrow.
+// (CLAUDE.md §7, §12). Writes are limited to postPrivateNote() and setTags()
+// (keyword tags for visibility) — both target the same Freshdesk ticket.
 
 const DEFAULT_TIMEOUT_MS = 20_000;
 
@@ -73,6 +73,7 @@ export interface Conversation {
 
 export interface Ticket extends TicketSummary {
   description_text: string;
+  tags?: string[];
   conversations?: Conversation[];
 }
 
@@ -160,6 +161,19 @@ export class Freshdesk {
     if (!res.ok) throw new HttpError(res.status, url, await res.text());
     const note = await res.json() as { id: number };
     return note.id;
+  }
+
+  // Second write (CLAUDE.md §12): replace the ticket's tag set. PUT /tickets/{id}
+  // REPLACES the whole tags array — there is no additive endpoint — so callers
+  // merge with the ticket's existing tags first to avoid clobbering them.
+  async setTags(ticketId: number, tags: string[]): Promise<void> {
+    const url = `${this.base}/tickets/${ticketId}`;
+    const res = await fetchWithRetry(url, {
+      method: "PUT",
+      headers: { authorization: this.auth, "content-type": "application/json" },
+      body: JSON.stringify({ tags }),
+    });
+    if (!res.ok) throw new HttpError(res.status, url, await res.text());
   }
 }
 

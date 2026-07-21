@@ -62,8 +62,10 @@ pg_cron (every minute)
 Three systems total: **Freshdesk** (trigger + data + KB + destination),
 **Supabase** (compute + log), **Claude API** (reasoning). Nothing else.
 
-**The only write to any external system** is the private note. Everything else
-is read-only. Keep it that way — it is what keeps the security review narrow.
+**The only write to any external system** is the private note — plus, as of
+2026-07-21, up to three single-word keyword tags on the same ticket (see §12,
+"Ticket tagging"). Everything else is read-only. Keep it that way — the two
+writes both target one ticket, which is what keeps the security review narrow.
 
 ---
 
@@ -302,3 +304,19 @@ signal a Gate 2 learning loop would train on. Views: `gate1_scorecard` (human
 verdict), `usage_scorecard` (usage + coverage), `calibration`, `failures`.
 The learning loop itself (feeding accepted replies back into generation) is
 deliberately deferred to Gate 2 — it needs the corpus these fields now collect.
+
+**Triage, follow-ups, bug guidance.** analyse also classifies `ticket_type`
+(question | howto | bug | unclear) and extracts topic `keywords`. The draft adds
+`follow_up_questions` (shown when the request is unclear, instead of a bare "no
+answer") and `bug_guidance` (reproduction steps for the agent + safe step-by-step
+for the customer, for bug tickets). All grounded in sources; nothing invented.
+
+**Ticket tagging (visibility) — §3 amended.** Per Tobias (2026-07-21) the system
+now also writes up to **3 single-word** keyword tags onto the Freshdesk ticket,
+**merged** with existing tags (never clobbering them). This is a deliberate
+SECOND external write, amending §3's "only write is the private note": the
+security review must now also cover ticket tag updates (`PUT /tickets/{id}`, the
+`tags` field). The full keyword list still lives internally in
+`suggestions.keywords`; the ticket receives at most the first three, one word
+each. A tag-write failure is logged and skipped — it never fails the ticket,
+since the note is the real deliverable.

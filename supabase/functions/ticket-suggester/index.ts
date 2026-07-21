@@ -13,7 +13,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Claude, Freshdesk } from "./clients.ts";
 import { PROMPT_VERSION } from "./prompts.ts";
-import { latestCustomerMessage } from "./render.ts";
+import { deriveTags, latestCustomerMessage } from "./render.ts";
 import { reconcileUsage, runPipeline, toRow } from "./pipeline.ts";
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -121,6 +121,18 @@ async function pollOnce(cfg: Config): Promise<Summary> {
       const noteId = await fd.postPrivateNote(t.id, s.note_html);
       await db.from("suggestions").insert(toRow(s, { noteId }));
       summary.processed++;
+
+      // Visibility (CLAUDE.md §12): write up to 3 single-word keyword tags onto
+      // the ticket, merged with its existing tags. A tag failure must not fail
+      // the ticket — the note (the real deliverable) is already posted.
+      const tags = deriveTags(s.keywords);
+      if (tags.length) {
+        try {
+          await fd.setTags(t.id, Array.from(new Set([...(ticket.tags ?? []), ...tags])));
+        } catch (e) {
+          console.warn(`tag write failed for ${t.id}:`, e instanceof Error ? e.message : e);
+        }
+      }
     } catch (err) {
       // No silent failures (CLAUDE.md §10). Record the error against the ticket.
       summary.errors++;

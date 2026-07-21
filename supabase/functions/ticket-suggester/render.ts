@@ -83,6 +83,23 @@ export function classifyUsage(sim: number): "used" | "partly" | "not" {
   return "not";
 }
 
+// Up to `max` single-word, lowercase tags derived from the analyse keywords, for
+// writing onto the Freshdesk ticket (CLAUDE.md §12). One word per tag: the first
+// token of each keyword, punctuation stripped, deduped.
+export function deriveTags(keywords: string[], max = 3): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const kw of keywords) {
+    const first = (kw ?? "").trim().split(/\s+/)[0] ?? "";
+    const tag = first.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "").slice(0, 32);
+    if (tag.length < 2 || seen.has(tag)) continue;
+    seen.add(tag);
+    out.push(tag);
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 // Remove verbatim quotes (verify's "unsupported" statements) from the draft,
 // then tidy up the whitespace and orphaned punctuation left behind.
 export function stripQuotes(text: string, quotes: string[]): string {
