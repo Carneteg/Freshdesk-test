@@ -1,12 +1,14 @@
 // Unit tests for the pure functions (CLAUDE.md §8). Run: `deno task test`.
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import {
+  classifyUsage,
   esc,
   extractJSON,
   lastAgentReply,
   latestCustomerMessage,
   lower,
   renderNote,
+  similarity,
   strip,
   stripQuotes,
 } from "./render.ts";
@@ -97,21 +99,72 @@ Deno.test("renderNote: none-confidence still produces a note with the gap report
     promptVersion: "test",
     searchQueries: ["vacation balance"],
     sources: [],
+    qaAnswered: 0,
+    qaTotal: 2,
   });
-  assertStringIncludes(html, "No confident answer");
+  assertStringIncludes(html, "NONE");
+  assertStringIncludes(html, "answers 0 of 2 question(s)");
   assertStringIncludes(html, "Searched for:");
   assertStringIncludes(html, "knowledge-base gap");
 });
 
-Deno.test("renderNote: high-confidence renders the draft and sources", () => {
+Deno.test("renderNote: high-confidence shows scores, draft, and a linked source", () => {
   const html = renderNote({
     confidence: "high",
     draft: "Line one\nLine two",
     promptVersion: "test",
     searchQueries: [],
-    sources: [{ ref: "kb:5", title: "Reset guide", text: "..." }],
+    sources: [{
+      ref: "kb:5",
+      kind: "kb",
+      id: 5,
+      title: "Reset guide",
+      text: "...",
+      url: "https://x.freshdesk.com/a/solutions/articles/5",
+    }],
+    qaAnswered: 3,
+    qaTotal: 3,
   });
-  assertStringIncludes(html, "High confidence");
+  assertStringIncludes(html, "HIGH");
+  assertStringIncludes(html, "answers 3 of 3 question(s)");
   assertStringIncludes(html, "Line one<br>Line two");
-  assertStringIncludes(html, "kb:5");
+  assertStringIncludes(html, '<a href="https://x.freshdesk.com/a/solutions/articles/5">Reset guide</a>');
+  assertStringIncludes(html, "KB article #5");
+});
+
+Deno.test("renderNote: a past-ticket source links to the ticket", () => {
+  const html = renderNote({
+    confidence: "low",
+    draft: "See prior case.",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [{
+      ref: "ticket:9001",
+      kind: "ticket",
+      id: 9001,
+      title: "Similar payroll question",
+      text: "...",
+      url: "https://x.freshdesk.com/a/tickets/9001",
+    }],
+    qaAnswered: 1,
+    qaTotal: 1,
+  });
+  assertStringIncludes(html, '<a href="https://x.freshdesk.com/a/tickets/9001">Similar payroll question</a>');
+  assertStringIncludes(html, "Ticket #9001");
+});
+
+Deno.test("similarity: identical text is 1, disjoint is 0", () => {
+  assertEquals(similarity("reset your password here", "reset your password here"), 1);
+  assertEquals(similarity("alpha bravo charlie", "xxxx yyyy zzzz"), 0);
+});
+
+Deno.test("similarity: partial overlap is between 0 and 1", () => {
+  const s = similarity("reset your password in settings", "reset password from the settings page");
+  if (!(s > 0 && s < 1)) throw new Error(`expected partial overlap, got ${s}`);
+});
+
+Deno.test("classifyUsage: thresholds map to used / partly / not", () => {
+  assertEquals(classifyUsage(0.9), "used");
+  assertEquals(classifyUsage(0.4), "partly");
+  assertEquals(classifyUsage(0.1), "not");
 });

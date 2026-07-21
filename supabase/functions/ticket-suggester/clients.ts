@@ -86,13 +86,23 @@ export interface Solution {
 }
 
 export class Freshdesk {
+  private readonly origin: string;
   private readonly base: string;
   private readonly auth: string;
 
   constructor(domain: string, apiKey: string) {
-    // domain "simployer" -> https://simployer.freshdesk.com/api/v2
-    this.base = `https://${domain}.freshdesk.com/api/v2`;
+    // domain "simployer" -> https://simployer.freshdesk.com
+    this.origin = `https://${domain}.freshdesk.com`;
+    this.base = `${this.origin}/api/v2`;
     this.auth = "Basic " + btoa(`${apiKey}:X`);
+  }
+
+  // Agent-facing links for the private note (agents, not customers, read notes).
+  articleUrl(id: number): string {
+    return `${this.origin}/a/solutions/articles/${id}`;
+  }
+  ticketUrl(id: number): string {
+    return `${this.origin}/a/tickets/${id}`;
   }
 
   private async get<T>(path: string, timeoutMs?: number): Promise<T> {

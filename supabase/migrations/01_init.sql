@@ -23,9 +23,19 @@ create table if not exists suggestions (
   search_queries     jsonb,           -- queries analyse asked for
   sources            jsonb,           -- retrieved KB solutions / past tickets
   verify             jsonb,           -- per-claim verdict from Claude call 3
+  rationale          text,            -- short "why this answer is right" shown in the note
+
+  -- Q/A score: how many of the customer's questions the draft answered (§12).
+  qa_answered        integer,
+  qa_total           integer,
 
   -- the human judgement this whole experiment exists to collect
   verdict            text,            -- usable | unusable | edited | null (unjudged)
+
+  -- usage capture: did the agent actually use our suggestion? Auto-derived by
+  -- comparing our draft to the reply they eventually sent (§12).
+  used               text,            -- used | partly | not | null (not yet scored)
+  similarity         numeric,         -- word-set Jaccard, 0..1
 
   -- operational
   prompt_version     text   not null,
@@ -37,7 +47,9 @@ create table if not exists suggestions (
   constraint suggestions_confidence_chk
     check (confidence in ('high', 'low', 'none')),
   constraint suggestions_verdict_chk
-    check (verdict in ('usable', 'unusable', 'edited') or verdict is null)
+    check (verdict in ('usable', 'unusable', 'edited') or verdict is null),
+  constraint suggestions_used_chk
+    check (used in ('used', 'partly', 'not') or used is null)
 );
 
 -- Deduplication key (§12). A newer customer message => new (ticket_id,
@@ -88,6 +100,24 @@ select id, ticket_id, error, prompt_version, created_at
 from suggestions
 where error is not null
 order by created_at desc;
+
+-- Did the notes get used, and how well did they cover the questions? The
+-- learning signal a future gate would train on (§12).
+create or replace view usage_scorecard with (security_invoker = on) as
+select
+  prompt_version,
+  count(*)                                       as generated,
+  count(used)                                    as usage_measured,
+  count(*) filter (where used = 'used')          as used_full,
+  count(*) filter (where used = 'partly')        as used_partly,
+  count(*) filter (where used = 'not')           as used_not,
+  round(avg(similarity), 3)                      as avg_similarity,
+  round(avg(case when qa_total > 0 then 100.0 * qa_answered / qa_total end), 1)
+                                                 as avg_qa_pct
+from suggestions
+where error is null
+group by prompt_version
+order by prompt_version;
 
 -- The suggestions table holds ticket PII (§11). Only the Edge Function touches
 -- it, connecting with the service-role key, which bypasses RLS. Enabling RLS

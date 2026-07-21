@@ -11,7 +11,11 @@
 // The DPA position is confirmed OK for Gate 1 (CLAUDE.md §11).
 
 import { Claude, Freshdesk } from "../supabase/functions/ticket-suggester/clients.ts";
-import { lastAgentReply } from "../supabase/functions/ticket-suggester/render.ts";
+import {
+  classifyUsage,
+  lastAgentReply,
+  similarity,
+} from "../supabase/functions/ticket-suggester/render.ts";
 import { runPipeline } from "../supabase/functions/ticket-suggester/index.ts";
 
 function env(name: string): string {
@@ -60,12 +64,26 @@ for (const t of tickets) {
   const bar = "─".repeat(76);
   try {
     const s = await runPipeline({ fd, claude, model, withRetrieval }, t);
+    const actual = lastAgentReply(t);
+    const sim = similarity(s.draft ?? "", actual);
+    const used = classifyUsage(sim);
+
     console.log(bar);
     console.log(`#${t.id}  ${t.subject}`);
-    console.log(`confidence=${s.confidence}  language=${s.language}  ${s.latency_ms}ms`);
-    console.log(`sources: ${s.sources.map((x) => x.ref).join(", ") || "none"}`);
+    console.log(
+      `confidence=${s.confidence}  Q/A=${s.qa_answered}/${s.qa_total}  ` +
+        `language=${s.language}  ${s.latency_ms}ms`,
+    );
+    console.log(`usage: ${used} (similarity ${sim} vs the agent's real reply)`);
+    if (s.sources.length) {
+      console.log("sources:");
+      for (const x of s.sources) console.log(`  - ${x.title} [${x.ref}] ${x.url ?? ""}`);
+    } else {
+      console.log("sources: none");
+    }
     console.log("\nSUGGESTED:\n" + (s.draft ?? "(no confident answer)"));
-    console.log("\nACTUALLY SENT BY AGENT:\n" + (lastAgentReply(t) || "(none found)"));
+    if (s.rationale) console.log("\nWHY (rationale):\n" + s.rationale);
+    console.log("\nACTUALLY SENT BY AGENT:\n" + (actual || "(none found)"));
     console.log("");
   } catch (err) {
     console.log(bar);

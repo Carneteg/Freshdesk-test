@@ -49,6 +49,35 @@ export function lower(c: Confidence): Confidence {
   return c === "high" ? "low" : c === "low" ? "low" : "none";
 }
 
+// ── Usage capture ─────────────────────────────────────────────────────────────
+// Did the agent actually use our suggestion? Compare our draft to the reply they
+// eventually sent. Word-set Jaccard: cheap, explainable, language-agnostic.
+
+function tokenize(s: string): string[] {
+  return strip(s)
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 2);
+}
+
+export function similarity(a: string, b: string): number {
+  const A = new Set(tokenize(a));
+  const B = new Set(tokenize(b));
+  if (!A.size || !B.size) return 0;
+  let inter = 0;
+  for (const w of A) if (B.has(w)) inter++;
+  const union = A.size + B.size - inter;
+  return union ? Number((inter / union).toFixed(3)) : 0;
+}
+
+// Thresholds are a first cut — tune once real data lands.
+export function classifyUsage(sim: number): "used" | "partly" | "not" {
+  if (sim >= 0.6) return "used";
+  if (sim >= 0.25) return "partly";
+  return "not";
+}
+
 // Remove verbatim quotes (verify's "unsupported" statements) from the draft,
 // then tidy up the whitespace and orphaned punctuation left behind.
 export function stripQuotes(text: string, quotes: string[]): string {
@@ -90,30 +119,50 @@ export function lastAgentReply(t: Ticket): string {
 export interface NoteData {
   confidence: Confidence;
   draft: string;
+  rationale?: string;
   promptVersion: string;
   searchQueries: string[];
   sources: SourceDoc[];
+  qaAnswered: number;
+  qaTotal: number;
   unsupportedNote?: string;
 }
 
 const BADGE: Record<Confidence, string> = {
-  high: "🟢 High confidence",
-  low: "🟡 Low confidence",
-  none: "⚪ No confident answer",
+  high: "🟢 HIGH",
+  low: "🟡 LOW",
+  none: "⚪ NONE",
 };
 
+// One line item per source, hyperlinked: KB solutions link to the article, past
+// tickets link to the ticket (agent-facing URLs). Falls back to plain text if no
+// URL could be built.
+function renderSource(s: SourceDoc): string {
+  const label = s.kind === "kb" ? `KB article #${s.id}` : `Ticket #${s.id}`;
+  const name = s.url
+    ? `<a href="${esc(s.url)}">${esc(s.title)}</a>`
+    : esc(s.title);
+  return `<li>${name} — ${esc(label)}</li>`;
+}
+
 // Render the private note. Always posted, including at confidence "none" —
-// silence is ambiguous (CLAUDE.md §2). Low/none notes state what was searched
-// and what was missing, which doubles as a knowledge-base gap report.
+// silence is ambiguous (CLAUDE.md §2). The header carries the Confidence and
+// Q/A score; low/none notes state what was searched and what was missing, which
+// doubles as a knowledge-base gap report.
 export function renderNote(r: NoteData): string {
   const out: string[] = [];
   out.push(
-    `<p><strong>AI suggested reply</strong> — ${esc(BADGE[r.confidence])} ` +
-      `· <em>${esc(r.promptVersion)}</em></p>`,
+    `<p><strong>AI suggested reply</strong><br>` +
+      `Confidence: ${esc(BADGE[r.confidence])} · ` +
+      `Q/A: answers ${r.qaAnswered} of ${r.qaTotal} question(s) · ` +
+      `<em>${esc(r.promptVersion)}</em></p>`,
   );
 
   if (r.confidence !== "none" && r.draft.trim()) {
     out.push(`<div>${esc(r.draft).replace(/\n/g, "<br>")}</div>`);
+    if (r.rationale && r.rationale.trim()) {
+      out.push(`<p><strong>Why this answers the ticket:</strong> ${esc(r.rationale)}</p>`);
+    }
   } else {
     out.push(
       "<p>No grounded answer was found in the knowledge base or past resolved tickets.</p>",
@@ -125,10 +174,7 @@ export function renderNote(r: NoteData): string {
   }
 
   if (r.sources.length) {
-    const items = r.sources
-      .map((s) => `<li>${esc(s.title)} <code>${esc(s.ref)}</code></li>`)
-      .join("");
-    out.push(`<p><strong>Sources:</strong></p><ul>${items}</ul>`);
+    out.push(`<p><strong>Sources:</strong></p><ul>${r.sources.map(renderSource).join("")}</ul>`);
   } else {
     out.push("<p><strong>Sources:</strong> none found — possible knowledge-base gap.</p>");
   }

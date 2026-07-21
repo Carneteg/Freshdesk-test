@@ -8,8 +8,11 @@ export const PROMPT_VERSION = "g1-2026-07-21";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
+  kind: "kb" | "ticket"; // knowledge-base article or a past ticket
+  id: number; // Freshdesk id, used to build the hyperlink
   title: string;
   text: string;
+  url?: string; // agent-facing link, filled where the Freshdesk domain is known
 }
 
 function renderSources(sources: SourceDoc[]): string {
@@ -76,8 +79,19 @@ export function draftPrompt(input: {
     "{",
     '  "confidence": "high | low | none",',
     '  "reply": "the drafted reply text, or an empty string if confidence is none",',
-    '  "claims": ["each factual statement you made, one per item"]',
+    '  "claims": ["each factual statement you made, one per item"],',
+    '  "rationale": "1-2 sentences: why this reply is right for what THIS customer wrote",',
+    '  "coverage": [',
+    '    { "question": "one of the customer\'s questions", "answered": true }',
+    "  ]",
     "}",
+    "",
+    "For rationale: connect the customer's own words to the answer and the sources —",
+    "e.g. \"The customer asks X; source [1] states Y, so the reply tells them Z.\" It is",
+    "shown to the agent to justify the draft. Leave it empty when confidence is none.",
+    "",
+    "For coverage: list EVERY question the customer asked and set answered=true only",
+    "if your reply answers it FROM THE SOURCES. This is the Q/A score shown to the agent.",
   ].join("\n");
 
   const user = [

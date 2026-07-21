@@ -108,10 +108,17 @@ Record each verdict on the `suggestions` row (`usable` / `edited` / `unusable`),
 then read the views:
 
 ```sql
-select * from gate1_scorecard;   -- usable-% per prompt version
+select * from gate1_scorecard;   -- usable-% per prompt version (human verdict)
 select * from calibration;       -- watch the (high, unusable) cell (§8)
+select * from usage_scorecard;   -- used/partly/not + avg Q/A coverage + similarity
 select * from failures;          -- every crashed run, never silent (§10)
 ```
+
+Each private note carries a **Confidence** badge, a **Q/A score** ("answers 2 of
+3 questions"), a short **rationale** ("why this answers the ticket"), and its
+**sources as hyperlinks** — KB solutions link to the article, past tickets to the
+ticket. Whether the note actually got used (used / partly / not) is derived
+automatically by comparing the draft to the reply the agent eventually sent.
 
 After any prompt change, bump `PROMPT_VERSION` in `prompts.ts` and re-run the
 **same** tickets so `gate1_scorecard` is comparable across versions.

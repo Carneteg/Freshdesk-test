@@ -12,11 +12,14 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { Claude, Freshdesk, type Ticket } from "./clients.ts";
 import { analysePrompt, draftPrompt, PROMPT_VERSION, type SourceDoc, verifyPrompt } from "./prompts.ts";
 import {
+  classifyUsage,
   type Confidence,
   extractJSON,
+  lastAgentReply,
   latestCustomerMessage,
   lower,
   renderNote,
+  similarity,
   strip,
   stripQuotes,
 } from "./render.ts";
@@ -29,10 +32,17 @@ interface Analysis {
   search_queries: string[];
 }
 
+interface Coverage {
+  question: string;
+  answered: boolean;
+}
+
 interface Draft {
   confidence: Confidence;
   reply: string;
   claims: string[];
+  rationale: string;
+  coverage: Coverage[];
 }
 
 interface VerifyClaim {
@@ -65,6 +75,11 @@ export interface Suggestion {
   search_queries: string[];
   sources: SourceDoc[];
   verify: VerifyResult | null;
+  rationale: string | null;
+  qa_answered: number;
+  qa_total: number;
+  used: "used" | "partly" | "not" | null;
+  similarity: number | null;
   prompt_version: string;
   model: string;
   latency_ms: number;
@@ -101,7 +116,14 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
       if (seen.has(ref)) continue;
       seen.add(ref);
       const body = strip(s.description_text ?? s.description ?? "");
-      docs.push({ ref, title: s.title ?? "(untitled)", text: body.slice(0, 1500) });
+      docs.push({
+        ref,
+        kind: "kb",
+        id: s.id,
+        title: s.title ?? "(untitled)",
+        text: body.slice(0, 1500),
+        url: deps.fd.articleUrl(s.id),
+      });
       if (docs.length >= 6) return docs;
     }
   }
@@ -124,6 +146,13 @@ async function draftReply(
     confidence,
     reply: typeof j.reply === "string" ? j.reply : "",
     claims: Array.isArray(j.claims) ? j.claims : [],
+    rationale: typeof j.rationale === "string" ? j.rationale : "",
+    coverage: Array.isArray(j.coverage)
+      ? j.coverage.filter((c) => c && typeof c.question === "string").map((c) => ({
+        question: c.question,
+        answered: c.answered === true,
+      }))
+      : [],
   };
 }
 
@@ -161,21 +190,31 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     if (contradicted.length) {
       // Confident nonsense caught: discard the draft, drop to "none".
       unsupportedNote = `Draft discarded: it contradicted the sources (${contradicted.length} statement(s)).`;
-      draft = { confidence: "none", reply: "", claims: draft.claims };
+      draft = { ...draft, confidence: "none", reply: "" };
     } else if (unsupported.length) {
       const cleaned = stripQuotes(draft.reply, unsupported.map((c) => c.quote));
-      draft = { confidence: lower(draft.confidence), reply: cleaned, claims: draft.claims };
+      draft = { ...draft, confidence: lower(draft.confidence), reply: cleaned };
       unsupportedNote =
         `Confidence lowered: ${unsupported.length} statement(s) not found in the sources were removed.`;
     }
   }
 
+  // Q/A coverage: how many of the customer's questions the draft answers from
+  // sources. Zero when the draft was discarded (confidence dropped to none).
+  const qaTotal = draft.coverage.length || a.questions_asked.length;
+  const qaAnswered = draft.confidence === "none"
+    ? 0
+    : draft.coverage.filter((c) => c.answered).length;
+
   const note = renderNote({
     confidence: draft.confidence,
     draft: draft.reply,
+    rationale: draft.rationale,
     promptVersion: PROMPT_VERSION,
     searchQueries: a.search_queries,
     sources,
+    qaAnswered,
+    qaTotal,
     unsupportedNote,
   });
 
@@ -190,6 +229,11 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     search_queries: a.search_queries,
     sources,
     verify,
+    rationale: draft.rationale || null,
+    qa_answered: qaAnswered,
+    qa_total: qaTotal,
+    used: null, // filled later by usage reconciliation / replay
+    similarity: null,
     prompt_version: PROMPT_VERSION,
     model: deps.model,
     latency_ms: Date.now() - start,
@@ -249,6 +293,7 @@ interface Summary {
   processed: number;
   skipped: number;
   errors: number;
+  usage_scored: number;
 }
 
 // ── Poll loop ─────────────────────────────────────────────────────────────────
@@ -271,7 +316,14 @@ async function pollOnce(cfg: Config): Promise<Summary> {
   const since = new Date(Date.now() - cfg.lookbackMin * 60_000).toISOString();
   const updated = await fd.listUpdatedTickets(since);
   const mine = updated.filter((t) => t.responder_id === Number(cfg.myAgentId));
-  const summary: Summary = { scanned: updated.length, mine: mine.length, processed: 0, skipped: 0, errors: 0 };
+  const summary: Summary = {
+    scanned: updated.length,
+    mine: mine.length,
+    processed: 0,
+    skipped: 0,
+    errors: 0,
+    usage_scored: 0,
+  };
 
   for (const t of mine.slice(0, cfg.maxPerRun)) {
     const tStart = Date.now();
@@ -293,7 +345,7 @@ async function pollOnce(cfg: Config): Promise<Summary> {
 
       const s = await runPipeline({ fd, claude, model: cfg.model, withRetrieval: cfg.withRetrieval }, ticket);
       const noteId = await fd.postPrivateNote(t.id, s.note_html);
-      await db.from("suggestions").insert(toRow(s, noteId));
+      await db.from("suggestions").insert(toRow(s, { noteId }));
       summary.processed++;
     } catch (err) {
       // No silent failures (CLAUDE.md §10). Record the error against the ticket.
@@ -314,10 +366,22 @@ async function pollOnce(cfg: Config): Promise<Summary> {
       } catch { /* already counted; do not mask the original error */ }
     }
   }
+
+  // Second responsibility: score usage of earlier suggestions the agent has now
+  // replied to. Bounded, and failures here never affect the suggestion loop.
+  try {
+    summary.usage_scored = await reconcileUsage(fd, db);
+  } catch (err) {
+    console.error("usage reconciliation failed:", err instanceof Error ? err.message : err);
+  }
+
   return summary;
 }
 
-function toRow(s: Suggestion, noteId: number | null) {
+export function toRow(
+  s: Suggestion,
+  extra: { noteId?: number | null; used?: string | null; similarity?: number | null } = {},
+) {
   return {
     ticket_id: s.ticket_id,
     trigger_message_id: s.trigger_message_id,
@@ -325,16 +389,55 @@ function toRow(s: Suggestion, noteId: number | null) {
     language: s.language,
     confidence: s.confidence,
     draft: s.draft,
-    note_id: noteId,
+    note_id: extra.noteId ?? null,
     questions: s.questions,
     search_queries: s.search_queries,
     sources: s.sources,
     verify: s.verify,
+    rationale: s.rationale,
+    qa_answered: s.qa_answered,
+    qa_total: s.qa_total,
+    used: extra.used ?? s.used,
+    similarity: extra.similarity ?? s.similarity,
     prompt_version: s.prompt_version,
     model: s.model,
     latency_ms: s.latency_ms,
     error: s.error,
   };
+}
+
+// Usage capture (CLAUDE.md §12): for suggestions we posted but haven't yet
+// scored, check whether the agent has since sent a public reply; if so, compare
+// it to our draft and record used / partly / not + the similarity. Bounded per
+// run so it never dominates the poll budget.
+export async function reconcileUsage(
+  fd: Freshdesk,
+  // deno-lint-ignore no-explicit-any
+  db: any,
+): Promise<number> {
+  const { data: pending } = await db
+    .from("suggestions")
+    .select("id, ticket_id, draft, created_at")
+    .is("used", null)
+    .not("note_id", "is", null)
+    .not("draft", "is", null)
+    .order("created_at", { ascending: false })
+    .limit(20);
+
+  let scored = 0;
+  for (const row of pending ?? []) {
+    try {
+      const ticket = await fd.ticketWithConversations(row.ticket_id);
+      const outgoing = (ticket.conversations ?? []).filter((c) => !c.incoming && !c.private);
+      const newest = outgoing.length ? outgoing[outgoing.length - 1] : null;
+      // Only score once the agent has actually replied after our note.
+      if (!newest || newest.created_at <= row.created_at) continue;
+      const sim = similarity(row.draft ?? "", lastAgentReply(ticket));
+      await db.from("suggestions").update({ used: classifyUsage(sim), similarity: sim }).eq("id", row.id);
+      scored++;
+    } catch { /* transient — try again next run */ }
+  }
+  return scored;
 }
 
 // ── HTTP entrypoint ───────────────────────────────────────────────────────────

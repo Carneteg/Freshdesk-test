@@ -286,3 +286,19 @@ mismatch is warned, an id mismatch is fatal.
 Anthropic and Supabase is confirmed OK, so replaying real closed tickets is
 permitted. The "flag rather than proceed" rule in Section 11 is satisfied for
 Gate 1; it still applies to any *new* data source or a move to live/production.
+
+**Supabase project (provisioned).** `simployer-ticket-suggester`, ref
+`pqwnpcibymtmcpnqlkle`, region `eu-central-1` (Frankfurt, per §2). Schema applied;
+`suggestions` has RLS enabled (service role bypasses it) and all views run
+`security_invoker`.
+
+**Note contents & feedback signal.** The private note shows, beyond the draft:
+a **Confidence** badge, a **Q/A score** (questions answered of asked), a short
+**rationale** (why the answer fits *this* customer's wording), and **hyperlinked
+sources** (KB solution → article, past ticket → ticket). Two feedback axes are
+logged: `verdict` (the human "would I have sent this", gold standard) and `used`
+(used/partly/not, auto-derived from draft-vs-sent similarity) — the latter is the
+signal a Gate 2 learning loop would train on. Views: `gate1_scorecard` (human
+verdict), `usage_scorecard` (usage + coverage), `calibration`, `failures`.
+The learning loop itself (feeding accepted replies back into generation) is
+deliberately deferred to Gate 2 — it needs the corpus these fields now collect.
