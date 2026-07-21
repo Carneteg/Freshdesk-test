@@ -16,7 +16,7 @@ import {
   lastAgentReply,
   similarity,
 } from "../supabase/functions/ticket-suggester/render.ts";
-import { runPipeline } from "../supabase/functions/ticket-suggester/index.ts";
+import { runPipeline } from "../supabase/functions/ticket-suggester/pipeline.ts";
 
 function env(name: string): string {
   const v = Deno.env.get(name) ?? "";
