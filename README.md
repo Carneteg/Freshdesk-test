@@ -28,6 +28,10 @@ scripts/replay.ts   run closed tickets through the pipeline, post nothing
 - A Freshdesk API key for the single monitored agent (**Tobias Carneteg**)
 - An Anthropic API key
 - A Supabase project — **Frankfurt / EU Central** (region is permanent)
+  - Provisioned: **`simployer-ticket-suggester`** — ref `pqwnpcibymtmcpnqlkle`,
+    region `eu-central-1`, URL `https://pqwnpcibymtmcpnqlkle.supabase.co`.
+    Schema `01_init.sql` is already applied; `suggestions` has RLS enabled and
+    the evaluation views run `security_invoker`.
 
 ## Setup
 

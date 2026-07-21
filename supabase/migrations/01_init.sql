@@ -51,7 +51,9 @@ create index if not exists suggestions_created_idx on suggestions (created_at);
 -- ── Evaluation views ─────────────────────────────────────────────────────────
 
 -- "Would I have sent this reply?" — usable share, per prompt version.
-create or replace view gate1_scorecard as
+-- security_invoker = on so the view respects the caller's RLS instead of the
+-- creator's (the default SECURITY DEFINER would bypass RLS on `suggestions`).
+create or replace view gate1_scorecard with (security_invoker = on) as
 select
   prompt_version,
   count(*)                                           as generated,
@@ -70,7 +72,7 @@ order by prompt_version;
 
 -- Confidence vs. verdict. The dangerous cell is (high, unusable): confident
 -- nonsense. If it is non-zero, tighten the HIGH criteria in prompts.ts (§8).
-create or replace view calibration as
+create or replace view calibration with (security_invoker = on) as
 select
   confidence,
   coalesce(verdict, '(unjudged)') as verdict,
@@ -81,8 +83,14 @@ group by confidence, coalesce(verdict, '(unjudged)')
 order by confidence, verdict;
 
 -- No silent failures (§10). Every crashed run is visible here.
-create or replace view failures as
+create or replace view failures with (security_invoker = on) as
 select id, ticket_id, error, prompt_version, created_at
 from suggestions
 where error is not null
 order by created_at desc;
+
+-- The suggestions table holds ticket PII (§11). Only the Edge Function touches
+-- it, connecting with the service-role key, which bypasses RLS. Enabling RLS
+-- with NO policies denies all anon/authenticated access while the function keeps
+-- working — the correct secure default for this design.
+alter table suggestions enable row level security;
