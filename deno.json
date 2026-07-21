@@ -2,6 +2,7 @@
   "tasks": {
     "check": "deno check supabase/functions/ticket-suggester/index.ts scripts/replay.ts",
     "test": "deno test supabase/functions/ticket-suggester/render_test.ts",
+    "verify-api": "deno run --allow-env --allow-net scripts/verify_api.ts",
     "replay": "deno run --allow-env --allow-net scripts/replay.ts",
     "serve": "deno run --allow-env --allow-net supabase/functions/ticket-suggester/index.ts"
   },
