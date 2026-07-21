@@ -150,7 +150,7 @@ export class Freshdesk {
     return this.get<{ results: TicketSummary[]; total: number }>(`/search/tickets?${q}`);
   }
 
-  // The ONLY write anywhere in this system. Posts a private (internal) note.
+  // Primary write: posts a private (internal) note — the real deliverable.
   async postPrivateNote(ticketId: number, bodyHtml: string): Promise<number> {
     const url = `${this.base}/tickets/${ticketId}/notes`;
     const res = await fetchWithRetry(url, {
