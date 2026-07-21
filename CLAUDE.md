@@ -149,8 +149,8 @@ Only after replay results look reasonable.
 - **Freshdesk rate limits.** Plan-dependent. Handle 429 with `Retry-After`.
   The pipeline makes several calls per ticket; batching may be needed.
 - **`updated_since` semantics.** Confirm it uses `updated_at`, and whether
-  reopened/updated tickets re-trigger. Deduplication relies on the unique
-  index on `suggestions.ticket_id`.
+  reopened/updated tickets re-trigger. Deduplication is on
+  `(ticket_id, trigger_message_id)`, not `ticket_id` alone — see Section 12.
 - **Edge Function timeout.** Three Claude calls plus searches may approach the
   limit. If so, process fewer tickets per run (`MAX_PER_RUN`) rather than
   parallelising into rate limits.
@@ -217,3 +217,62 @@ Ticket content may contain employee personal data. Before running against
 **live** tickets, the DPA position on Anthropic and Supabase must be confirmed
 by legal. Until then, use closed tickets via the replay harness, or synthetic
 data. If asked to run live before that is settled, flag it rather than proceed.
+
+Note: replaying real closed tickets (Section 6, Step 4) still sends real
+customer PII to Anthropic on every call. The DPA gate therefore applies to the
+replay harness too, not only the live scheduler. Flag at run time; do not
+proceed silently.
+
+---
+
+## 12. Resolved design questions (2026-07-21)
+
+These refine Sections 3, 6 and 7. Where they conflict with an earlier line,
+these win.
+
+**Verify step (Claude call 3) — failure behaviour.**
+Verify only ever *lowers* confidence, never raises it, and never freely
+rewrites the draft (free rewriting reintroduces ungrounded text). It classifies
+each claim against the retrieved sources:
+- Any claim **contradicted** by sources → confidence drops to `none`; discard
+  the draft and post the standard "no confident answer" note (what was
+  searched, what was missing).
+- Any claim **unsupported** (not in sources, not contradicted) → drop one
+  confidence level and strip those sentences before posting.
+- All claims **supported** → post as drafted.
+Always log the verify verdict to `suggestions` so the `calibration` view is
+meaningful. Effect: a HIGH draft that fails verify becomes NONE, so the
+`high + unusable` cell is structurally near-impossible.
+
+**Re-triggering on customer response.**
+A new customer reply is treated exactly like a new ticket: generate a fresh
+suggestion. Dedup is therefore **not** a unique index on `ticket_id` alone.
+Store the id of the latest customer message the suggestion was based on
+(`trigger_message_id` — the newest conversation entry with `incoming: true`,
+or the ticket description for the first reply) and make the unique key
+`(ticket_id, trigger_message_id)`. Skip a ticket only when a suggestion already
+exists for its *current* latest customer message; a newer customer message
+produces a new row. Agent/internal updates do not re-trigger.
+
+**Replay harness — first run.**
+Default to **5 tickets**, not 50, for the first run. Before sending anything to
+Anthropic, print the chosen ticket ids and subjects and stop for approval.
+Scale to 50 only after that first batch looks right. (DPA caveat in Section 11
+applies — these are real closed tickets carrying real PII.)
+
+**Edge Function timeout — what it means and what to do.**
+Each ticket makes ~5 sequential network calls (analyse → KB search → ticket
+search → draft → verify), each waiting on the one before; three Claude calls
+alone can be 10–30s. Supabase Edge Functions have a hard wall-clock limit per
+invocation, so a few slow tickets in one run can get the function killed
+mid-flight — possibly after a note is posted but before its log row is written.
+Mitigation: an explicit timeout on every fetch (AbortController) and a
+per-ticket time budget; on breach, log to `suggestions.error` and move on.
+Unfinished tickets are picked up on the next minute's poll. `MAX_PER_RUN` still
+caps tickets per run but does not bound a single slow ticket.
+
+**`MY_AGENT_ID` — source of truth.**
+The `MY_AGENT_ID` env var is authoritative; both the poll filter and the
+`responder_id` re-check use it. At startup, call `GET /api/v2/agents/me` once
+and assert it equals `MY_AGENT_ID`; on mismatch, refuse to run and log an error
+rather than risk suggesting on the wrong agent's tickets.
