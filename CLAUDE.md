@@ -1,0 +1,219 @@
+# CLAUDE.md — Gate 1: AI suggested replies for Freshdesk
+
+Read this first. It contains decisions already made, why they were made, and
+what still needs doing. Do not relitigate settled decisions unless you find a
+concrete technical blocker — if you do, say so explicitly rather than quietly
+changing direction.
+
+---
+
+## 1. What we are building
+
+A background job that watches **one agent's** Freshdesk tickets. When a ticket
+is assigned to that agent, it drafts a suggested reply and posts it as a
+**private note** on the ticket. The agent reads it, decides whether it is any
+good, and records a verdict.
+
+The entire purpose is to answer one question over ~50 tickets:
+
+> **"Would I have sent this reply?"**
+
+If the answer is yes often enough (>50%), the project proceeds to a wider
+pilot. If not, it stops. This is a two-week experiment, not a product.
+
+**Company context:** Simployer, Nordic HR-tech (payroll, HR admin,
+compensation). Support tickets arrive in Norwegian (~49%), English (~39%) and
+Swedish (~12%). Customer content may contain employee personal data — treat
+it accordingly.
+
+---
+
+## 2. Decisions already made — do not change without flagging
+
+| Decision | Reason |
+|---|---|
+| **Polling, not webhooks** | Freshdesk waits for a webhook response; our pipeline takes ~10s. Polling avoids timeouts, retries, duplicate notes, and any public endpoint. A ~60s delay is irrelevant here. |
+| **Supabase Edge Functions** | Account already exists. Postgres + serverless in one place. Must be **Frankfurt / EU Central** — region is permanent per project. |
+| **No n8n** | One workflow does not justify a new self-hosted platform, and it would trigger a 2–8 week IT review. Revisit only at Gate 3 if non-engineers need to maintain many automations. |
+| **Freshdesk only** | No Confluence, Jira, Salesforce, Planhat, or vector store in Gate 1. Those need API access from four other teams — weeks of calendar time. Gate 2 problem. |
+| **Three LLM calls** | analyse → draft → verify. One call produces confident nonsense; the verify step exists to catch it. |
+| **Always post a note** | Including when confidence is `none`. Silence is ambiguous — the agent cannot tell "no answer found" from "the job crashed". Low-confidence notes state what was searched and what was missing, which doubles as a knowledge-base gap report. |
+| **One agent only** | Two independent filters (poll filter + `responder_id` re-check). Removes adoption risk, works-council concerns, and any chance of a bad draft reaching a colleague's customer. |
+| **Keyword retrieval first** | Freshdesk's own search. Add embeddings/pgvector **only if** evaluation shows retrieval is the dominant failure mode. Do not build it pre-emptively. |
+
+---
+
+## 3. Systems and flow
+
+```
+pg_cron (every minute)
+  → Edge Function `ticket-suggester`
+      1. GET /api/v2/tickets?updated_since=…   filter responder_id == MY_AGENT_ID
+      2. skip tickets already in `suggestions`
+      3. per ticket:
+           a. Claude call 1 — analyse:  language, questions_asked, search_queries
+           b. Freshdesk search — KB solutions + past RESOLVED tickets
+           c. Claude call 2 — draft:    reply grounded ONLY in retrieved sources
+           d. Claude call 3 — verify:   check every claim against those sources
+           e. POST /api/v2/tickets/{id}/notes  {private: true}
+           f. INSERT into `suggestions`
+```
+
+Three systems total: **Freshdesk** (trigger + data + KB + destination),
+**Supabase** (compute + log), **Claude API** (reasoning). Nothing else.
+
+**The only write to any external system** is the private note. Everything else
+is read-only. Keep it that way — it is what keeps the security review narrow.
+
+---
+
+## 4. Existing code
+
+The repo already contains a working first draft. It **typechecks** (`deno
+check`) but has **never run against a live Freshdesk instance**.
+
+```
+supabase/migrations/01_init.sql              tables + evaluation views
+supabase/functions/ticket-suggester/
+    index.ts       polling loop + pipeline + note rendering
+    clients.ts     Freshdesk + Claude API clients
+    prompts.ts     the three prompts  ← the actual product
+scripts/replay.ts  runs closed tickets through it, posts nothing
+README.md          setup and how to run the experiment
+```
+
+Read all of it before changing anything.
+
+---
+
+## 5. Environment
+
+```
+FRESHDESK_DOMAIN      e.g. "simployer"  (→ simployer.freshdesk.com)
+FRESHDESK_API_KEY     basic auth: base64(apikey + ":X")
+MY_AGENT_ID           from GET /api/v2/agents/me
+ANTHROPIC_API_KEY
+CLAUDE_MODEL          default claude-sonnet-5
+CRON_SECRET           guards the function; pg_cron sends it as x-cron-secret
+SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY   (injected by Supabase)
+```
+
+Never commit secrets. Never log ticket bodies or customer PII to console.
+
+---
+
+## 6. Your build order
+
+**Do these in order. Do not skip ahead — each step de-risks the next.**
+
+### Step 1 — Verify the Freshdesk API actually behaves as assumed
+This is the highest-risk unknown. The client code was written from
+documentation, not from a live instance. Write a throwaway script that:
+
+- `GET /api/v2/agents/me` → confirm the agent id
+- `GET /api/v2/tickets?updated_since=…` → confirm the field is named
+  `responder_id` and that filtering works
+- `GET /api/v2/tickets/{id}?include=conversations` → confirm
+  `description_text`, `body_text`, `incoming`, `private` field names
+- `GET /api/v2/search/solutions?term=…` → **confirm this endpoint exists and
+  what its response shape is.** This is the one I am least confident about.
+- `GET /api/v2/search/tickets?query=…` → confirm the query syntax
+- `POST /api/v2/tickets/{id}/notes` → post a test note to a test ticket
+
+Fix `clients.ts` to match reality. Report anything that differs from the
+assumptions above.
+
+### Step 2 — Minimal end-to-end, no retrieval
+Ticket in → Claude → note out. Skip search entirely. Run it on ~5 tickets.
+Confirms auth, latency, note rendering, and the log write. Should be ~4 hours.
+
+### Step 3 — Add retrieval
+Wire up the KB + past-ticket search. **Before this, check ten resolved
+tickets**: does the customer-facing reply actually contain the solution? If
+your team resolves things by phone or in private notes, past tickets teach the
+model nothing and retrieval must be KB-only. Report what you find.
+
+### Step 4 — Replay harness
+`scripts/replay.ts` against 50 closed tickets. Nothing posted. This is how
+quality gets evaluated before anything goes live.
+
+### Step 5 — Schedule it
+Only after replay results look reasonable.
+
+---
+
+## 7. Known unknowns — verify, do not assume
+
+- **Freshdesk solutions search endpoint.** May not exist in that form; may
+  need `/api/v2/solutions/categories` traversal instead. Verify first.
+- **Freshdesk rate limits.** Plan-dependent. Handle 429 with `Retry-After`.
+  The pipeline makes several calls per ticket; batching may be needed.
+- **`updated_since` semantics.** Confirm it uses `updated_at`, and whether
+  reopened/updated tickets re-trigger. Deduplication relies on the unique
+  index on `suggestions.ticket_id`.
+- **Edge Function timeout.** Three Claude calls plus searches may approach the
+  limit. If so, process fewer tickets per run (`MAX_PER_RUN`) rather than
+  parallelising into rate limits.
+
+---
+
+## 8. Testing
+
+There is no meaningful unit-test surface here — the logic is API orchestration
+and prompt behaviour. Test by:
+
+1. **Replay against closed tickets.** The real test. Compare the suggestion to
+   what the agent actually sent (stored in the same ticket).
+2. **Golden set.** The 50 replayed tickets become a regression suite. After any
+   prompt change, bump `PROMPT_VERSION` and re-run the *same* tickets. Compare
+   `gate1_scorecard` across versions. Without this, prompt iteration is guesswork.
+3. **Calibration check.** Query the `calibration` view. The cell
+   `confidence='high' AND verdict='unusable'` is confident nonsense — the only
+   genuinely dangerous output. If non-zero, tighten the HIGH criteria in
+   `prompts.ts` before anything else.
+
+Do add small unit tests for the pure functions (`extractJSON`, `strip`, `esc`,
+`renderNote`) — those are cheap and catch real regressions.
+
+---
+
+## 9. Definition of done for Gate 1
+
+- [ ] Runs on a schedule without manual intervention
+- [ ] Posts a note on every assigned ticket, including low-confidence ones
+- [ ] Never touches a ticket assigned to anyone else (verified, not assumed)
+- [ ] Every generation logged with sources, confidence, prompt version, latency
+- [ ] Replay harness works against closed tickets
+- [ ] 50 tickets generated and judged
+- [ ] `gate1_scorecard` produces a usable-percentage figure
+
+**Not in scope:** UI, auth, multi-agent support, other data sources, error
+alerting, retries beyond the next poll, cost dashboards.
+
+---
+
+## 10. Quality bar
+
+**The prompts are the product.** `prompts.ts` will change far more often than
+the code. Optimise it for readability and iteration — it should be obvious to a
+non-engineer what the model is being told.
+
+**Correctness over cleverness.** A wrong suggestion is worse than no
+suggestion. When in doubt, lower confidence and post the "no confident answer"
+note. That path is a feature, not a failure.
+
+**No silent failures.** Every error gets logged to `suggestions.error` with the
+ticket id. A crashed run must be visible in the data.
+
+**Do not expand scope.** If you find yourself adding a data source, a UI, or a
+new service, stop and ask. The value of this experiment comes from it being
+small enough to finish and honest enough to kill.
+
+---
+
+## 11. Data protection — non-negotiable
+
+Ticket content may contain employee personal data. Before running against
+**live** tickets, the DPA position on Anthropic and Supabase must be confirmed
+by legal. Until then, use closed tickets via the replay harness, or synthetic
+data. If asked to run live before that is settled, flag it rather than proceed.
