@@ -11,7 +11,7 @@
 //   4. reconcile usage of earlier suggestions the agent has since replied to
 
 import { createClient } from "npm:@supabase/supabase-js@2";
-import { Claude, Freshdesk } from "./clients.ts";
+import { Freshdesk, LLM } from "./clients.ts";
 import { PROMPT_VERSION } from "./prompts.ts";
 import { deriveTags, latestCustomerMessage } from "./render.ts";
 import { reconcileUsage, runPipeline, toRow } from "./pipeline.ts";
@@ -23,7 +23,7 @@ interface Config {
   apiKey: string;
   myAgentId: string;
   expectedName: string;
-  anthropicKey: string;
+  openaiKey: string;
   model: string;
   cronSecret: string;
   supabaseUrl: string;
@@ -45,8 +45,8 @@ function loadConfig(): Config {
     apiKey: env("FRESHDESK_API_KEY"),
     myAgentId: env("MY_AGENT_ID"),
     expectedName: Deno.env.get("EXPECTED_AGENT_NAME") ?? "Tobias Carneteg",
-    anthropicKey: env("ANTHROPIC_API_KEY"),
-    model: Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-5",
+    openaiKey: env("OPENAI_API_KEY"),
+    model: Deno.env.get("OPENAI_MODEL") ?? "gpt-4o",
     cronSecret: env("CRON_SECRET"),
     supabaseUrl: env("SUPABASE_URL"),
     serviceKey: env("SUPABASE_SERVICE_ROLE_KEY"),
@@ -74,7 +74,7 @@ interface Summary {
 
 async function pollOnce(cfg: Config): Promise<Summary> {
   const fd = new Freshdesk(cfg.domain, cfg.apiKey);
-  const claude = new Claude(cfg.anthropicKey, cfg.model);
+  const llm = new LLM(cfg.openaiKey, cfg.model);
   const db = createClient(cfg.supabaseUrl, cfg.serviceKey);
 
   // Roles are decoupled (CLAUDE.md §12): the API key is a SERVICE account that
@@ -128,7 +128,7 @@ async function pollOnce(cfg: Config): Promise<Summary> {
         continue;
       }
 
-      const s = await runPipeline({ fd, claude, model: cfg.model, withRetrieval: cfg.withRetrieval }, ticket);
+      const s = await runPipeline({ fd, llm, model: cfg.model, withRetrieval: cfg.withRetrieval }, ticket);
       const noteId = await fd.postPrivateNote(t.id, s.note_html);
       await db.from("suggestions").insert(toRow(s, { noteId }));
       summary.processed++;

@@ -4,7 +4,7 @@
 // any caller can import runPipeline WITHOUT pulling in Deno.serve. index.ts is
 // the only place that starts a server.
 
-import { Claude, Freshdesk, type Ticket } from "./clients.ts";
+import { Freshdesk, LLM, type Ticket } from "./clients.ts";
 import { analysePrompt, draftPrompt, PROMPT_VERSION, type SourceDoc, verifyPrompt } from "./prompts.ts";
 import {
   type BugGuidance,
@@ -65,7 +65,7 @@ function strList(v: unknown): string[] {
 
 export interface PipelineDeps {
   fd: Freshdesk;
-  claude: Claude;
+  llm: LLM;
   model: string;
   withRetrieval: boolean;
 }
@@ -99,7 +99,7 @@ export interface Suggestion {
 
 async function analyse(deps: PipelineDeps, subject: string, customerText: string): Promise<Analysis> {
   const { system, user } = analysePrompt(subject, customerText);
-  const out = await deps.claude.complete(system, [{ role: "user", content: user }], { maxTokens: 700 });
+  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 700 });
   const j = extractJSON<Partial<Analysis>>(out);
   return {
     language: j.language ?? "other",
@@ -158,7 +158,7 @@ async function draftReply(
   },
 ): Promise<Draft> {
   const { system, user } = draftPrompt(input);
-  const out = await deps.claude.complete(system, [{ role: "user", content: user }], { maxTokens: 1800 });
+  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1800 });
   const j = extractJSON<Partial<Draft>>(out);
   const confidence: Confidence = j.confidence === "high" || j.confidence === "low" ? j.confidence : "none";
   return {
@@ -182,7 +182,7 @@ async function draftReply(
 
 async function verifyDraft(deps: PipelineDeps, reply: string, sources: SourceDoc[]): Promise<VerifyResult> {
   const { system, user } = verifyPrompt({ reply, sources });
-  const out = await deps.claude.complete(system, [{ role: "user", content: user }], { maxTokens: 1200 });
+  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1200 });
   const j = extractJSON<Partial<VerifyResult>>(out);
   return { claims: Array.isArray(j.claims) ? j.claims : [] };
 }

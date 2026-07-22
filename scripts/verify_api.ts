@@ -1,7 +1,7 @@
 // scripts/verify_api.ts — Build Order Step 1 (CLAUDE.md §6).
 //
 // Throwaway probe: confirms the Freshdesk API behaves as clients.ts assumes,
-// BEFORE any Claude calls or scheduling. Read-only by default; it will only
+// BEFORE any LLM calls or scheduling. Read-only by default; it will only
 // POST a test note if you explicitly opt in (see the note check below).
 //
 // Run:  deno run --allow-env --allow-net scripts/verify_api.ts

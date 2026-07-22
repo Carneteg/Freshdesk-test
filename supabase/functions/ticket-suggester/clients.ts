@@ -1,4 +1,4 @@
-// Freshdesk + Claude API clients.
+// Freshdesk + LLM (OpenAI) API clients.
 //
 // Every outbound call has an explicit timeout and 429/Retry-After handling
 // (CLAUDE.md §7, §12). Writes are limited to postPrivateNote() and setTags()
@@ -187,39 +187,42 @@ export class Freshdesk {
   }
 }
 
-// ── Claude ────────────────────────────────────────────────────────────────────
+// ── LLM (OpenAI) ────────────────────────────────────────────────────────────
+// The provider is isolated in this one class (CLAUDE.md §12). The pipeline only
+// calls complete(system, messages) and gets back text, so switching providers
+// (or back to Anthropic) touches nothing else.
 
-export interface ClaudeMessage {
+export interface ChatMessage {
   role: "user" | "assistant";
   content: string;
 }
 
-export class Claude {
+export class LLM {
   constructor(private readonly apiKey: string, private readonly model: string) {}
 
   async complete(
     system: string,
-    messages: ClaudeMessage[],
+    messages: ChatMessage[],
     opts: { maxTokens?: number; timeoutMs?: number } = {},
   ): Promise<string> {
-    const url = "https://api.anthropic.com/v1/messages";
+    const url = "https://api.openai.com/v1/chat/completions";
     const res = await fetchWithRetry(url, {
       method: "POST",
       headers: {
-        "x-api-key": this.apiKey,
-        "anthropic-version": "2023-06-01",
+        authorization: `Bearer ${this.apiKey}`,
         "content-type": "application/json",
       },
       body: JSON.stringify({
         model: this.model,
+        temperature: 0.3,
         max_tokens: opts.maxTokens ?? 1500,
-        system,
-        messages,
+        // OpenAI takes the system prompt as the first message.
+        messages: [{ role: "system", content: system }, ...messages],
       }),
-    }, { timeoutMs: opts.timeoutMs ?? 30_000 });
+    }, { timeoutMs: opts.timeoutMs ?? 60_000 });
 
     if (!res.ok) throw new HttpError(res.status, url, await res.text());
-    const data = await res.json() as { content: Array<{ type: string; text?: string }> };
-    return data.content.filter((b) => b.type === "text").map((b) => b.text ?? "").join("");
+    const data = await res.json() as { choices: Array<{ message?: { content?: string } }> };
+    return data.choices?.[0]?.message?.content ?? "";
   }
 }

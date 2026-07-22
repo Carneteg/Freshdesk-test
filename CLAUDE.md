@@ -92,10 +92,10 @@ Read all of it before changing anything.
 
 ```
 FRESHDESK_DOMAIN      e.g. "simployer"  (→ simployer.freshdesk.com)
-FRESHDESK_API_KEY     basic auth: base64(apikey + ":X")
-MY_AGENT_ID           from GET /api/v2/agents/me
-ANTHROPIC_API_KEY
-CLAUDE_MODEL          default claude-sonnet-5
+FRESHDESK_API_KEY     service account key that POSTS notes; base64(apikey + ":X")
+MY_AGENT_ID           the MONITORED agent whose tickets we watch (may differ from key owner)
+OPENAI_API_KEY        LLM provider — the three reasoning calls (see §12)
+OPENAI_MODEL          default gpt-4o
 CRON_SECRET           guards the function; pg_cron sends it as x-cron-secret
 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY   (injected by Supabase)
 ```
@@ -303,10 +303,20 @@ only warns). For Gate 1 there is still exactly **one** monitored agent
 (`EXPECTED_AGENT_NAME`, default **Tobias Carneteg**); notes are authored by the
 service account, which is fine since notes are private/internal.
 
-**DPA — cleared for Gate 1.** Per Tobias (2026-07-21) the DPA position on
-Anthropic and Supabase is confirmed OK, so replaying real closed tickets is
-permitted. The "flag rather than proceed" rule in Section 11 is satisfied for
-Gate 1; it still applies to any *new* data source or a move to live/production.
+**LLM provider — OpenAI (2026-07-22).** Per Tobias the Anthropic key is
+unavailable, so the three reasoning calls (analyse → draft → verify) now run on
+**OpenAI** (`OPENAI_API_KEY`, `OPENAI_MODEL` default `gpt-4o`). The provider is
+isolated in the `LLM` class in `clients.ts`; prompts and pipeline are unchanged,
+so switching back is a one-file change. Historical "Claude"/"Anthropic" mentions
+elsewhere in this doc describe the same pipeline — read them as "the LLM provider".
+
+**DPA — Anthropic clearance does NOT cover OpenAI (re-opened 2026-07-22).** Per
+Tobias (2026-07-21) the DPA position on *Anthropic* and Supabase was confirmed OK.
+The provider is now **OpenAI** — a different processor — so that clearance no
+longer applies to the reasoning calls. Per §11 (non-negotiable), sending real
+ticket PII to OpenAI — **including via the replay harness** — requires the DPA
+position on **OpenAI** to be confirmed first. Until then: synthetic data, or
+tickets with no personal data. Flag at run time; do not proceed silently.
 
 **Supabase project (provisioned).** `simployer-ticket-suggester`, ref
 `pqwnpcibymtmcpnqlkle`, region `eu-central-1` (Frankfurt, per §2). Schema applied;

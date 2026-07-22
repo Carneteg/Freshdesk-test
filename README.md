@@ -25,8 +25,9 @@ scripts/replay.ts   run closed tickets through the pipeline, post nothing
 ## Prerequisites
 
 - [Deno](https://deno.land) 1.44+
-- A Freshdesk API key for the single monitored agent (**Tobias Carneteg**)
-- An Anthropic API key
+- A Freshdesk API key — a service account posts the notes; `MY_AGENT_ID` is the
+  monitored agent (**Tobias Carneteg**) whose tickets get watched
+- An **OpenAI** API key (`OPENAI_API_KEY`; `OPENAI_MODEL` default `gpt-4o`)
 - A Supabase project — **Frankfurt / EU Central** (region is permanent)
   - Provisioned: **`simployer-ticket-suggester`** — ref `pqwnpcibymtmcpnqlkle`,
     region `eu-central-1`, URL `https://pqwnpcibymtmcpnqlkle.supabase.co`.
@@ -125,6 +126,8 @@ After any prompt change, bump `PROMPT_VERSION` in `prompts.ts` and re-run the
 
 ## Data protection
 
-Ticket content may contain employee personal data. The DPA position on Anthropic
-and Supabase is confirmed OK for Gate 1 (CLAUDE.md §11–§12). Any move to a new
-data source, or to live/production beyond this experiment, needs its own sign-off.
+Ticket content may contain employee personal data. The DPA position was cleared
+for **Anthropic** + Supabase — but the LLM provider is now **OpenAI**, a different
+processor, so that clearance does **not** cover the reasoning calls. Confirm the
+DPA position on OpenAI before sending real ticket PII (including via the replay
+harness); until then use synthetic data. See CLAUDE.md §11–§12.

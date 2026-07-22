@@ -2,15 +2,15 @@
 // result next to what the agent actually sent. Posts NOTHING (CLAUDE.md §6 Step 4).
 //
 // First run: start with 5 tickets. The chosen ids + subjects are printed before
-// anything is sent to Anthropic, so you can confirm the sample (CLAUDE.md §12).
+// anything is sent to the LLM, so you can confirm the sample (CLAUDE.md §12).
 //
 //   deno task replay 1001 1002 1003 1004 1005
 //   REPLAY_TICKET_IDS=1001,1002,1003 deno task replay
 //
-// Note: replaying real closed tickets sends real customer content to Anthropic.
-// The DPA position is confirmed OK for Gate 1 (CLAUDE.md §11).
+// Note: replaying real closed tickets sends real customer content to the LLM
+// provider (OpenAI). The DPA position is confirmed OK for Gate 1 (CLAUDE.md §11).
 
-import { Claude, Freshdesk } from "../supabase/functions/ticket-suggester/clients.ts";
+import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import {
   classifyUsage,
   lastAgentReply,
@@ -42,11 +42,11 @@ if (ids.length > 5) {
 }
 
 const fd = new Freshdesk(env("FRESHDESK_DOMAIN"), env("FRESHDESK_API_KEY"));
-const model = Deno.env.get("CLAUDE_MODEL") ?? "claude-sonnet-5";
-const claude = new Claude(env("ANTHROPIC_API_KEY"), model);
+const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
+const llm = new LLM(env("OPENAI_API_KEY"), model);
 const withRetrieval = (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false";
 
-// Show which tickets before sending anything to Anthropic.
+// Show which tickets before sending anything to OpenAI.
 console.log("Tickets to replay (nothing will be posted):\n");
 const tickets = [];
 for (const id of ids) {
@@ -63,7 +63,7 @@ console.log("");
 for (const t of tickets) {
   const bar = "─".repeat(76);
   try {
-    const s = await runPipeline({ fd, claude, model, withRetrieval }, t);
+    const s = await runPipeline({ fd, llm, model, withRetrieval }, t);
     const actual = lastAgentReply(t);
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);
