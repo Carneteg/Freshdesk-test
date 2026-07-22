@@ -1,12 +1,14 @@
 // Unit tests for the pure functions (CLAUDE.md §8). Run: `deno task test`.
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import {
+  agentReplyToLatestCustomer,
   buildContext,
   classifyUsage,
   containsFalseSystemAccess,
   deriveTags,
   esc,
   extractJSON,
+  firstAgentReply,
   lastAgentReply,
   latestCustomerMessage,
   looksLikeAutoReply,
@@ -15,6 +17,9 @@ import {
   similarity,
   strip,
   stripQuotes,
+  stripSignaturePlaceholders,
+  ticketAsOfLatestCustomer,
+  ticketBeforeFirstAgentReply,
 } from "./render.ts";
 import type { Ticket } from "./clients.ts";
 
@@ -61,6 +66,17 @@ Deno.test("stripQuotes: removes verbatim quotes and tidies punctuation", () => {
 
 Deno.test("stripQuotes: no-op when quote absent", () => {
   assertEquals(stripQuotes("hello world", ["missing"]), "hello world");
+});
+
+Deno.test("stripSignaturePlaceholders: removes placeholder signers, keeps the closing", () => {
+  assertEquals(
+    stripSignaturePlaceholders("Hei Kari,\n\nTakk!\n\nVennlig hilsen,\n[Your Name]"),
+    "Hei Kari,\n\nTakk!\n\nVennlig hilsen,",
+  );
+  assertEquals(stripSignaturePlaceholders("Best,\n[Agent's Name]"), "Best,");
+  assertEquals(stripSignaturePlaceholders("Med vennlig hilsen,\n[Ditt navn]"), "Med vennlig hilsen,");
+  // Real names are untouched.
+  assertEquals(stripSignaturePlaceholders("Hei Natalie, takk!"), "Hei Natalie, takk!");
 });
 
 Deno.test("latestCustomerMessage: newest incoming defines the trigger id", () => {
@@ -254,7 +270,7 @@ Deno.test("buildContext: includes internal notes and agent replies, labelled", (
     ],
   } as unknown as Ticket;
   const ctx = buildContext(t);
-  assertStringIncludes(ctx, "[initial] CUSTOMER:");
+  assertStringIncludes(ctx, "[initial] CUSTOMER");
   assertStringIncludes(ctx, "Jag vill lägga till en administratör.");
   assertStringIncludes(ctx, "AGENT REPLY");
   assertStringIncludes(ctx, "Vem ska registreras");
@@ -264,6 +280,33 @@ Deno.test("buildContext: includes internal notes and agent replies, labelled", (
 
 // Case F/H — an auto/OOO reply must be flagged in-context and never counted as
 // the customer answering the agent's control question.
+Deno.test("buildContext: surfaces the requester on file so the model won't ask for the email", () => {
+  const t = {
+    id: 700,
+    subject: "Access",
+    status: 2,
+    description_text: "I lost my access.",
+    requester: { name: "Natalie Müller", email: "natalie.muller@aon.com" },
+    conversations: [],
+  } as unknown as Ticket;
+  const ctx = buildContext(t);
+  assertStringIncludes(ctx, "CUSTOMER ON FILE:");
+  assertStringIncludes(ctx, "natalie.muller@aon.com");
+  assertStringIncludes(ctx, "do NOT ask the customer to provide an email");
+});
+
+Deno.test("buildContext: falls back to the ticket email when no requester object", () => {
+  const t = {
+    id: 701,
+    subject: "x",
+    status: 2,
+    description_text: "hi",
+    email: "kari@example.com",
+    conversations: [],
+  } as unknown as Ticket;
+  assertStringIncludes(buildContext(t), "kari@example.com");
+});
+
 Deno.test("buildContext: flags an automatic out-of-office customer reply", () => {
   const t = {
     id: 101,
@@ -315,7 +358,7 @@ Deno.test("renderNote: security-sensitive note shows manual-verify disclaimer an
     confidenceReason: "An agent already asked who should be admin and it is unanswered.",
     draft: "Kan du bekräfta vilken person som ska ha administratörsbehörighet?",
     answerStrategy: "REPEAT_CLARIFYING_QUESTION",
-    agentNextAction: "Confirm the admin's identity before granting access.",
+    resolutionSteps: ["Confirm the admin's identity before granting access."],
     unknowns: ["Which person should hold the admin role"],
     requiresManualCheck: true,
     securitySensitive: true,
@@ -329,9 +372,170 @@ Deno.test("renderNote: security-sensitive note shows manual-verify disclaimer an
   assertStringIncludes(html, "Repeat the open clarifying question");
   assertStringIncludes(html, "Verify manually");
   assertStringIncludes(html, "cannot see the customer's account");
-  assertStringIncludes(html, "Next action for you:");
+  assertStringIncludes(html, "How to resolve this (for you):");
+  assertStringIncludes(html, "Confirm the admin&#39;s identity before granting access.");
   assertStringIncludes(html, "Not established from the ticket");
   assertStringIncludes(html, "Which person should hold the admin role");
+});
+
+// The two tracks are rendered as distinct, labelled sections.
+Deno.test("renderNote: reply and resolution steps are separate sections", () => {
+  const html = renderNote({
+    confidence: "low",
+    draft: "Hei, vi ser på saken og kommer tilbake.",
+    answerStrategy: "ESCALATE",
+    agentAnalysis: "404s in AI search usually mean a reindex is needed; not covered by the KB.",
+    resolutionSteps: ["Reindex the customer's search", "Request system access if needed", "Escalate to the technical team"],
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+  });
+  assertStringIncludes(html, "💬 Reply to the customer:");
+  assertStringIncludes(html, "Hei, vi ser på saken");
+  assertStringIncludes(html, "🔧 How to resolve this (for you):");
+  assertStringIncludes(html, "Reindex the customer&#39;s search");
+  assertStringIncludes(html, "AI analysis (for you)");
+  // Reply comes before the resolution steps in the note.
+  const replyIdx = html.indexOf("💬 Reply to the customer:");
+  const stepsIdx = html.indexOf("🔧 How to resolve this");
+  assertEquals(replyIdx > -1 && stepsIdx > replyIdx, true);
+});
+
+// At confidence none there is no send-ready reply, but the resolution track and
+// analysis still carry substance — never a hollow note.
+Deno.test("renderNote: none confidence still shows resolution steps, not just a greeting", () => {
+  const html = renderNote({
+    confidence: "none",
+    draft: "",
+    agentAnalysis: "Likely a policy question the KB does not cover.",
+    resolutionSteps: ["Confirm the customer's identity", "Ask the manager to re-issue the contract"],
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+  });
+  assertStringIncludes(html, "No send-ready reply yet");
+  assertStringIncludes(html, "How to resolve this (for you):");
+  assertStringIncludes(html, "Ask the manager to re-issue the contract");
+});
+
+// ── Replay fairness (CLAUDE.md §6 Step 4) ───────────────────────────────────────
+// Replaying a CLOSED ticket must hide the agent's resolution, or the model reads
+// the answer and abstains with "already handled". These reconstruct the ticket as
+// the agent saw it and pick out the reply they actually sent to compare against.
+
+const CLOSED_TICKET = {
+  id: 500,
+  subject: "Access request",
+  status: 5,
+  description_text: "Please give me admin access.",
+  conversations: [
+    { id: 1, body_text: "Who should be the admin?", incoming: false, private: false, created_at: "2026-01-01T10:00:00Z" },
+    { id: 2, body_text: "Me, anna@example.com", incoming: true, private: false, created_at: "2026-01-02T10:00:00Z" },
+    { id: 3, body_text: "Done — you now have admin access.", incoming: false, private: false, created_at: "2026-01-03T10:00:00Z" },
+    { id: 4, body_text: "resolved", incoming: false, private: true, created_at: "2026-01-03T10:05:00Z" },
+  ],
+} as unknown as Ticket;
+
+Deno.test("ticketAsOfLatestCustomer: drops the agent's post-trigger resolution", () => {
+  const view = ticketAsOfLatestCustomer(CLOSED_TICKET);
+  const ctx = buildContext(view);
+  // The customer's latest message and the earlier agent question are kept…
+  assertStringIncludes(ctx, "Me, anna@example.com");
+  assertStringIncludes(ctx, "Who should be the admin?");
+  // …but the resolution that came AFTER it is gone (no cheating).
+  assertEquals(ctx.includes("you now have admin access"), false);
+  assertEquals(ctx.includes("resolved"), false);
+});
+
+Deno.test("ticketAsOfLatestCustomer: no incoming message drops all conversations", () => {
+  const t = {
+    id: 501,
+    subject: "x",
+    status: 5,
+    description_text: "first question",
+    conversations: [
+      { id: 1, body_text: "here is the answer", incoming: false, private: false, created_at: "2026-01-02T00:00:00Z" },
+    ],
+  } as unknown as Ticket;
+  assertEquals(ticketAsOfLatestCustomer(t).conversations?.length, 0);
+});
+
+Deno.test("agentReplyToLatestCustomer: returns the reply sent AFTER the trigger", () => {
+  assertEquals(agentReplyToLatestCustomer(CLOSED_TICKET), "Done — you now have admin access.");
+});
+
+// Cold start: test the ticket before the agent's FIRST reply, so we grade the
+// substantive opening turn — not a mid-thread follow-up already answered above.
+Deno.test("ticketBeforeFirstAgentReply: keeps only the opening request, hides all replies", () => {
+  const view = ticketBeforeFirstAgentReply(CLOSED_TICKET);
+  const ctx = buildContext(view);
+  assertStringIncludes(ctx, "Please give me admin access."); // the opening request stays
+  // Everything from the first agent reply onward is hidden.
+  assertEquals(view.conversations?.length, 0);
+  assertEquals(ctx.includes("Who should be the admin?"), false);
+  assertEquals(ctx.includes("you now have admin access"), false);
+});
+
+Deno.test("firstAgentReply: returns the first public reply, not the last", () => {
+  assertEquals(firstAgentReply(CLOSED_TICKET), "Who should be the admin?");
+});
+
+Deno.test("ticketBeforeFirstAgentReply: no agent reply keeps the whole ticket", () => {
+  const t = {
+    id: 502,
+    subject: "x",
+    status: 2,
+    description_text: "opening",
+    conversations: [
+      { id: 1, body_text: "more detail", incoming: true, private: false, created_at: "2026-01-02T00:00:00Z" },
+    ],
+  } as unknown as Ticket;
+  assertEquals(ticketBeforeFirstAgentReply(t).conversations?.length, 1);
+  assertEquals(firstAgentReply(t), "");
+});
+
+// A low/none note must still HELP the agent — the analysis carries substance so
+// it is never a hollow greeting (user feedback on #85840).
+Deno.test("renderNote: low/none note still shows the agent analysis", () => {
+  const html = renderNote({
+    confidence: "none",
+    draft: "",
+    answerStrategy: "RECOMMEND_AGENT_VERIFICATION",
+    agentAnalysis: "Likely an expired signing link; usually resolved by the manager re-issuing the agreement. Verify whose contract before advising.",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+  });
+  assertStringIncludes(html, "AI analysis (for you)");
+  assertStringIncludes(html, "expired signing link");
+  assertStringIncludes(html, "manager re-issuing");
+});
+
+Deno.test("buildContext: marks the latest real customer message as the one to answer", () => {
+  const t = {
+    id: 600,
+    subject: "Follow-up",
+    status: 2,
+    description_text: "First question.",
+    conversations: [
+      { id: 1, body_text: "Agent answer.", incoming: false, private: false, created_at: "2026-01-01T00:00:00Z" },
+      { id: 2, body_text: "New follow-up question.", incoming: true, private: false, created_at: "2026-01-02T00:00:00Z" },
+    ],
+  } as unknown as Ticket;
+  const ctx = buildContext(t);
+  // The newest customer message is flagged; the older description is not.
+  const marker = "LATEST CUSTOMER MESSAGE — respond to THIS";
+  assertStringIncludes(ctx, `New follow-up question.`);
+  const idx = ctx.indexOf(marker);
+  assertEquals(idx > -1, true);
+  // Only the newest incoming carries it (exactly one marker).
+  assertEquals(ctx.split(marker).length - 1, 1);
 });
 
 // Case C — a straightforward how-to answer needs no manual-verify banner.

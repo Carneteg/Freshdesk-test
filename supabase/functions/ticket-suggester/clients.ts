@@ -75,6 +75,10 @@ export interface Ticket extends TicketSummary {
   description_text: string;
   tags?: string[];
   conversations?: Conversation[];
+  // Requester (the customer) — already on file because they contacted us. Surfaced
+  // so the model never asks the customer for an email/identity we already hold.
+  email?: string | null;
+  requester?: { name?: string; email?: string } | null;
 }
 
 export interface Solution {
@@ -138,7 +142,7 @@ export class Freshdesk {
   }
 
   ticketWithConversations(id: number): Promise<Ticket> {
-    return this.get<Ticket>(`/tickets/${id}?include=conversations`);
+    return this.get<Ticket>(`/tickets/${id}?include=conversations,requester`);
   }
 
   // VERIFIED 2026-07-22 against the live instance: returns solution articles with

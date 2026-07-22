@@ -14,8 +14,9 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import {
   classifyUsage,
-  lastAgentReply,
+  firstAgentReply,
   similarity,
+  ticketBeforeFirstAgentReply,
 } from "../supabase/functions/ticket-suggester/render.ts";
 import { runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
 
@@ -78,8 +79,14 @@ console.log("");
 for (const t of tickets) {
   const bar = "─".repeat(76);
   try {
-    const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories }, t);
-    const actual = lastAgentReply(t);
+    // Cold start (CLAUDE.md §6 Step 4): reason over the ticket as it stood just
+    // before the agent's FIRST reply — the customer's opening request, nothing
+    // after. This mirrors a freshly assigned live ticket and avoids grading the
+    // trivial "thanks, it worked" turn at the end of a resolved thread. Compare
+    // against the substantive first reply the agent actually sent.
+    const view = ticketBeforeFirstAgentReply(t);
+    const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories }, view);
+    const actual = firstAgentReply(t);
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);
 
@@ -105,7 +112,11 @@ for (const t of tickets) {
     } else {
       console.log("sources: none");
     }
-    console.log("\nSUGGESTED:\n" + (s.draft ?? "(no confident answer)"));
+    console.log("\nREPLY TO CUSTOMER:\n" + (s.draft ?? "(no send-ready reply yet)"));
+    if (s.resolution_steps.length) {
+      console.log("\nHOW TO RESOLVE (for the agent):\n  - " + s.resolution_steps.join("\n  - "));
+    }
+    if (s.agent_analysis) console.log("\nAI ANALYSIS (for the agent):\n" + s.agent_analysis);
     if (s.rationale) console.log("\nWHY (rationale):\n" + s.rationale);
     if (s.follow_up_questions.length) {
       console.log("\nFOLLOW-UP QUESTIONS:\n  - " + s.follow_up_questions.join("\n  - "));

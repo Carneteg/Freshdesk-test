@@ -138,6 +138,78 @@ export function lastAgentReply(t: Ticket): string {
   return outgoing.length ? (outgoing[outgoing.length - 1].body_text ?? "") : "";
 }
 
+// Timestamp of the trigger message — the latest incoming customer message, or
+// null when the first reply is on the ticket description. Used only to split a
+// closed ticket into "what the agent saw" vs "the future".
+function triggerTime(t: Ticket): string | null {
+  const incoming = (t.conversations ?? [])
+    .filter((c) => c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return incoming.length ? incoming[incoming.length - 1].created_at : null;
+}
+
+// REPLAY ONLY (CLAUDE.md §6 Step 4). Reconstruct the ticket as it stood right
+// after the latest customer message: every later entry — the agent's actual
+// answer and any follow-up notes — is removed, so the model cannot "cheat" by
+// reading the resolution of an already-closed ticket. The live pipeline never
+// calls this; it always reasons over the full, still-open ticket.
+export function ticketAsOfLatestCustomer(t: Ticket): Ticket {
+  const cut = triggerTime(t);
+  // No incoming message → the first reply is on the description; drop every
+  // conversation entry (they are all post-trigger). Otherwise keep entries up to
+  // and including the trigger message.
+  const conversations = (t.conversations ?? []).filter((c) =>
+    cut ? c.created_at <= cut : false
+  );
+  return { ...t, conversations };
+}
+
+// REPLAY ONLY. The reply the agent actually sent in response to the latest
+// customer message — the first public outgoing message after the trigger, which
+// is the fair comparison target for "would I have sent this?". Falls back to the
+// last agent reply when timestamps can't separate before/after.
+export function agentReplyToLatestCustomer(t: Ticket): string {
+  const cut = triggerTime(t);
+  const outgoing = (t.conversations ?? [])
+    .filter((c) => !c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  if (cut) {
+    const after = outgoing.find((c) => c.created_at > cut);
+    if (after) return after.body_text ?? "";
+  }
+  return outgoing.length ? (outgoing[outgoing.length - 1].body_text ?? "") : "";
+}
+
+// The agent's FIRST public reply — the substantive "cold start" answer the live
+// tool would face on a freshly assigned ticket. Empty if the agent never replied
+// publicly.
+export function firstAgentReply(t: Ticket): string {
+  const outgoing = (t.conversations ?? [])
+    .filter((c) => !c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return outgoing.length ? (outgoing[0].body_text ?? "") : "";
+}
+
+// REPLAY ONLY (cold start). The ticket as it stood just before the agent's FIRST
+// public reply: the customer's opening request (plus any pre-reply notes),
+// nothing after. This mirrors what the live scheduler actually sees on a newly
+// assigned ticket, and avoids grading trivial end-of-thread pleasantries. If the
+// agent never replied, the whole ticket is kept (there is nothing to hide).
+export function ticketBeforeFirstAgentReply(t: Ticket): Ticket {
+  const outgoing = (t.conversations ?? [])
+    .filter((c) => !c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const firstReplyAt = outgoing.length ? outgoing[0].created_at : null;
+  const conversations = (t.conversations ?? []).filter((c) =>
+    firstReplyAt ? c.created_at < firstReplyAt : true
+  );
+  return { ...t, conversations };
+}
+
 // Out-of-office / automatic-absence detection. Such a reply must NOT be treated
 // as the customer answering an agent's clarifying question.
 const AUTO_REPLY_HINTS = [
@@ -185,6 +257,20 @@ export function containsFalseSystemAccess(text: string): boolean {
   return FALSE_ACCESS_PATTERNS.some((re) => re.test(text));
 }
 
+// Belt-and-suspenders for the tone rule: the model must not sign the reply with a
+// placeholder (the agent adds their own name). Strip bracketed "[Your Name]" /
+// "[Agent's Name]" / "[Ditt navn]" style tokens if one slips through.
+const SIGNATURE_PLACEHOLDER = /\[[^\]\n]*(?:name|navn|namn)[^\]\n]*\]/gi;
+
+export function stripSignaturePlaceholders(text: string): string {
+  return text
+    .replace(SIGNATURE_PLACEHOLDER, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // Build the FULL, chronological, source-labelled ticket context for the model.
 // The old pipeline only fed the customer's own messages, so later agent replies
 // and internal notes (e.g. "X already seems to be an admin") never reached the
@@ -195,20 +281,40 @@ export function buildContext(t: Ticket): string {
     `TICKET #${t.id} · subject: ${t.subject ?? ""} · status: ${t.status}`,
   ];
 
-  if ((t.description_text ?? "").trim()) {
-    lines.push("", "[initial] CUSTOMER:", strip(t.description_text));
+  // The customer is already on file (they contacted us). Surface their name/email
+  // so the model never asks them for an identity/email we already hold.
+  const onFile = [t.requester?.name, t.requester?.email ?? t.email]
+    .filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+  if (onFile.length) {
+    lines.push(
+      `CUSTOMER ON FILE: ${onFile.join(" · ")} — already known from the ticket; do NOT ask the customer to provide an email or identity that is already here.`,
+    );
   }
 
   const convos = (t.conversations ?? [])
     .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
 
+  // The latest real (non-auto) customer message is the one the draft should
+  // respond to. If there are no incoming conversation entries, that is the
+  // ticket description.
+  const latestIncoming = [...convos].reverse().find(
+    (c) => c.incoming && !c.private && !looksLikeAutoReply(c.body_text ?? ""),
+  );
+  const RESPOND = " ← LATEST CUSTOMER MESSAGE — respond to THIS";
+
+  if ((t.description_text ?? "").trim()) {
+    const tag = latestIncoming ? "" : RESPOND;
+    lines.push("", `[initial] CUSTOMER${tag}:`, strip(t.description_text));
+  }
+
   for (const c of convos) {
     const who = c.private ? "INTERNAL NOTE (agent/internal)" : c.incoming ? "CUSTOMER" : "AGENT REPLY";
     const auto = c.incoming && looksLikeAutoReply(c.body_text ?? "")
       ? " [likely AUTOMATIC / out-of-office reply — do NOT treat as an answer]"
       : "";
-    lines.push("", `[${c.created_at}] ${who}${auto}:`, strip(c.body_text ?? ""));
+    const respond = latestIncoming && c.id === latestIncoming.id ? RESPOND : "";
+    lines.push("", `[${c.created_at}] ${who}${auto}${respond}:`, strip(c.body_text ?? ""));
   }
 
   return lines.join("\n").slice(0, 12000);
@@ -233,7 +339,8 @@ export interface NoteData {
   rationale?: string;
   ticketType?: string;
   answerStrategy?: string;
-  agentNextAction?: string;
+  agentAnalysis?: string;
+  resolutionSteps?: string[];
   unknowns?: string[];
   requiresManualCheck?: boolean;
   securitySensitive?: boolean;
@@ -293,6 +400,13 @@ export function renderNote(r: NoteData): string {
     out.push(`<p><strong>Suggested approach:</strong> ${esc(strategyLabel)}${reason}</p>`);
   }
 
+  // Agent-facing analysis — always shown when present. This is what keeps a
+  // low/none note from being a hollow greeting: even without a send-ready reply,
+  // the agent gets the likely resolution path and what to verify.
+  if (r.agentAnalysis && r.agentAnalysis.trim()) {
+    out.push(`<p><strong>🔎 AI analysis (for you):</strong> ${esc(r.agentAnalysis)}</p>`);
+  }
+
   // The AI has NO system access. On security-sensitive / manual-check tickets say
   // so explicitly, so nobody mistakes the draft for a verified system lookup.
   if (r.requiresManualCheck || r.securitySensitive) {
@@ -303,6 +417,8 @@ export function renderNote(r: NoteData): string {
     );
   }
 
+  // Track 1 — what to SAY to the customer.
+  out.push(`<p><strong>💬 Reply to the customer:</strong></p>`);
   if (r.confidence !== "none" && r.draft.trim()) {
     out.push(`<div>${esc(r.draft).replace(/\n/g, "<br>")}</div>`);
     if (r.rationale && r.rationale.trim()) {
@@ -310,13 +426,14 @@ export function renderNote(r: NoteData): string {
     }
   } else {
     out.push(
-      "<p>No grounded answer was found in the knowledge base or past resolved tickets.</p>",
+      "<p><em>No send-ready reply yet — see the resolution steps and analysis below.</em></p>",
     );
   }
 
-  // What the agent should do next (internal — may reference the manual check above).
-  if (r.agentNextAction && r.agentNextAction.trim()) {
-    out.push(`<p><strong>Next action for you:</strong> ${esc(r.agentNextAction)}</p>`);
+  // Track 2 — what to DO to resolve the case (internal actions, kept separate).
+  if (r.resolutionSteps && r.resolutionSteps.length) {
+    out.push(`<p><strong>🔧 How to resolve this (for you):</strong></p>`);
+    out.push(renderList(r.resolutionSteps, true));
   }
 
   // Things the AI could not establish from the text — a to-confirm list.
