@@ -341,6 +341,7 @@ const STRATEGY_LABEL: Record<string, string> = {
   REQUEST_MISSING_INFORMATION: "Ask for missing information",
   RECOMMEND_AGENT_VERIFICATION: "You should verify this manually",
   PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS: "General how-to from the knowledge base",
+  ROUTE: "Route to the right team",
   ESCALATE: "Escalate",
   ABSTAIN: "No grounded answer",
 };

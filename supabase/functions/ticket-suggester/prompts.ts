@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22j";
+export const PROMPT_VERSION = "g1-2026-07-22k";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -21,6 +21,7 @@ export const ANSWER_STRATEGIES = [
   "REQUEST_MISSING_INFORMATION",
   "RECOMMEND_AGENT_VERIFICATION",
   "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS",
+  "ROUTE",
   "ESCALATE",
   "ABSTAIN",
 ] as const;
@@ -159,6 +160,8 @@ export function draftPrompt(input: {
     "- RECOMMEND_AGENT_VERIFICATION: the answer depends on the customer's account/roles — the agent",
     "  must check manually; you cannot.",
     "- PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS: a general how-to the KB covers, with no open identity/role question.",
+    "- ROUTE: hand a commercial/sales/pricing/offer request to a consultant or sales, or a legal/",
+    "  employment-law question to Simployer Expert. Put the routing message in the reply.",
     "- ESCALATE: genuinely beyond first-line — name the higher tier (2nd-line / developer / product)",
     "  and why. NOT \"the technical team\" (you ARE support); not a way to avoid answering.",
     "- ABSTAIN: nothing grounded to say.",
@@ -187,6 +190,9 @@ export function draftPrompt(input: {
     "  hypothesis. Prefer ABSTAIN or RECOMMEND_AGENT_VERIFICATION: leave reply empty or minimal, and put",
     "  the value in agent_analysis (\"the ticket does not establish whether this is X\") and resolution_steps",
     "  (the checks). A missing customer reply is better than a confident guess.",
+    "- Whenever you do NOT give a fully-grounded customer answer (you ask, verify, route, escalate, or",
+    "  abstain), include at least ONE concrete resolution_step — the specific check, action, routing, or",
+    "  info to request. Never hand the agent an empty next-action in those cases.",
     "- If there is an unanswered agent clarifying/identity question, do NOT fall back to generic",
     "  instructions. Choose REPEAT_CLARIFYING_QUESTION or REQUEST_MISSING_INFORMATION and make the",
     "  reply ask/repeat it.",
