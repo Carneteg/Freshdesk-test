@@ -63,17 +63,24 @@ export interface TicketSummary {
   status: number;
 }
 
+export interface Attachment {
+  name?: string;
+  content_type?: string;
+}
+
 export interface Conversation {
   id: number;
   body_text: string;
   incoming: boolean; // true = from the customer
   private: boolean; // true = internal note
   created_at: string;
+  attachments?: Attachment[];
 }
 
 export interface Ticket extends TicketSummary {
   description_text: string;
   tags?: string[];
+  attachments?: Attachment[];
   conversations?: Conversation[];
   // Requester (the customer) — already on file because they contacted us. Surfaced
   // so the model never asks the customer for an email/identity we already hold.
@@ -176,8 +183,8 @@ export class Freshdesk {
   // a bare term returns HTTP 400 (verified 2026-07-22). This is why past-ticket
   // retrieval stays out of the pipeline (KB-only). Kept for possible future
   // field-based use; callers must pass a valid `keyword:value` query, not prose.
-  searchTickets(query: string): Promise<{ results: TicketSummary[]; total: number }> {
-    const q = new URLSearchParams({ query: `"${query}"` });
+  searchTickets(query: string, page = 1): Promise<{ results: TicketSummary[]; total: number }> {
+    const q = new URLSearchParams({ query: `"${query}"`, page: String(page) });
     return this.get<{ results: TicketSummary[]; total: number }>(`/search/tickets?${q}`);
   }
 
@@ -247,5 +254,19 @@ export class LLM {
     if (!res.ok) throw new HttpError(res.status, url, await res.text());
     const data = await res.json() as { choices: Array<{ message?: { content?: string } }> };
     return data.choices?.[0]?.message?.content ?? "";
+  }
+
+  // Embedding for semantic past-ticket search (stage 2). Fixed 1536-dim model to
+  // match the past_tickets.embedding column. Callers treat a failure as "no vector".
+  async embed(text: string, opts: { timeoutMs?: number } = {}): Promise<number[]> {
+    const url = "https://api.openai.com/v1/embeddings";
+    const res = await fetchWithRetry(url, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({ model: "text-embedding-3-small", input: text.slice(0, 8000) }),
+    }, { timeoutMs: opts.timeoutMs ?? 30_000 });
+    if (!res.ok) throw new HttpError(res.status, url, await res.text());
+    const data = await res.json() as { data: Array<{ embedding: number[] }> };
+    return data.data?.[0]?.embedding ?? [];
   }
 }

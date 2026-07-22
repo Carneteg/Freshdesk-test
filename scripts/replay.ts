@@ -14,10 +14,9 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import {
   classifyUsage,
-  firstAgentReply,
   isIgnorableTicket,
+  replayTurn,
   similarity,
-  ticketBeforeFirstAgentReply,
 } from "../supabase/functions/ticket-suggester/render.ts";
 import { loadIncidents, runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
 
@@ -68,13 +67,25 @@ if (!ids.length) {
     }
   }
 
+  // Holdout support: REPLAY_EXCLUDE_IDS keeps the already-evaluated tickets out of
+  // the auto-pick, so you can grab a FRESH set the playbook wasn't built from.
+  const excludeIds = new Set(
+    (Deno.env.get("REPLAY_EXCLUDE_IDS") ?? "")
+      .split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0),
+  );
   try {
-    const res = await fd.searchTickets(`status:5 AND agent_id:${agentId}`);
-    ids = (res.results ?? [])
-      .filter((t) => !isIgnorableTicket(t.subject)) // skip call-log/receipt tickets
-      .map((t) => t.id)
-      .slice(0, count);
-    console.log(`Auto-selected ${ids.length} recent CLOSED ticket(s) for agent ${agentId}. Set REPLAY_COUNT to change.\n`);
+    // Paginate (call-logs + excluded ids removed) until we have enough fresh ones.
+    const picked: number[] = [];
+    for (let page = 1; page <= 10 && picked.length < count; page++) {
+      const res = await fd.searchTickets(`status:5 AND agent_id:${agentId}`, page);
+      if (!(res.results ?? []).length) break;
+      for (const t of res.results ?? []) {
+        if (!isIgnorableTicket(t.subject) && !excludeIds.has(t.id)) picked.push(t.id);
+      }
+    }
+    ids = picked.slice(0, count);
+    const exNote = excludeIds.size ? `, excluding ${excludeIds.size} id(s)` : "";
+    console.log(`Auto-selected ${ids.length} recent CLOSED ticket(s) for agent ${agentId}${exNote}. Set REPLAY_COUNT to change.\n`);
   } catch (err) {
     console.error(`Auto-select failed (${err instanceof Error ? err.message : err}). Pass ticket ids explicitly.`);
     Deno.exit(1);
@@ -135,14 +146,21 @@ console.log("");
 for (const t of kept) {
   const bar = "─".repeat(76);
   try {
-    // Cold start (CLAUDE.md §6 Step 4): reason over the ticket as it stood just
-    // before the agent's FIRST reply — the customer's opening request, nothing
-    // after. This mirrors a freshly assigned live ticket and avoids grading the
-    // trivial "thanks, it worked" turn at the end of a resolved thread. Compare
-    // against the substantive first reply the agent actually sent.
-    const view = ticketBeforeFirstAgentReply(t);
-    const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories, incidents }, view);
-    const actual = firstAgentReply(t);
+    // Exact dialogue-turn synchronisation (CLAUDE.md §6 Step 4; #84875, #84611):
+    // pick ONE specific public agent reply — the first SUBSTANTIVE one, skipping
+    // auto/holding acknowledgments — reason over the ticket as it stood strictly
+    // BEFORE that turn (everything later hidden), and compare against THAT reply.
+    const turn = replayTurn(t);
+    const s = await runPipeline(
+      {
+        fd, llm, model, withRetrieval, excludeCategories, incidents,
+        db: db ?? undefined,
+        // No leakage: exclude past tickets resolved at/after the graded turn's time.
+        retrievalBefore: turn.targetAt ?? undefined,
+      },
+      turn.view,
+    );
+    const actual = turn.target;
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);
 
@@ -186,7 +204,12 @@ for (const t of kept) {
     if (s.bug_guidance.customer_steps.length) {
       console.log("\nCUSTOMER STEPS:\n  - " + s.bug_guidance.customer_steps.join("\n  - "));
     }
-    console.log("\nACTUALLY SENT BY AGENT:\n" + (actual || "(none found)"));
+    const turnNote = turn.index < 0
+      ? " (agent never replied publicly)"
+      : turn.skipped
+      ? ` (graded against agent reply #${turn.index + 1}; skipped ${turn.skipped} holding/auto reply(ies))`
+      : ` (graded against the agent's first substantive reply)`;
+    console.log("\nACTUALLY SENT BY AGENT" + turnNote + ":\n" + (actual || "(none found)"));
     console.log("");
   } catch (err) {
     console.log(bar);

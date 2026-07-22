@@ -67,7 +67,10 @@ if (db && !force) {
 
 console.log("Running pipeline (analyse → retrieve → draft → verify) …");
 const incidents = db ? await loadIncidents(db) : [];
-const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories, incidents }, ticket);
+const s = await runPipeline(
+  { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined },
+  ticket,
+);
 console.log(`  type=${s.ticket_type}  confidence=${s.confidence}  Q/A=${s.qa_answered}/${s.qa_total}`);
 if (s.confidence === "none") {
   console.log("  (confidence is 'none' — the note will say so; try a ticket your KB covers for a real draft)");

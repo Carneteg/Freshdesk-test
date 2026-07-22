@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22o";
+export const PROMPT_VERSION = "g1-2026-07-22u";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -26,6 +26,8 @@ export interface Incident {
   affected?: string | null; // versions / scope / distinguishing symptoms
   workaround?: string | null; // interim workaround while unresolved
   customer_action?: string | null; // what the customer does (esp. after a fix)
+  fix_released_at?: string | null; // date the fix went live ("resolved as of …")
+  post_fix_instructions?: string | null; // which records auto-corrected vs. fix manually, and how
 }
 
 function renderPlaybook(incidents: Incident[]): string {
@@ -37,6 +39,8 @@ function renderPlaybook(incidents: Incident[]): string {
       if (i.affected) lines.push(`  scope: ${i.affected}`);
       lines.push(`  resolution: ${i.resolution}`);
       if (i.workaround) lines.push(`  workaround: ${i.workaround}`);
+      if (i.fix_released_at) lines.push(`  fix released: ${i.fix_released_at}`);
+      if (i.post_fix_instructions) lines.push(`  after the fix: ${i.post_fix_instructions}`);
       if (i.customer_action) lines.push(`  customer does: ${i.customer_action}`);
       if (i.routing) lines.push(`  route to: ${i.routing}`);
       return lines.join("\n");
@@ -118,6 +122,8 @@ export function analysePrompt(subject: string, context: string) {
     '  "questions_asked": ["each distinct question the customer needs answered"],',
     '  "search_queries": ["2-4 short keyword queries IN THE TICKET LANGUAGE for the help centre"],',
     '  "security_sensitive": true,',
+    '  "sensitive_action_request": false,',
+    '  "sensitive_action_desc": "if the customer is asking us to perform an irreversible / sensitive action (delete an account or data, remove a user, grant or change access rights, export personal data, transfer ownership), describe it in a few words; else empty string",',
     '  "facts_from_customer": ["what the customer stated"],',
     '  "facts_from_agent": ["what an agent stated in a reply"],',
     '  "facts_from_internal_notes": ["what an internal note stated"],',
@@ -132,6 +138,10 @@ export function analysePrompt(subject: string, context: string) {
     '- ticket_type: "bug" for something not working; "howto" for how-do-I; "unclear" if you',
     '  cannot tell what they need; else "question".',
     "- security_sensitive = true when the ticket concerns roles, admin/access rights, or permissions.",
+    "- sensitive_action_request = true ONLY when the customer is asking US to CARRY OUT an irreversible or",
+    "  high-impact action: delete an account or personal data, remove/deactivate a user, grant or change",
+    "  access rights, export personal data, or transfer ownership. Merely mentioning an account, or asking a",
+    "  how-to about these areas, is NOT a sensitive_action_request. When true, fill sensitive_action_desc.",
     "- Source-tag facts by WHO stated them; do not merge them or treat them as your own findings.",
     "- unanswered_agent_question: if an agent already asked e.g. \"is this the right person?\" and the",
     "  customer only sent an auto-reply or nothing, keep that question here — it is still open.",
@@ -165,6 +175,23 @@ export function draftPrompt(input: {
     GROUND_RULES,
     "",
     ORG_CONTEXT,
+    "",
+    "BLOCKING SAFETY RULE — irreversible / sensitive actions. This OVERRIDES \"prefer solving\"; it is a",
+    "hard rule, not a tone preference. It applies whenever the customer asks us to CARRY OUT: account or",
+    "data DELETION, removing/deactivating a user, GRANTING or CHANGING access rights, exporting personal",
+    "data, or transferring ownership (analysis flags this as sensitive_action_request).",
+    "  • NEVER draft a customer reply that confirms, promises, or instructs performing such an action —",
+    "    not \"I have deleted…\", not \"we will now remove…\", not \"access has been granted\". You have no",
+    "    system access and cannot verify who is asking.",
+    "  • Before such an action may even be RECOMMENDED, ALL FOUR of these must be established IN THE TICKET",
+    "    TEXT: (1) the requester's IDENTITY is verified, (2) their RELATIONSHIP to the account/data (they",
+    "    own or administer it), (3) their AUTHORITY to request this specific action, (4) the EXACT object",
+    "    to act on (which account / which data / which user). A confirmed or existing account is NOT by",
+    "    itself sufficient authority to delete or change it.",
+    "  • If ANY of the four is not established in the text, you MUST NOT recommend the action. Choose",
+    "    RECOMMEND_AGENT_VERIFICATION or REQUEST_MISSING_INFORMATION, and put the specific verifications",
+    "    still needed into resolution_steps (for the agent) and required_customer_steps (what the customer",
+    "    must confirm). Say plainly that these must be verified before the action can be carried out.",
     "",
     "Never write things like \"I see in the system…\", \"I have checked…\", \"the access is",
     "already in place\", or \"the user exists\". If a fact comes from the ticket text, attribute",
@@ -210,6 +237,9 @@ export function draftPrompt(input: {
     "  change. When unsure, put the investigation step in resolution_steps for the agent to try first.",
     "- NEVER ask the customer for information already on the ticket (their email/identity is on file —",
     "  see CUSTOMER ON FILE). Use it; ask only for details that are genuinely not present.",
+    "- If the context notes ATTACHMENTS, you cannot read them. Do NOT ask the customer to send a",
+    "  screenshot/file they already attached — say you cannot access the attachment yourself and ask",
+    "  the agent to open it.",
     "- DO NOT propose roles, permissions, access levels, or system settings as the cause OR the",
     "  solution unless there is EXPLICIT support in the ticket text or a SOURCE whose content actually",
     "  addresses it. \"This could be a permissions issue\" / \"verify the customer's role\" is a HYPOTHESIS,",
@@ -217,6 +247,9 @@ export function draftPrompt(input: {
     "  you have, the cause is UNKNOWN: say so, and do not build a reply around the guess.",
     "- A SOURCE only counts as grounding if its CONTENT addresses THIS problem — not because it shares a",
     "  word like \"access\", \"role\" or \"sick leave\". If no source truly fits, treat it as a KB gap.",
+    "- SOURCES may include past RESOLVED tickets (ref \"ticket:*\") showing how a SIMILAR case was actually",
+    "  handled. Treat a close match as useful precedent and reference it, but the customer's situation may",
+    "  differ — verify the match before reusing the resolution; it is grounding, not a guarantee.",
     "- You are given an INTERNAL PLAYBOOK of known incidents / routing. If one clearly matches this ticket,",
     "  it is STRONGER grounding than a generic KB article — follow its resolution/routing and reference it",
     "  (\"this matches a known issue\"). It counts as KB-BASED grounding, not a hypothesis. If none matches,",
@@ -224,9 +257,14 @@ export function draftPrompt(input: {
     "- When you DO apply a playbook incident, stay humble: tell the agent to VERIFY the symptoms match",
     "  before relying on it (\"this looks like known incident X — confirm before linking/acting\"), never",
     "  state it as certain, and never claim what the customer's account or settings currently are.",
-    "- Use the incident's STATUS. If 'fixed'/'closed', the fix is deployed — tell the customer how to get",
-    "  it (its customer_action, e.g. reload / clear cache) and do NOT escalate to developers. If",
-    "  'investigating'/'identified', it is a KNOWN issue already being handled — set expectations, give any",
+    "- Use the incident's STATUS. If 'fixed'/'closed', the fix is deployed — do NOT escalate to developers",
+    "  and do NOT tell the customer it is still being investigated. State it is resolved (if 'fix released'",
+    "  is given, say \"resolved as of <that date>\"), tell them how to get the fix (its customer_action, e.g.",
+    "  reload / clear cache), AND — critically — if 'after the fix' (post-fix instructions) is present, relay",
+    "  it: which records were corrected automatically versus which HISTORICAL records the customer must still",
+    "  fix by hand, and exactly how. A solved incident with old bad data left uncorrected is a real failure",
+    "  (#84553, #85607) — never say only \"it's fixed\" when historical records still need manual correction.",
+    "  If 'investigating'/'identified', it is a KNOWN issue already being handled — set expectations, give any",
     "  workaround, and do NOT re-escalate. Only link the ticket if the customer's symptoms/scope match.",
     "- Separate three certainty levels and treat them differently: (a) VERIFIED = stated in the ticket;",
     "  (b) KB-BASED = grounded in a fitting SOURCE; (c) HYPOTHESIS = a guess to check. Only (a) and (b)",
@@ -265,6 +303,11 @@ export function draftPrompt(input: {
     "- Do NOT write a signature, a name, or any placeholder like \"[Your Name]\", \"[Agent's Name]\" or",
     "  \"Simployer Support\" — the agent adds their own name. End with a warm closing line only.",
     "- Never let empathy replace substance: still give the concrete answer or next step.",
+    "",
+    "- Your reply must be CONSISTENT with your own analysis: never recommend an action or setting that",
+    "  your analysis ruled out or said does not apply (e.g. do not tell the customer to change setting X",
+    "  while your analysis says the incident about X does not fit). If you cannot tell which of two causes",
+    "  it is, ask / verify first instead of recommending one.",
     "",
     "FINAL CHECK before you output: does the reply actually contain the customer-facing action, the",
     "ownership (\"I will…\" / who does what), and the next step your analysis / matched incident",
@@ -313,7 +356,7 @@ export function draftPrompt(input: {
     "INTERNAL PLAYBOOK (known incidents — outrank generic KB when they match):",
     renderPlaybook(input.incidents),
     "",
-    "SOURCES (knowledge base):",
+    "SOURCES (knowledge base + similar past resolved tickets, ref ticket:*):",
     renderSources(input.sources),
     "",
     "Choose the strategy and draft the suggestion now.",
@@ -327,7 +370,14 @@ export function draftPrompt(input: {
 // LOWER confidence, never rewrites the reply (CLAUDE.md §12). It also catches
 // false claims of system access (forbidden) and marks them contradicted.
 export function verifyPrompt(
-  input: { reply: string; sources: SourceDoc[]; context: string; requiredCustomerSteps: string[] },
+  input: {
+    reply: string;
+    sources: SourceDoc[];
+    context: string;
+    requiredCustomerSteps: string[];
+    agentAnalysis: string;
+    sensitiveAction: string;
+  },
 ) {
   const system = [
     "You fact-check a support reply that a colleague will review before sending. You are given the",
@@ -353,12 +403,28 @@ export function verifyPrompt(
     "present as missing_steps — this is how we stop a reply that only thanks the customer while omitting the",
     "real action.",
     "",
+    "You are ALSO given the AI's own ANALYSIS. Check whether the reply RECOMMENDS or ASSERTS anything the",
+    "analysis explicitly ruled out, said does NOT apply, or left as unknown (e.g. the analysis says a known",
+    "incident does not fit, yet the reply still tells the customer to apply that incident's fix). Return a",
+    "short contradicts_analysis describing it, or \"\" if the reply is consistent with the analysis.",
+    "",
+    "You may ALSO be told this ticket requests an IRREVERSIBLE / SENSITIVE ACTION (account or data deletion,",
+    "removing a user, granting or changing access rights, exporting personal data, transferring ownership).",
+    "When such an action is flagged, check the reply STRICTLY: does it CONFIRM, PROMISE, or INSTRUCT carrying",
+    "out that action WITHOUT the ticket text having established ALL FOUR of — verified identity, the",
+    "requester's relationship to the account/data, their authority to request it, and the exact object to act",
+    "on? A confirmed/existing account alone is NOT sufficient. If the reply crosses that line, return a short",
+    "unsafe_action describing what it recommends and which safeguard is missing; else \"\". If no sensitive",
+    "action is flagged, always return \"\".",
+    "",
     "Return ONLY a JSON object with exactly this shape:",
     "{",
     '  "claims": [',
     '    { "quote": "verbatim text copied from the reply", "status": "supported | unsupported | contradicted", "reason": "one short sentence" }',
     "  ],",
-    '  "missing_steps": ["each REQUIRED CUSTOMER STEP that does NOT clearly appear in the reply; [] if all present"]',
+    '  "missing_steps": ["each REQUIRED CUSTOMER STEP that does NOT clearly appear in the reply; [] if all present"],',
+    '  "contradicts_analysis": "short description if the reply recommends/asserts something the analysis ruled out or left unknown; else empty string",',
+    '  "unsafe_action": "short description if the reply recommends/confirms an irreversible or sensitive action without all four safeguards established; else empty string"',
     "}",
     "",
     "Each quote MUST appear character-for-character in the reply so it can be located.",
@@ -372,6 +438,12 @@ export function verifyPrompt(
     input.requiredCustomerSteps.length
       ? input.requiredCustomerSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")
       : "(none)",
+    "",
+    "ANALYSIS (the reply must not contradict this):",
+    input.agentAnalysis || "(none)",
+    "",
+    "SENSITIVE ACTION REQUESTED (apply the strict four-safeguard check if present):",
+    input.sensitiveAction || "(none)",
     "",
     "SOURCES:",
     renderSources(input.sources),

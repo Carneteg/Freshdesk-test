@@ -42,6 +42,8 @@ interface Analysis {
   questions_asked: string[];
   search_queries: string[];
   security_sensitive: boolean;
+  sensitive_action_request: boolean;
+  sensitive_action_desc: string;
   facts_from_customer: string[];
   facts_from_agent: string[];
   facts_from_internal_notes: string[];
@@ -81,6 +83,8 @@ interface VerifyClaim {
 interface VerifyResult {
   claims: VerifyClaim[];
   missing_steps: string[];
+  contradicts_analysis: string;
+  unsafe_action: string;
 }
 
 const TICKET_TYPES = ["question", "howto", "bug", "unclear"];
@@ -94,6 +98,9 @@ function str(v: unknown): string {
 
 // ── Pipeline ──────────────────────────────────────────────────────────────────
 
+// deno-lint-ignore no-explicit-any
+type Db = any;
+
 export interface PipelineDeps {
   fd: Freshdesk;
   llm: LLM;
@@ -103,6 +110,12 @@ export interface PipelineDeps {
   excludeCategories: string[];
   // Team-curated known incidents fed into the draft as an internal playbook.
   incidents?: Incident[];
+  // Supabase client — enables the past-ticket semantic search (stage 2).
+  db?: Db;
+  // Search the past-ticket index for similar resolved tickets (default on when db set).
+  withPastTickets?: boolean;
+  // Replay only: only use past tickets resolved BEFORE this ISO time (no leakage).
+  retrievalBefore?: string;
 }
 
 export interface Suggestion {
@@ -154,6 +167,8 @@ async function analyse(deps: PipelineDeps, subject: string, context: string): Pr
     questions_asked: strList(j.questions_asked),
     search_queries: strList(j.search_queries),
     security_sensitive: j.security_sensitive === true,
+    sensitive_action_request: j.sensitive_action_request === true,
+    sensitive_action_desc: str(j.sensitive_action_desc),
     facts_from_customer: strList(j.facts_from_customer),
     facts_from_agent: strList(j.facts_from_agent),
     facts_from_internal_notes: strList(j.facts_from_internal_notes),
@@ -202,7 +217,43 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
     }
   }
   return docs;
-  // NOTE: past-RESOLVED-ticket retrieval is deliberately NOT wired in yet (§6 Step 3).
+}
+
+// Stage 2: semantic search of our own past-ticket index. Embeds the current
+// ticket's question and pulls the nearest RESOLVED tickets as `ticket` sources,
+// so the draft can reference how a similar case was actually handled. Fail-safe:
+// no db, no embedding, or an empty/unsynced index all just mean "no past tickets".
+async function retrievePastTickets(
+  deps: PipelineDeps,
+  queryText: string,
+  excludeId?: number,
+): Promise<SourceDoc[]> {
+  if (!deps.db || !queryText.trim()) return [];
+  try {
+    const embedding = await deps.llm.embed(queryText);
+    if (!embedding.length) return [];
+    const { data } = await deps.db.rpc("match_past_tickets", {
+      query_embedding: embedding,
+      match_count: 3,
+      min_similarity: 0.35,
+      // No leakage: never cite the ticket being answered, and (in replay) never a
+      // ticket resolved after this one's reply time.
+      exclude_ticket_id: excludeId ?? null,
+      before_ts: deps.retrievalBefore ?? null,
+    });
+    return (data ?? [])
+      .filter((r: { resolution?: string | null }) => r && r.resolution)
+      .map((r: { ticket_id: number; subject?: string; resolution: string }) => ({
+        ref: `ticket:${r.ticket_id}`,
+        kind: "ticket" as const,
+        id: r.ticket_id,
+        title: r.subject ?? `Ticket #${r.ticket_id}`,
+        text: strip(String(r.resolution)).slice(0, 1200),
+        url: deps.fd.ticketUrl(r.ticket_id),
+      }));
+  } catch {
+    return [];
+  }
 }
 
 async function draftReply(
@@ -254,13 +305,24 @@ async function verifyDraft(
   sources: SourceDoc[],
   context: string,
   requiredCustomerSteps: string[],
+  agentAnalysis: string,
+  sensitiveAction: string,
 ): Promise<VerifyResult> {
-  const { system, user } = verifyPrompt({ reply, sources, context, requiredCustomerSteps });
+  const { system, user } = verifyPrompt({
+    reply,
+    sources,
+    context,
+    requiredCustomerSteps,
+    agentAnalysis,
+    sensitiveAction,
+  });
   const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1200 });
   const j = extractJSON<Partial<VerifyResult>>(out);
   return {
     claims: Array.isArray(j.claims) ? j.claims : [],
     missing_steps: strList(j.missing_steps),
+    contradicts_analysis: str(j.contradicts_analysis),
+    unsafe_action: str(j.unsafe_action),
   };
 }
 
@@ -280,12 +342,21 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   const latestCustomer = incoming.length ? (incoming[incoming.length - 1].body_text ?? "") : (ticket.description_text ?? "");
   a.latest_customer_is_auto_reply = a.latest_customer_is_auto_reply || looksLikeAutoReply(latestCustomer);
 
-  const sources = deps.withRetrieval ? await retrieve(deps, a.search_queries) : [];
+  const kbSources = deps.withRetrieval ? await retrieve(deps, a.search_queries) : [];
+  // Similar RESOLVED past tickets (stage 2) — listed first as they show real
+  // resolutions. Default on whenever a db is available.
+  const wantPast = deps.withPastTickets ?? Boolean(deps.db);
+  const pastSources = wantPast
+    ? await retrievePastTickets(deps, `${ticket.subject}\n${a.questions_asked.join("\n")}`, ticket.id)
+    : [];
+  const sources = [...pastSources, ...kbSources];
 
   const analysisJson = JSON.stringify(
     {
       detected_intent: a.detected_intent,
       security_sensitive: a.security_sensitive,
+      sensitive_action_request: a.sensitive_action_request,
+      sensitive_action_desc: a.sensitive_action_desc,
       questions_asked: a.questions_asked,
       facts_from_customer: a.facts_from_customer,
       facts_from_agent: a.facts_from_agent,
@@ -314,7 +385,15 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   let unsupportedNote = "";
   let notSendReady = false;
   if (draft.confidence !== "none" && draft.reply.trim()) {
-    verify = await verifyDraft(deps, draft.reply, sources, context, draft.required_customer_steps);
+    verify = await verifyDraft(
+      deps,
+      draft.reply,
+      sources,
+      context,
+      draft.required_customer_steps,
+      draft.agent_analysis,
+      a.sensitive_action_request ? a.sensitive_action_desc || "an irreversible/sensitive action" : "",
+    );
     const contradicted = verify.claims.filter((c) => c.status === "contradicted");
     const unsupported = verify.claims.filter((c) => c.status === "unsupported");
 
@@ -334,8 +413,44 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     if (draft.reply.trim() && missing.length) {
       notSendReady = true;
       draft = { ...draft, confidence: draft.confidence === "high" ? "low" : draft.confidence };
-      unsupportedNote = `⚠️ NOT send-ready: the reply is missing required customer step(s): ` +
-        `${missing.join("; ")}. Add them before sending.`;
+      unsupportedNote = [
+        unsupportedNote,
+        `⚠️ NOT send-ready: the reply is missing required customer step(s): ${missing.join("; ")}. ` +
+        `Add them before sending.`,
+      ].filter(Boolean).join(" ");
+    }
+
+    // Consistency gate: the reply must not recommend/assert what the analysis ruled
+    // out (mechanical version of the prompt rule — a prompt nudge wasn't enough, cf. #86002).
+    const contradiction = (verify.contradicts_analysis ?? "").trim();
+    if (draft.reply.trim() && contradiction) {
+      notSendReady = true;
+      draft = { ...draft, confidence: draft.confidence === "high" ? "low" : draft.confidence };
+      unsupportedNote = [
+        unsupportedNote,
+        `⚠️ Reply contradicts the analysis: ${contradiction}. Fix before sending.`,
+      ].filter(Boolean).join(" ");
+    }
+
+    // BLOCKING SECURITY GATE (priority #1, cf. #85081): an irreversible / sensitive
+    // action — account or data deletion, user removal, access change, data export —
+    // must NEVER be recommended in a customer reply unless the ticket text establishes
+    // all four safeguards (verified identity, account relationship, authority, exact
+    // object). This is a HARD block, not a confidence nudge: discard the customer draft
+    // entirely and hand the judgement back to the agent. A confirmed account alone is
+    // not sufficient support for deletion. The gate fires only when analysis flagged a
+    // sensitive action AND verify found the reply crossing the line, so a properly
+    // hedged "verify identity first" reply is never blocked.
+    const unsafe = (verify.unsafe_action ?? "").trim();
+    if (a.sensitive_action_request && draft.reply.trim() && unsafe) {
+      notSendReady = true;
+      unsupportedNote = [
+        unsupportedNote,
+        `⛔ BLOCKED (safety): the reply recommends a sensitive/irreversible action without ` +
+        `verified identity, account relationship, authority and the exact object — ${unsafe}. ` +
+        `These must be verified before any such action; a confirmed account alone is not enough.`,
+      ].filter(Boolean).join(" ");
+      draft = { ...draft, confidence: "none", reply: "" };
     }
   }
 
@@ -476,7 +591,9 @@ export async function loadIncidents(
   try {
     const { data } = await db
       .from("known_incidents")
-      .select("title, symptoms, resolution, routing, status, affected, workaround, customer_action")
+      .select(
+        "title, symptoms, resolution, routing, status, affected, workaround, customer_action, fix_released_at, post_fix_instructions",
+      )
       .eq("active", true)
       .limit(50);
     return (data ?? []) as Incident[];

@@ -206,6 +206,16 @@ export function firstAgentReply(t: Ticket): string {
   return outgoing.length ? (outgoing[0].body_text ?? "") : "";
 }
 
+// When the agent's first reply was sent — the simulated "reply time" for replay.
+// Used to exclude past tickets that were only resolved AFTER this one (no leakage).
+export function firstAgentReplyAt(t: Ticket): string | null {
+  const outgoing = (t.conversations ?? [])
+    .filter((c) => !c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return outgoing.length ? outgoing[0].created_at : null;
+}
+
 // REPLAY ONLY (cold start). The ticket as it stood just before the agent's FIRST
 // public reply: the customer's opening request (plus any pre-reply notes),
 // nothing after. This mirrors what the live scheduler actually sees on a newly
@@ -221,6 +231,77 @@ export function ticketBeforeFirstAgentReply(t: Ticket): Ticket {
     firstReplyAt ? c.created_at < firstReplyAt : true
   );
   return { ...t, conversations };
+}
+
+// Holding / acknowledgment replies ("Hi, thanks for reaching out, we're looking
+// into it") are NOT the substantive answer. In replay they must not be the turn we
+// grade against — the AI writes a real coaching reply, so comparing it to a filler
+// line is the wrong-turn bug (#84875, #84611). A reply that ASKS something concrete
+// (contains "?") is substantive and never counts as holding; a long reply that
+// merely opens with thanks is substantive too — only a SHORT ack with no question
+// and a holding phrase is skipped.
+const HOLDING_HINTS = [
+  "looking into", "look into this", "we'll get back", "get back to you",
+  "investigating this", "working on it", "we are on it",
+  "ser på saken", "ser paa saken", "ser nærmere", "ser naermere",
+  "återkommer", "aterkommer", "vi undersöker", "vi undersoker", "vi kollar",
+  "kommer tilbake", "undersøker", "undersoker", "vi kikker",
+  "takk for din henvendelse", "tack för att du kontaktar", "tack for att du kontaktar",
+  "thank you for reaching out", "thanks for reaching out", "thanks for contacting",
+  "takk for at du kontakter", "vi ser på det", "vi ser paa det",
+];
+
+export function looksLikeHoldingReply(text: string): boolean {
+  const t = strip(text).toLowerCase();
+  if (!t) return true; // an empty public reply is not a real turn
+  if (t.includes("?")) return false; // asks something concrete → substantive
+  return t.length < 200 && HOLDING_HINTS.some((h) => t.includes(h));
+}
+
+// REPLAY ONLY (CLAUDE.md §6 Step 4). Exact dialogue-turn synchronisation (#84875,
+// #84611): pick ONE specific public agent reply as the grading target — the first
+// SUBSTANTIVE one, skipping auto/out-of-office and short holding acknowledgments —
+// then reconstruct the ticket as it stood strictly BEFORE that turn (every later
+// customer message, agent reply and internal note hidden). The AI reasons over the
+// view and is compared against `target`. If every reply is holding/auto, fall back
+// to the first; if the agent never replied publicly, there is no turn to grade.
+export interface ReplayTurn {
+  view: Ticket; // the ticket as the agent saw it just before the target reply
+  target: string; // the specific agent reply we grade the AI against
+  targetAt: string | null; // its timestamp — also the retrieval cut-off (no leakage)
+  index: number; // which public reply (0-based); -1 if the agent never replied
+  skipped: number; // holding/auto replies skipped before the target
+}
+
+export function replayTurn(t: Ticket): ReplayTurn {
+  const outgoing = (t.conversations ?? [])
+    .filter((c) => !c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  if (!outgoing.length) {
+    return { view: { ...t }, target: "", targetAt: null, index: -1, skipped: 0 };
+  }
+
+  // First substantive public reply — skip auto-replies and holding acknowledgments
+  // so we grade against the turn that actually answered.
+  let idx = outgoing.findIndex(
+    (c) => !looksLikeAutoReply(c.body_text ?? "") && !looksLikeHoldingReply(c.body_text ?? ""),
+  );
+  if (idx === -1) idx = 0; // all holding/auto → fall back to the first reply
+
+  const target = outgoing[idx];
+  const cut = target.created_at;
+  // Strictly before the target turn: hide the target itself and everything after it
+  // (later customer/agent/internal), keep every earlier turn as real context.
+  const conversations = (t.conversations ?? []).filter((c) => c.created_at < cut);
+  return {
+    view: { ...t, conversations },
+    target: target.body_text ?? "",
+    targetAt: target.created_at,
+    index: idx,
+    skipped: idx,
+  };
 }
 
 // Out-of-office / automatic-absence detection. Such a reply must NOT be treated
@@ -307,6 +388,16 @@ export function buildContext(t: Ticket): string {
   const convos = (t.conversations ?? [])
     .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  // Attachments (e.g. screenshots) exist on the ticket but the AI cannot read them.
+  // Flag them so it acknowledges that instead of asking for what is already sent.
+  const attachN = (t.attachments?.length ?? 0) +
+    convos.reduce((n, c) => n + (c.attachments?.length ?? 0), 0);
+  if (attachN) {
+    lines.push(
+      `ATTACHMENTS: ${attachN} file(s) are attached (e.g. a screenshot) that you CANNOT read. Do NOT ask the customer to send what is already attached — say you cannot access the attachment and ask the agent to look at it.`,
+    );
+  }
 
   // The latest real (non-auto) customer message is the one the draft should
   // respond to. If there are no incoming conversation entries, that is the
@@ -395,10 +486,18 @@ function renderList(items: string[], ordered: boolean): string {
 export function renderNote(r: NoteData): string {
   const out: string[] = [];
   const typePart = r.ticketType ? `Type: ${esc(r.ticketType)} · ` : "";
+  // Q/A only means something for a direct answer. For a coach action (verify /
+  // route / clarify / abstain) "answers 0 of N" reads as a failure when it isn't —
+  // show the coach status instead (QA feedback).
+  const isAnswer = r.answerStrategy === "DIRECT_ANSWER" ||
+    r.answerStrategy === "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS";
+  const scorePart = isAnswer
+    ? `Q/A: answers ${r.qaAnswered} of ${r.qaTotal} question(s)`
+    : `Coach action (verify / route / clarify — not a direct answer)`;
   out.push(
     `<p><strong>🤝 AI assist for the agent</strong> — decision support, not an automatic answer<br>` +
       `${typePart}Confidence: ${esc(BADGE[r.confidence])} · ` +
-      `Q/A: answers ${r.qaAnswered} of ${r.qaTotal} question(s) · ` +
+      `${scorePart} · ` +
       `<em>${esc(r.promptVersion)}</em></p>`,
   );
 

@@ -161,7 +161,54 @@ create table if not exists known_incidents (
   customer_action text,                    -- what the customer does (esp. after a fix)
   started_at  date,
   resolved_at date,
+  -- post-fix lifecycle (migration 14): so the AI stops re-escalating a solved issue
+  -- and tells the customer which historical records still need a manual correction.
+  fix_released_at       date,              -- when the fix went live ("resolved as of …")
+  post_fix_instructions text,              -- which records auto-corrected vs. fix manually, and how
   active      boolean not null default true,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+
+-- Knowledge layer stage 2 (migration 12): our own semantic index of resolved
+-- tickets. Freshdesk can't search ticket content, so scripts/sync_tickets.ts fills
+-- this and the pipeline pulls the nearest resolved tickets by embedding similarity.
+create extension if not exists vector;
+
+create table if not exists past_tickets (
+  ticket_id   bigint primary key,
+  subject     text,
+  question    text not null,          -- customer's question(s)
+  resolution  text,                   -- the agent's resolving public reply
+  language    text,
+  resolved_at timestamptz,
+  embedding   vector(1536),           -- text-embedding-3-small of subject + question
+  synced_at   timestamptz not null default now()
+);
+alter table past_tickets enable row level security;
+create index if not exists past_tickets_embedding_idx
+  on past_tickets using hnsw (embedding vector_cosine_ops);
+
+-- match_count similar resolved tickets, excluding the ticket being answered and
+-- (in replay) any ticket resolved after the simulated reply time — no leakage (13).
+create or replace function match_past_tickets(
+  query_embedding vector(1536),
+  match_count int default 5,
+  min_similarity float default 0.3,
+  exclude_ticket_id bigint default null,
+  before_ts timestamptz default null
+)
+returns table (ticket_id bigint, subject text, resolution text, similarity float)
+language sql stable
+as $$
+  select p.ticket_id, p.subject, p.resolution,
+         1 - (p.embedding <=> query_embedding) as similarity
+  from past_tickets p
+  where p.embedding is not null
+    and p.resolution is not null
+    and (exclude_ticket_id is null or p.ticket_id <> exclude_ticket_id)
+    and (before_ts is null or (p.resolved_at is not null and p.resolved_at < before_ts))
+    and 1 - (p.embedding <=> query_embedding) >= min_similarity
+  order by p.embedding <=> query_embedding
+  limit match_count;
+$$;

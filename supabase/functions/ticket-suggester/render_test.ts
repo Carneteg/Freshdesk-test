@@ -13,8 +13,10 @@ import {
   lastAgentReply,
   latestCustomerMessage,
   looksLikeAutoReply,
+  looksLikeHoldingReply,
   lower,
   renderNote,
+  replayTurn,
   similarity,
   strip,
   stripQuotes,
@@ -43,6 +45,33 @@ Deno.test("draftPrompt: injects the known-incidents playbook, outranking generic
   assertStringIncludes(user, "AI search returns 404");
   assertStringIncludes(user, "reindex the search");
   assertStringIncludes(system, "STRONGER grounding than a generic KB article");
+});
+
+// Post-fix lifecycle (#84553, #85607): a 'fixed' incident must carry the fix date
+// and the post-fix runbook (auto-corrected vs. manual records) into the prompt.
+Deno.test("draftPrompt: fixed incident surfaces fix date + post-fix instructions", () => {
+  const { system, user } = draftPrompt({
+    subject: "Wrong values on old agreements",
+    language: "no",
+    context: "customer: figures look wrong on agreements from last year",
+    analysisJson: "{}",
+    sources: [],
+    incidents: [{
+      title: "Agreement template field correction",
+      symptoms: "incorrect values shown on agreements",
+      resolution: "template field mapping corrected in the platform",
+      status: "fixed",
+      fix_released_at: "2026-06-15",
+      post_fix_instructions:
+        "New agreements are correct automatically; agreements created before 2026-06-15 must be re-opened and re-saved by the customer to recalculate.",
+    }],
+  });
+  assertStringIncludes(user, "fix released: 2026-06-15");
+  assertStringIncludes(user, "after the fix:");
+  assertStringIncludes(user, "must be re-opened and re-saved");
+  // The rule that teaches the model to apply it is present.
+  assertStringIncludes(system, "historical records the customer must still");
+  assertStringIncludes(system, "resolved as of");
 });
 
 Deno.test("extractJSON: plain object", () => {
@@ -156,7 +185,7 @@ Deno.test("renderNote: none-confidence still produces a note with the gap report
     qaTotal: 2,
   });
   assertStringIncludes(html, "NONE");
-  assertStringIncludes(html, "answers 0 of 2 question(s)");
+  assertStringIncludes(html, "Coach action");
   assertStringIncludes(html, "Searched for:");
   assertStringIncludes(html, "knowledge-base gap");
 });
@@ -165,6 +194,7 @@ Deno.test("renderNote: high-confidence shows scores, draft, and a linked source"
   const html = renderNote({
     confidence: "high",
     draft: "Line one\nLine two",
+    answerStrategy: "DIRECT_ANSWER",
     promptVersion: "test",
     searchQueries: [],
     sources: [{
@@ -529,6 +559,90 @@ Deno.test("ticketBeforeFirstAgentReply: no agent reply keeps the whole ticket", 
   } as unknown as Ticket;
   assertEquals(ticketBeforeFirstAgentReply(t).conversations?.length, 1);
   assertEquals(firstAgentReply(t), "");
+});
+
+// ── Exact dialogue-turn sync (#84875, #84611) ───────────────────────────────────
+
+Deno.test("looksLikeHoldingReply: skips short acknowledgments, keeps real answers", () => {
+  assertEquals(looksLikeHoldingReply("Hei! Takk for din henvendelse, vi ser på saken og återkommer."), true);
+  assertEquals(looksLikeHoldingReply("Thanks for reaching out — we're looking into it."), true);
+  // A concrete question is substantive even if short.
+  assertEquals(looksLikeHoldingReply("Who should be the admin?"), false);
+  // A long reply that merely opens with thanks is substantive.
+  assertEquals(
+    looksLikeHoldingReply(
+      "Thanks for reaching out. To grant admin access, go to Settings > Users, " +
+        "select the person, and toggle the Administrator role. Let me know once done.",
+    ),
+    false,
+  );
+  // Empty public reply is not a real turn.
+  assertEquals(looksLikeHoldingReply(""), true);
+});
+
+// The grading target must be the first SUBSTANTIVE agent reply, with everything
+// from that turn onward hidden — not a leading "we're looking into it" holding line.
+Deno.test("replayTurn: skips a holding reply and grades the substantive turn", () => {
+  const t = {
+    id: 600,
+    subject: "AI search 404",
+    status: 5,
+    description_text: "Search returns 404.",
+    conversations: [
+      { id: 1, body_text: "Hi, thanks for reaching out — we're looking into it.", incoming: false, private: false, created_at: "2026-02-01T09:00:00Z" },
+      { id: 2, body_text: "Any update?", incoming: true, private: false, created_at: "2026-02-01T11:00:00Z" },
+      { id: 3, body_text: "We reindexed your search; it now works. Please reload.", incoming: false, private: false, created_at: "2026-02-02T09:00:00Z" },
+      { id: 4, body_text: "closed", incoming: false, private: true, created_at: "2026-02-02T09:05:00Z" },
+    ],
+  } as unknown as Ticket;
+
+  const turn = replayTurn(t);
+  // Target is the substantive reply (#3), not the holding line (#1).
+  assertEquals(turn.index, 1);
+  assertEquals(turn.skipped, 1);
+  assertStringIncludes(turn.target, "We reindexed your search");
+  assertEquals(turn.targetAt, "2026-02-02T09:00:00Z");
+
+  // The view keeps everything strictly BEFORE the target: the opening request, the
+  // holding reply, and the customer's follow-up — but hides the target and after it.
+  const ctx = buildContext(turn.view);
+  assertStringIncludes(ctx, "Search returns 404.");
+  assertStringIncludes(ctx, "we're looking into it");
+  assertStringIncludes(ctx, "Any update?");
+  assertEquals(ctx.includes("We reindexed your search"), false);
+  assertEquals(ctx.includes("closed"), false);
+});
+
+Deno.test("replayTurn: all replies holding → falls back to the first", () => {
+  const t = {
+    id: 601,
+    subject: "x",
+    status: 5,
+    description_text: "opening",
+    conversations: [
+      { id: 1, body_text: "Thanks, we're looking into it.", incoming: false, private: false, created_at: "2026-02-01T09:00:00Z" },
+      { id: 2, body_text: "Still investigating this, we'll get back to you.", incoming: false, private: false, created_at: "2026-02-02T09:00:00Z" },
+    ],
+  } as unknown as Ticket;
+  const turn = replayTurn(t);
+  assertEquals(turn.index, 0);
+  assertStringIncludes(turn.target, "Thanks, we're looking into it");
+});
+
+Deno.test("replayTurn: no public agent reply → nothing to grade", () => {
+  const t = {
+    id: 602,
+    subject: "x",
+    status: 2,
+    description_text: "opening",
+    conversations: [
+      { id: 1, body_text: "more detail", incoming: true, private: false, created_at: "2026-02-01T09:00:00Z" },
+    ],
+  } as unknown as Ticket;
+  const turn = replayTurn(t);
+  assertEquals(turn.index, -1);
+  assertEquals(turn.target, "");
+  assertEquals(turn.targetAt, null);
 });
 
 // A low/none note must still HELP the agent — the analysis carries substance so
