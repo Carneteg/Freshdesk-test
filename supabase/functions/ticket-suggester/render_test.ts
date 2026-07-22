@@ -1,6 +1,7 @@
 // Unit tests for the pure functions (CLAUDE.md §8). Run: `deno task test`.
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import {
+  agentReplyToLatestCustomer,
   buildContext,
   classifyUsage,
   containsFalseSystemAccess,
@@ -15,6 +16,7 @@ import {
   similarity,
   strip,
   stripQuotes,
+  ticketAsOfLatestCustomer,
 } from "./render.ts";
 import type { Ticket } from "./clients.ts";
 
@@ -332,6 +334,52 @@ Deno.test("renderNote: security-sensitive note shows manual-verify disclaimer an
   assertStringIncludes(html, "Next action for you:");
   assertStringIncludes(html, "Not established from the ticket");
   assertStringIncludes(html, "Which person should hold the admin role");
+});
+
+// ── Replay fairness (CLAUDE.md §6 Step 4) ───────────────────────────────────────
+// Replaying a CLOSED ticket must hide the agent's resolution, or the model reads
+// the answer and abstains with "already handled". These reconstruct the ticket as
+// the agent saw it and pick out the reply they actually sent to compare against.
+
+const CLOSED_TICKET = {
+  id: 500,
+  subject: "Access request",
+  status: 5,
+  description_text: "Please give me admin access.",
+  conversations: [
+    { id: 1, body_text: "Who should be the admin?", incoming: false, private: false, created_at: "2026-01-01T10:00:00Z" },
+    { id: 2, body_text: "Me, anna@example.com", incoming: true, private: false, created_at: "2026-01-02T10:00:00Z" },
+    { id: 3, body_text: "Done — you now have admin access.", incoming: false, private: false, created_at: "2026-01-03T10:00:00Z" },
+    { id: 4, body_text: "resolved", incoming: false, private: true, created_at: "2026-01-03T10:05:00Z" },
+  ],
+} as unknown as Ticket;
+
+Deno.test("ticketAsOfLatestCustomer: drops the agent's post-trigger resolution", () => {
+  const view = ticketAsOfLatestCustomer(CLOSED_TICKET);
+  const ctx = buildContext(view);
+  // The customer's latest message and the earlier agent question are kept…
+  assertStringIncludes(ctx, "Me, anna@example.com");
+  assertStringIncludes(ctx, "Who should be the admin?");
+  // …but the resolution that came AFTER it is gone (no cheating).
+  assertEquals(ctx.includes("you now have admin access"), false);
+  assertEquals(ctx.includes("resolved"), false);
+});
+
+Deno.test("ticketAsOfLatestCustomer: no incoming message drops all conversations", () => {
+  const t = {
+    id: 501,
+    subject: "x",
+    status: 5,
+    description_text: "first question",
+    conversations: [
+      { id: 1, body_text: "here is the answer", incoming: false, private: false, created_at: "2026-01-02T00:00:00Z" },
+    ],
+  } as unknown as Ticket;
+  assertEquals(ticketAsOfLatestCustomer(t).conversations?.length, 0);
+});
+
+Deno.test("agentReplyToLatestCustomer: returns the reply sent AFTER the trigger", () => {
+  assertEquals(agentReplyToLatestCustomer(CLOSED_TICKET), "Done — you now have admin access.");
 });
 
 // Case C — a straightforward how-to answer needs no manual-verify banner.

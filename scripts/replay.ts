@@ -13,9 +13,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import {
+  agentReplyToLatestCustomer,
   classifyUsage,
-  lastAgentReply,
   similarity,
+  ticketAsOfLatestCustomer,
 } from "../supabase/functions/ticket-suggester/render.ts";
 import { runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
 
@@ -78,8 +79,12 @@ console.log("");
 for (const t of tickets) {
   const bar = "─".repeat(76);
   try {
-    const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories }, t);
-    const actual = lastAgentReply(t);
+    // Fair test: reason over the ticket as the agent saw it (before their reply),
+    // not the resolved/closed version — otherwise the model reads the answer and
+    // just says "already handled" (CLAUDE.md §6 Step 4).
+    const view = ticketAsOfLatestCustomer(t);
+    const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories }, view);
+    const actual = agentReplyToLatestCustomer(t);
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);
 

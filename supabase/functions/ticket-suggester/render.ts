@@ -138,6 +138,50 @@ export function lastAgentReply(t: Ticket): string {
   return outgoing.length ? (outgoing[outgoing.length - 1].body_text ?? "") : "";
 }
 
+// Timestamp of the trigger message — the latest incoming customer message, or
+// null when the first reply is on the ticket description. Used only to split a
+// closed ticket into "what the agent saw" vs "the future".
+function triggerTime(t: Ticket): string | null {
+  const incoming = (t.conversations ?? [])
+    .filter((c) => c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return incoming.length ? incoming[incoming.length - 1].created_at : null;
+}
+
+// REPLAY ONLY (CLAUDE.md §6 Step 4). Reconstruct the ticket as it stood right
+// after the latest customer message: every later entry — the agent's actual
+// answer and any follow-up notes — is removed, so the model cannot "cheat" by
+// reading the resolution of an already-closed ticket. The live pipeline never
+// calls this; it always reasons over the full, still-open ticket.
+export function ticketAsOfLatestCustomer(t: Ticket): Ticket {
+  const cut = triggerTime(t);
+  // No incoming message → the first reply is on the description; drop every
+  // conversation entry (they are all post-trigger). Otherwise keep entries up to
+  // and including the trigger message.
+  const conversations = (t.conversations ?? []).filter((c) =>
+    cut ? c.created_at <= cut : false
+  );
+  return { ...t, conversations };
+}
+
+// REPLAY ONLY. The reply the agent actually sent in response to the latest
+// customer message — the first public outgoing message after the trigger, which
+// is the fair comparison target for "would I have sent this?". Falls back to the
+// last agent reply when timestamps can't separate before/after.
+export function agentReplyToLatestCustomer(t: Ticket): string {
+  const cut = triggerTime(t);
+  const outgoing = (t.conversations ?? [])
+    .filter((c) => !c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  if (cut) {
+    const after = outgoing.find((c) => c.created_at > cut);
+    if (after) return after.body_text ?? "";
+  }
+  return outgoing.length ? (outgoing[outgoing.length - 1].body_text ?? "") : "";
+}
+
 // Out-of-office / automatic-absence detection. Such a reply must NOT be treated
 // as the customer answering an agent's clarifying question.
 const AUTO_REPLY_HINTS = [
