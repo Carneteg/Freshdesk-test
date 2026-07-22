@@ -42,6 +42,8 @@ interface Analysis {
   questions_asked: string[];
   search_queries: string[];
   security_sensitive: boolean;
+  sensitive_action_request: boolean;
+  sensitive_action_desc: string;
   facts_from_customer: string[];
   facts_from_agent: string[];
   facts_from_internal_notes: string[];
@@ -82,6 +84,7 @@ interface VerifyResult {
   claims: VerifyClaim[];
   missing_steps: string[];
   contradicts_analysis: string;
+  unsafe_action: string;
 }
 
 const TICKET_TYPES = ["question", "howto", "bug", "unclear"];
@@ -164,6 +167,8 @@ async function analyse(deps: PipelineDeps, subject: string, context: string): Pr
     questions_asked: strList(j.questions_asked),
     search_queries: strList(j.search_queries),
     security_sensitive: j.security_sensitive === true,
+    sensitive_action_request: j.sensitive_action_request === true,
+    sensitive_action_desc: str(j.sensitive_action_desc),
     facts_from_customer: strList(j.facts_from_customer),
     facts_from_agent: strList(j.facts_from_agent),
     facts_from_internal_notes: strList(j.facts_from_internal_notes),
@@ -301,14 +306,23 @@ async function verifyDraft(
   context: string,
   requiredCustomerSteps: string[],
   agentAnalysis: string,
+  sensitiveAction: string,
 ): Promise<VerifyResult> {
-  const { system, user } = verifyPrompt({ reply, sources, context, requiredCustomerSteps, agentAnalysis });
+  const { system, user } = verifyPrompt({
+    reply,
+    sources,
+    context,
+    requiredCustomerSteps,
+    agentAnalysis,
+    sensitiveAction,
+  });
   const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1200 });
   const j = extractJSON<Partial<VerifyResult>>(out);
   return {
     claims: Array.isArray(j.claims) ? j.claims : [],
     missing_steps: strList(j.missing_steps),
     contradicts_analysis: str(j.contradicts_analysis),
+    unsafe_action: str(j.unsafe_action),
   };
 }
 
@@ -341,6 +355,8 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     {
       detected_intent: a.detected_intent,
       security_sensitive: a.security_sensitive,
+      sensitive_action_request: a.sensitive_action_request,
+      sensitive_action_desc: a.sensitive_action_desc,
       questions_asked: a.questions_asked,
       facts_from_customer: a.facts_from_customer,
       facts_from_agent: a.facts_from_agent,
@@ -376,6 +392,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
       context,
       draft.required_customer_steps,
       draft.agent_analysis,
+      a.sensitive_action_request ? a.sensitive_action_desc || "an irreversible/sensitive action" : "",
     );
     const contradicted = verify.claims.filter((c) => c.status === "contradicted");
     const unsupported = verify.claims.filter((c) => c.status === "unsupported");
@@ -413,6 +430,27 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
         unsupportedNote,
         `⚠️ Reply contradicts the analysis: ${contradiction}. Fix before sending.`,
       ].filter(Boolean).join(" ");
+    }
+
+    // BLOCKING SECURITY GATE (priority #1, cf. #85081): an irreversible / sensitive
+    // action — account or data deletion, user removal, access change, data export —
+    // must NEVER be recommended in a customer reply unless the ticket text establishes
+    // all four safeguards (verified identity, account relationship, authority, exact
+    // object). This is a HARD block, not a confidence nudge: discard the customer draft
+    // entirely and hand the judgement back to the agent. A confirmed account alone is
+    // not sufficient support for deletion. The gate fires only when analysis flagged a
+    // sensitive action AND verify found the reply crossing the line, so a properly
+    // hedged "verify identity first" reply is never blocked.
+    const unsafe = (verify.unsafe_action ?? "").trim();
+    if (a.sensitive_action_request && draft.reply.trim() && unsafe) {
+      notSendReady = true;
+      unsupportedNote = [
+        unsupportedNote,
+        `⛔ BLOCKED (safety): the reply recommends a sensitive/irreversible action without ` +
+        `verified identity, account relationship, authority and the exact object — ${unsafe}. ` +
+        `These must be verified before any such action; a confirmed account alone is not enough.`,
+      ].filter(Boolean).join(" ");
+      draft = { ...draft, confidence: "none", reply: "" };
     }
   }
 

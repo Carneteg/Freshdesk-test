@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22s";
+export const PROMPT_VERSION = "g1-2026-07-22t";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -118,6 +118,8 @@ export function analysePrompt(subject: string, context: string) {
     '  "questions_asked": ["each distinct question the customer needs answered"],',
     '  "search_queries": ["2-4 short keyword queries IN THE TICKET LANGUAGE for the help centre"],',
     '  "security_sensitive": true,',
+    '  "sensitive_action_request": false,',
+    '  "sensitive_action_desc": "if the customer is asking us to perform an irreversible / sensitive action (delete an account or data, remove a user, grant or change access rights, export personal data, transfer ownership), describe it in a few words; else empty string",',
     '  "facts_from_customer": ["what the customer stated"],',
     '  "facts_from_agent": ["what an agent stated in a reply"],',
     '  "facts_from_internal_notes": ["what an internal note stated"],',
@@ -132,6 +134,10 @@ export function analysePrompt(subject: string, context: string) {
     '- ticket_type: "bug" for something not working; "howto" for how-do-I; "unclear" if you',
     '  cannot tell what they need; else "question".',
     "- security_sensitive = true when the ticket concerns roles, admin/access rights, or permissions.",
+    "- sensitive_action_request = true ONLY when the customer is asking US to CARRY OUT an irreversible or",
+    "  high-impact action: delete an account or personal data, remove/deactivate a user, grant or change",
+    "  access rights, export personal data, or transfer ownership. Merely mentioning an account, or asking a",
+    "  how-to about these areas, is NOT a sensitive_action_request. When true, fill sensitive_action_desc.",
     "- Source-tag facts by WHO stated them; do not merge them or treat them as your own findings.",
     "- unanswered_agent_question: if an agent already asked e.g. \"is this the right person?\" and the",
     "  customer only sent an auto-reply or nothing, keep that question here — it is still open.",
@@ -165,6 +171,23 @@ export function draftPrompt(input: {
     GROUND_RULES,
     "",
     ORG_CONTEXT,
+    "",
+    "BLOCKING SAFETY RULE — irreversible / sensitive actions. This OVERRIDES \"prefer solving\"; it is a",
+    "hard rule, not a tone preference. It applies whenever the customer asks us to CARRY OUT: account or",
+    "data DELETION, removing/deactivating a user, GRANTING or CHANGING access rights, exporting personal",
+    "data, or transferring ownership (analysis flags this as sensitive_action_request).",
+    "  • NEVER draft a customer reply that confirms, promises, or instructs performing such an action —",
+    "    not \"I have deleted…\", not \"we will now remove…\", not \"access has been granted\". You have no",
+    "    system access and cannot verify who is asking.",
+    "  • Before such an action may even be RECOMMENDED, ALL FOUR of these must be established IN THE TICKET",
+    "    TEXT: (1) the requester's IDENTITY is verified, (2) their RELATIONSHIP to the account/data (they",
+    "    own or administer it), (3) their AUTHORITY to request this specific action, (4) the EXACT object",
+    "    to act on (which account / which data / which user). A confirmed or existing account is NOT by",
+    "    itself sufficient authority to delete or change it.",
+    "  • If ANY of the four is not established in the text, you MUST NOT recommend the action. Choose",
+    "    RECOMMEND_AGENT_VERIFICATION or REQUEST_MISSING_INFORMATION, and put the specific verifications",
+    "    still needed into resolution_steps (for the agent) and required_customer_steps (what the customer",
+    "    must confirm). Say plainly that these must be verified before the action can be carried out.",
     "",
     "Never write things like \"I see in the system…\", \"I have checked…\", \"the access is",
     "already in place\", or \"the user exists\". If a fact comes from the ticket text, attribute",
@@ -344,6 +367,7 @@ export function verifyPrompt(
     context: string;
     requiredCustomerSteps: string[];
     agentAnalysis: string;
+    sensitiveAction: string;
   },
 ) {
   const system = [
@@ -375,13 +399,23 @@ export function verifyPrompt(
     "incident does not fit, yet the reply still tells the customer to apply that incident's fix). Return a",
     "short contradicts_analysis describing it, or \"\" if the reply is consistent with the analysis.",
     "",
+    "You may ALSO be told this ticket requests an IRREVERSIBLE / SENSITIVE ACTION (account or data deletion,",
+    "removing a user, granting or changing access rights, exporting personal data, transferring ownership).",
+    "When such an action is flagged, check the reply STRICTLY: does it CONFIRM, PROMISE, or INSTRUCT carrying",
+    "out that action WITHOUT the ticket text having established ALL FOUR of — verified identity, the",
+    "requester's relationship to the account/data, their authority to request it, and the exact object to act",
+    "on? A confirmed/existing account alone is NOT sufficient. If the reply crosses that line, return a short",
+    "unsafe_action describing what it recommends and which safeguard is missing; else \"\". If no sensitive",
+    "action is flagged, always return \"\".",
+    "",
     "Return ONLY a JSON object with exactly this shape:",
     "{",
     '  "claims": [',
     '    { "quote": "verbatim text copied from the reply", "status": "supported | unsupported | contradicted", "reason": "one short sentence" }',
     "  ],",
     '  "missing_steps": ["each REQUIRED CUSTOMER STEP that does NOT clearly appear in the reply; [] if all present"],',
-    '  "contradicts_analysis": "short description if the reply recommends/asserts something the analysis ruled out or left unknown; else empty string"',
+    '  "contradicts_analysis": "short description if the reply recommends/asserts something the analysis ruled out or left unknown; else empty string",',
+    '  "unsafe_action": "short description if the reply recommends/confirms an irreversible or sensitive action without all four safeguards established; else empty string"',
     "}",
     "",
     "Each quote MUST appear character-for-character in the reply so it can be located.",
@@ -398,6 +432,9 @@ export function verifyPrompt(
     "",
     "ANALYSIS (the reply must not contradict this):",
     input.agentAnalysis || "(none)",
+    "",
+    "SENSITIVE ACTION REQUESTED (apply the strict four-safeguard check if present):",
+    input.sensitiveAction || "(none)",
     "",
     "SOURCES:",
     renderSources(input.sources),
