@@ -138,6 +138,19 @@ export function lastAgentReply(t: Ticket): string {
   return outgoing.length ? (outgoing[outgoing.length - 1].body_text ?? "") : "";
 }
 
+// Auto-generated call-log / receipt tickets (e.g. "Incoming call with +47…") carry
+// no customer question — the phone integration logs them and the agent just closes
+// them. They must NEVER be processed by this framework (user decision 2026-07-22).
+// Matched by subject; EXCLUDE_SUBJECTS (lowercased substrings) adds more.
+const CALL_LOG_SUBJECT = /^\s*(incoming|outgoing|missed) call with\b/i;
+
+export function isIgnorableTicket(subject: string, extraSubstrings: string[] = []): boolean {
+  const s = subject ?? "";
+  if (CALL_LOG_SUBJECT.test(s)) return true;
+  const lower = s.toLowerCase();
+  return extraSubstrings.some((x) => x && lower.includes(x));
+}
+
 // Timestamp of the trigger message — the latest incoming customer message, or
 // null when the first reply is on the ticket description. Used only to split a
 // closed ticket into "what the agent saw" vs "the future".

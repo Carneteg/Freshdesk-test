@@ -15,6 +15,7 @@ import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.t
 import {
   classifyUsage,
   firstAgentReply,
+  isIgnorableTicket,
   similarity,
   ticketBeforeFirstAgentReply,
 } from "../supabase/functions/ticket-suggester/render.ts";
@@ -29,25 +30,69 @@ function env(name: string): string {
   return v;
 }
 
+const fd = new Freshdesk(env("FRESHDESK_DOMAIN"), env("FRESHDESK_API_KEY"));
+
 const raw = Deno.args.length
   ? Deno.args
   : (Deno.env.get("REPLAY_TICKET_IDS") ?? "").split(",");
-const ids = raw.map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
+let ids = raw.map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
 
+// No ids given → auto-pick a chosen agent's recent CLOSED tickets so the
+// evaluation is easy to scale (CLAUDE.md §6 Step 4). REPLAY_AGENT selects WHO
+// (name, email, or numeric id); defaults to MY_AGENT_ID. Uses Freshdesk's
+// field-based filter (free-text search returns 400 — see clients.ts).
 if (!ids.length) {
-  console.error("Usage: deno task replay <ticketId> [ticketId ...]   (or REPLAY_TICKET_IDS=1,2,3)");
-  console.error("Tip: start with 5 CLOSED tickets whose correct answer you already know.");
-  Deno.exit(1);
+  const count = Number(Deno.env.get("REPLAY_COUNT") ?? "10");
+  const sel = (Deno.env.get("REPLAY_AGENT") ?? Deno.env.get("MY_AGENT_ID") ?? "").trim();
+  if (!sel) {
+    console.error("Usage: deno task replay <ticketId ...>   (or REPLAY_TICKET_IDS=1,2,3)");
+    console.error("Or set REPLAY_AGENT (name / email / id) — or MY_AGENT_ID — to auto-pick closed tickets.");
+    Deno.exit(1);
+  }
+
+  // Resolve the agent selector to a numeric id.
+  let agentId = sel;
+  if (!/^\d+$/.test(sel)) {
+    try {
+      const agent = await fd.findAgent(sel);
+      if (!agent) {
+        console.error(`No agent matched "${sel}". Try their exact email, or set REPLAY_AGENT to the numeric agent id.`);
+        Deno.exit(1);
+      }
+      agentId = String(agent.id);
+      console.log(`Matched agent "${agent.contact?.name}" (id ${agentId}, ${agent.contact?.email}).`);
+    } catch (err) {
+      console.error(`Agent lookup failed (${err instanceof Error ? err.message : err}) — needs admin API.`);
+      console.error(`Set REPLAY_AGENT to the numeric agent id instead.`);
+      Deno.exit(1);
+    }
+  }
+
+  try {
+    const res = await fd.searchTickets(`status:5 AND agent_id:${agentId}`);
+    ids = (res.results ?? [])
+      .filter((t) => !isIgnorableTicket(t.subject)) // skip call-log/receipt tickets
+      .map((t) => t.id)
+      .slice(0, count);
+    console.log(`Auto-selected ${ids.length} recent CLOSED ticket(s) for agent ${agentId}. Set REPLAY_COUNT to change.\n`);
+  } catch (err) {
+    console.error(`Auto-select failed (${err instanceof Error ? err.message : err}). Pass ticket ids explicitly.`);
+    Deno.exit(1);
+  }
+  if (!ids.length) {
+    console.error("No closed tickets found for that agent. Pass ticket ids explicitly.");
+    Deno.exit(1);
+  }
 }
 if (ids.length > 5) {
-  console.warn(`\n⚠  ${ids.length} tickets requested. CLAUDE.md §12 says start with 5. Review first.\n`);
+  console.warn(`\n⚠  ${ids.length} tickets. CLAUDE.md §12: start with 5, scale once it looks right.\n`);
 }
-
-const fd = new Freshdesk(env("FRESHDESK_DOMAIN"), env("FRESHDESK_API_KEY"));
 const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
 const llm = new LLM(env("OPENAI_API_KEY"), model);
 const withRetrieval = (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false";
 const excludeCategories = (Deno.env.get("EXCLUDE_SOLUTION_CATEGORIES") ?? "")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+const excludeSubjects = (Deno.env.get("EXCLUDE_SUBJECTS") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 // Optional: persist results to `suggestions` so you can set verdicts + read
@@ -74,9 +119,16 @@ for (const id of ids) {
     console.error(`  #${id}  FAILED to load: ${err instanceof Error ? err.message : err}`);
   }
 }
+
+// Never handle auto-generated call-log/receipt tickets, even if passed explicitly.
+const kept = tickets.filter((t) => !isIgnorableTicket(t.subject, excludeSubjects));
+const dropped = tickets.length - kept.length;
+if (dropped) {
+  console.log(`\n(excluded ${dropped} call-log/receipt ticket(s) — not handled by this framework)`);
+}
 console.log("");
 
-for (const t of tickets) {
+for (const t of kept) {
   const bar = "─".repeat(76);
   try {
     // Cold start (CLAUDE.md §6 Step 4): reason over the ticket as it stood just
