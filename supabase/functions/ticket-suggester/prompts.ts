@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22n";
+export const PROMPT_VERSION = "g1-2026-07-22o";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -287,6 +287,7 @@ export function draftPrompt(input: {
     '  "confidence_reason": "one short sentence",',
     '  "reply": "WHAT TO SAY to the customer — the message to send, in their language, or empty string if nothing is sendable yet",',
     '  "resolution_steps": ["WHAT TO DO to resolve the case — concrete internal actions for the agent, one per item (investigate/verify/request access/reindex/escalate to X). Keep these OUT of the reply. [] only if truly nothing to do."],',
+    '  "required_customer_steps": ["concrete actions the CUSTOMER must take for this ticket (e.g. click Gi Simployer tilgang; tell us when access is granted). EACH one MUST also appear in the reply, or the reply is not send-ready. [] if the customer need not do anything."],',
     '  "agent_analysis": "1-2 sentence diagnosis for the agent: what is going on and any KB gap. NOT actions (those go in resolution_steps). Always fill, in the ticket language.",',
     '  "requires_manual_system_check": true,',
     '  "claims": ["each factual statement in the reply, one per item"],',
@@ -325,7 +326,9 @@ export function draftPrompt(input: {
 // Check the draft against BOTH the sources and the ticket text. It can only
 // LOWER confidence, never rewrites the reply (CLAUDE.md §12). It also catches
 // false claims of system access (forbidden) and marks them contradicted.
-export function verifyPrompt(input: { reply: string; sources: SourceDoc[]; context: string }) {
+export function verifyPrompt(
+  input: { reply: string; sources: SourceDoc[]; context: string; requiredCustomerSteps: string[] },
+) {
   const system = [
     "You fact-check a support reply that a colleague will review before sending. You are given the",
     "drafted REPLY, the approved SOURCES, and the full TICKET CONTEXT.",
@@ -345,11 +348,17 @@ export function verifyPrompt(input: { reply: string; sources: SourceDoc[]; conte
     "When unsure whether something is a hard factual claim, prefer \"supported\" — do not strip helpful",
     "hedged guidance. Reserve unsupported/contradicted for claims that could actually mislead a customer.",
     "",
+    "You are ALSO given REQUIRED CUSTOMER STEPS — actions the customer must take for this ticket. Check",
+    "whether EACH one is clearly present in the reply (a paraphrase counts). Return the ones that are NOT",
+    "present as missing_steps — this is how we stop a reply that only thanks the customer while omitting the",
+    "real action.",
+    "",
     "Return ONLY a JSON object with exactly this shape:",
     "{",
     '  "claims": [',
     '    { "quote": "verbatim text copied from the reply", "status": "supported | unsupported | contradicted", "reason": "one short sentence" }',
-    "  ]",
+    "  ],",
+    '  "missing_steps": ["each REQUIRED CUSTOMER STEP that does NOT clearly appear in the reply; [] if all present"]',
     "}",
     "",
     "Each quote MUST appear character-for-character in the reply so it can be located.",
@@ -358,6 +367,11 @@ export function verifyPrompt(input: { reply: string; sources: SourceDoc[]; conte
   const user = [
     "REPLY:",
     input.reply,
+    "",
+    "REQUIRED CUSTOMER STEPS (each must appear in the reply):",
+    input.requiredCustomerSteps.length
+      ? input.requiredCustomerSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")
+      : "(none)",
     "",
     "SOURCES:",
     renderSources(input.sources),
