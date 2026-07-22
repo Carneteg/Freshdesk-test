@@ -19,7 +19,7 @@ import {
   similarity,
   ticketBeforeFirstAgentReply,
 } from "../supabase/functions/ticket-suggester/render.ts";
-import { runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
+import { loadIncidents, runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
 
 function env(name: string): string {
   const v = Deno.env.get(name) ?? "";
@@ -126,6 +126,10 @@ const dropped = tickets.length - kept.length;
 if (dropped) {
   console.log(`\n(excluded ${dropped} call-log/receipt ticket(s) — not handled by this framework)`);
 }
+
+// Known-incidents playbook (knowledge layer) — only when Supabase is configured.
+const incidents = db ? await loadIncidents(db) : [];
+if (incidents.length) console.log(`(playbook: ${incidents.length} known incident(s) loaded)`);
 console.log("");
 
 for (const t of kept) {
@@ -137,7 +141,7 @@ for (const t of kept) {
     // trivial "thanks, it worked" turn at the end of a resolved thread. Compare
     // against the substantive first reply the agent actually sent.
     const view = ticketBeforeFirstAgentReply(t);
-    const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories }, view);
+    const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories, incidents }, view);
     const actual = firstAgentReply(t);
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);

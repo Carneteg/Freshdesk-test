@@ -22,7 +22,28 @@ import {
   ticketAsOfLatestCustomer,
   ticketBeforeFirstAgentReply,
 } from "./render.ts";
+import { draftPrompt } from "./prompts.ts";
 import type { Ticket } from "./clients.ts";
+
+Deno.test("draftPrompt: injects the known-incidents playbook, outranking generic KB", () => {
+  const { system, user } = draftPrompt({
+    subject: "AI search 404",
+    language: "no",
+    context: "customer: links give 404",
+    analysisJson: "{}",
+    sources: [],
+    incidents: [{
+      title: "AI search returns 404",
+      symptoms: "links from AI search open a 404 page",
+      resolution: "reindex the search; ask for system access",
+      routing: null,
+    }],
+  });
+  assertStringIncludes(user, "INTERNAL PLAYBOOK");
+  assertStringIncludes(user, "AI search returns 404");
+  assertStringIncludes(user, "reindex the search");
+  assertStringIncludes(system, "STRONGER grounding than a generic KB article");
+});
 
 Deno.test("extractJSON: plain object", () => {
   assertEquals(extractJSON('{"a":1}'), { a: 1 });

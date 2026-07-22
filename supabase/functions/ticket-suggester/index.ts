@@ -14,7 +14,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { Freshdesk, LLM } from "./clients.ts";
 import { PROMPT_VERSION } from "./prompts.ts";
 import { deriveTags, isIgnorableTicket, latestCustomerMessage } from "./render.ts";
-import { reconcileUsage, runPipeline, toRow } from "./pipeline.ts";
+import { loadIncidents, reconcileUsage, runPipeline, toRow } from "./pipeline.ts";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -107,6 +107,9 @@ async function pollOnce(cfg: Config): Promise<Summary> {
     console.warn(`could not verify monitored agent ${cfg.myAgentId} (needs admin API): ${e instanceof Error ? e.message : e}`);
   }
 
+  // Team-curated known-incidents playbook, loaded once per run (knowledge layer).
+  const incidents = await loadIncidents(db);
+
   const since = new Date(Date.now() - cfg.lookbackMin * 60_000).toISOString();
   const updated = await fd.listUpdatedTickets(since);
   // Only the monitored agent's tickets, and never auto-generated call-log/receipt
@@ -147,6 +150,7 @@ async function pollOnce(cfg: Config): Promise<Summary> {
         model: cfg.model,
         withRetrieval: cfg.withRetrieval,
         excludeCategories: cfg.excludeCategories,
+        incidents,
       }, ticket);
       const noteId = await fd.postPrivateNote(t.id, s.note_html);
       await db.from("suggestions").insert(toRow(s, { noteId }));

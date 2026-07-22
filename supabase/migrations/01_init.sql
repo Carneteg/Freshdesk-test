@@ -141,3 +141,18 @@ order by prompt_version;
 -- with NO policies denies all anon/authenticated access while the function keeps
 -- working — the correct secure default for this design.
 alter table suggestions enable row level security;
+
+-- Knowledge layer stage 1 (migration 10): team-curated known incidents / routing,
+-- injected into the draft prompt as an internal playbook that outranks a generic
+-- KB keyword match. Freshdesk's ticket search can't do free-text lookups, so this
+-- is how the operational knowledge the agents rely on reaches the model.
+create table if not exists known_incidents (
+  id          bigint generated always as identity primary key,
+  title       text not null,
+  symptoms    text not null,               -- how the customer describes it (match signal)
+  resolution  text not null,               -- what the agent actually does / the answer
+  routing     text,                        -- where to send it, if applicable
+  active      boolean not null default true,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);

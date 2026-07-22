@@ -9,6 +9,7 @@ import {
   ANSWER_STRATEGIES,
   analysePrompt,
   draftPrompt,
+  type Incident,
   PROMPT_VERSION,
   type SourceDoc,
   verifyPrompt,
@@ -98,6 +99,8 @@ export interface PipelineDeps {
   withRetrieval: boolean;
   // KB categories/folders to exclude from retrieval, lowercased (e.g. "expert no").
   excludeCategories: string[];
+  // Team-curated known incidents fed into the draft as an internal playbook.
+  incidents?: Incident[];
 }
 
 export interface Suggestion {
@@ -202,7 +205,14 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
 
 async function draftReply(
   deps: PipelineDeps,
-  input: { subject: string; language: string; context: string; analysisJson: string; sources: SourceDoc[] },
+  input: {
+    subject: string;
+    language: string;
+    context: string;
+    analysisJson: string;
+    sources: SourceDoc[];
+    incidents: Incident[];
+  },
 ): Promise<Draft> {
   const { system, user } = draftPrompt(input);
   const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1800 });
@@ -288,6 +298,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     context,
     analysisJson,
     sources,
+    incidents: deps.incidents ?? [],
   });
 
   // Verify against sources AND ticket context. Can only lower confidence / strip /
@@ -433,6 +444,24 @@ export function toRow(
     latency_ms: s.latency_ms,
     error: s.error,
   };
+}
+
+// Load the active known-incidents playbook (knowledge layer stage 1). A failure
+// or missing table just means "no playbook" — never a crashed pipeline.
+export async function loadIncidents(
+  // deno-lint-ignore no-explicit-any
+  db: any,
+): Promise<Incident[]> {
+  try {
+    const { data } = await db
+      .from("known_incidents")
+      .select("title, symptoms, resolution, routing")
+      .eq("active", true)
+      .limit(50);
+    return (data ?? []) as Incident[];
+  } catch {
+    return [];
+  }
 }
 
 // Usage capture (CLAUDE.md §12): for suggestions we posted but haven't yet

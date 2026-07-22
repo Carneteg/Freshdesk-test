@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22k";
+export const PROMPT_VERSION = "g1-2026-07-22l";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -13,6 +13,25 @@ export interface SourceDoc {
   title: string;
   text: string;
   url?: string; // agent-facing link, filled where the Freshdesk domain is known
+}
+
+// A team-curated known incident / routing rule (knowledge layer stage 1). These
+// outrank a generic KB keyword match: they are what the agents actually know.
+export interface Incident {
+  title: string;
+  symptoms: string;
+  resolution: string;
+  routing?: string | null;
+}
+
+function renderPlaybook(incidents: Incident[]): string {
+  if (!incidents.length) return "(no known incidents on file)";
+  return incidents
+    .map((i, n) =>
+      `[P${n + 1}] ${i.title}\n  symptoms: ${i.symptoms}\n  resolution: ${i.resolution}` +
+      (i.routing ? `\n  route to: ${i.routing}` : "")
+    )
+    .join("\n\n");
 }
 
 export const ANSWER_STRATEGIES = [
@@ -123,6 +142,7 @@ export function draftPrompt(input: {
   context: string;
   analysisJson: string;
   sources: SourceDoc[];
+  incidents: Incident[];
 }) {
   const system = [
     "You are a support COACH for a Simployer agent — decision support, NOT an autonomous answer",
@@ -182,6 +202,10 @@ export function draftPrompt(input: {
     "  you have, the cause is UNKNOWN: say so, and do not build a reply around the guess.",
     "- A SOURCE only counts as grounding if its CONTENT addresses THIS problem — not because it shares a",
     "  word like \"access\", \"role\" or \"sick leave\". If no source truly fits, treat it as a KB gap.",
+    "- You are given an INTERNAL PLAYBOOK of known incidents / routing. If one clearly matches this ticket,",
+    "  it is STRONGER grounding than a generic KB article — follow its resolution/routing and reference it",
+    "  (\"this matches a known issue\"). It counts as KB-BASED grounding, not a hypothesis. If none matches,",
+    "  do not force one.",
     "- Separate three certainty levels and treat them differently: (a) VERIFIED = stated in the ticket;",
     "  (b) KB-BASED = grounded in a fitting SOURCE; (c) HYPOTHESIS = a guess to check. Only (a) and (b)",
     "  may appear as statements in the customer reply. (c) goes ONLY into resolution_steps / agent_analysis",
@@ -252,6 +276,9 @@ export function draftPrompt(input: {
     "",
     "FULL TICKET CONTEXT (chronological):",
     input.context,
+    "",
+    "INTERNAL PLAYBOOK (known incidents — outrank generic KB when they match):",
+    renderPlaybook(input.incidents),
     "",
     "SOURCES (knowledge base):",
     renderSources(input.sources),

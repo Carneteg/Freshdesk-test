@@ -11,7 +11,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import { deriveTags, latestCustomerMessage } from "../supabase/functions/ticket-suggester/render.ts";
-import { runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
+import { loadIncidents, runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
 
 function env(name: string): string {
   const v = Deno.env.get(name) ?? "";
@@ -66,7 +66,8 @@ if (db && !force) {
 }
 
 console.log("Running pipeline (analyse → retrieve → draft → verify) …");
-const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories }, ticket);
+const incidents = db ? await loadIncidents(db) : [];
+const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories, incidents }, ticket);
 console.log(`  type=${s.ticket_type}  confidence=${s.confidence}  Q/A=${s.qa_answered}/${s.qa_total}`);
 if (s.confidence === "none") {
   console.log("  (confidence is 'none' — the note will say so; try a ticket your KB covers for a real draft)");
