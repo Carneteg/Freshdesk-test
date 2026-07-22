@@ -267,6 +267,16 @@ export function buildContext(t: Ticket): string {
     `TICKET #${t.id} · subject: ${t.subject ?? ""} · status: ${t.status}`,
   ];
 
+  // The customer is already on file (they contacted us). Surface their name/email
+  // so the model never asks them for an identity/email we already hold.
+  const onFile = [t.requester?.name, t.requester?.email ?? t.email]
+    .filter((x): x is string => typeof x === "string" && x.trim().length > 0);
+  if (onFile.length) {
+    lines.push(
+      `CUSTOMER ON FILE: ${onFile.join(" · ")} — already known from the ticket; do NOT ask the customer to provide an email or identity that is already here.`,
+    );
+  }
+
   const convos = (t.conversations ?? [])
     .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at));

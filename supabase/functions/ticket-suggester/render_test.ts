@@ -268,6 +268,33 @@ Deno.test("buildContext: includes internal notes and agent replies, labelled", (
 
 // Case F/H — an auto/OOO reply must be flagged in-context and never counted as
 // the customer answering the agent's control question.
+Deno.test("buildContext: surfaces the requester on file so the model won't ask for the email", () => {
+  const t = {
+    id: 700,
+    subject: "Access",
+    status: 2,
+    description_text: "I lost my access.",
+    requester: { name: "Natalie Müller", email: "natalie.muller@aon.com" },
+    conversations: [],
+  } as unknown as Ticket;
+  const ctx = buildContext(t);
+  assertStringIncludes(ctx, "CUSTOMER ON FILE:");
+  assertStringIncludes(ctx, "natalie.muller@aon.com");
+  assertStringIncludes(ctx, "do NOT ask the customer to provide an email");
+});
+
+Deno.test("buildContext: falls back to the ticket email when no requester object", () => {
+  const t = {
+    id: 701,
+    subject: "x",
+    status: 2,
+    description_text: "hi",
+    email: "kari@example.com",
+    conversations: [],
+  } as unknown as Ticket;
+  assertStringIncludes(buildContext(t), "kari@example.com");
+});
+
 Deno.test("buildContext: flags an automatic out-of-office customer reply", () => {
   const t = {
     id: 101,

@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22f";
+export const PROMPT_VERSION = "g1-2026-07-22g";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -158,6 +158,11 @@ export function draftPrompt(input: {
     "- You ARE the technical support team: default to SOLVING. Never resolve a ticket by \"escalating",
     "  to technical support\"/\"forwarding to the technical team\". Escalate only to a NAMED higher tier",
     "  (2nd-line/developer/product) with a reason, route sales/pricing to a consultant, or ask a question.",
+    "- Before you ESCALATE, consider whether first-line can act itself: investigate, reindex, re-run,",
+    "  request access from the customer, or reconfigure. Escalate only if it truly needs a code/product",
+    "  change. When unsure, put the investigation step in resolution_steps for the agent to try first.",
+    "- NEVER ask the customer for information already on the ticket (their email/identity is on file —",
+    "  see CUSTOMER ON FILE). Use it; ask only for details that are genuinely not present.",
     "- If there is an unanswered agent clarifying/identity question, do NOT fall back to generic",
     "  instructions. Choose REPEAT_CLARIFYING_QUESTION or REQUEST_MISSING_INFORMATION and make the",
     "  reply ask/repeat it.",
