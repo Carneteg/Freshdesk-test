@@ -258,7 +258,7 @@ Deno.test("buildContext: includes internal notes and agent replies, labelled", (
     ],
   } as unknown as Ticket;
   const ctx = buildContext(t);
-  assertStringIncludes(ctx, "[initial] CUSTOMER:");
+  assertStringIncludes(ctx, "[initial] CUSTOMER");
   assertStringIncludes(ctx, "Jag vill lägga till en administratör.");
   assertStringIncludes(ctx, "AGENT REPLY");
   assertStringIncludes(ctx, "Vem ska registreras");
@@ -412,6 +412,46 @@ Deno.test("ticketBeforeFirstAgentReply: no agent reply keeps the whole ticket", 
   } as unknown as Ticket;
   assertEquals(ticketBeforeFirstAgentReply(t).conversations?.length, 1);
   assertEquals(firstAgentReply(t), "");
+});
+
+// A low/none note must still HELP the agent — the analysis carries substance so
+// it is never a hollow greeting (user feedback on #85840).
+Deno.test("renderNote: low/none note still shows the agent analysis", () => {
+  const html = renderNote({
+    confidence: "none",
+    draft: "",
+    answerStrategy: "RECOMMEND_AGENT_VERIFICATION",
+    agentAnalysis: "Likely an expired signing link; usually resolved by the manager re-issuing the agreement. Verify whose contract before advising.",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+  });
+  assertStringIncludes(html, "AI analysis (for you)");
+  assertStringIncludes(html, "expired signing link");
+  assertStringIncludes(html, "manager re-issuing");
+});
+
+Deno.test("buildContext: marks the latest real customer message as the one to answer", () => {
+  const t = {
+    id: 600,
+    subject: "Follow-up",
+    status: 2,
+    description_text: "First question.",
+    conversations: [
+      { id: 1, body_text: "Agent answer.", incoming: false, private: false, created_at: "2026-01-01T00:00:00Z" },
+      { id: 2, body_text: "New follow-up question.", incoming: true, private: false, created_at: "2026-01-02T00:00:00Z" },
+    ],
+  } as unknown as Ticket;
+  const ctx = buildContext(t);
+  // The newest customer message is flagged; the older description is not.
+  const marker = "LATEST CUSTOMER MESSAGE — respond to THIS";
+  assertStringIncludes(ctx, `New follow-up question.`);
+  const idx = ctx.indexOf(marker);
+  assertEquals(idx > -1, true);
+  // Only the newest incoming carries it (exactly one marker).
+  assertEquals(ctx.split(marker).length - 1, 1);
 });
 
 // Case C — a straightforward how-to answer needs no manual-verify banner.

@@ -21,6 +21,7 @@ create table if not exists suggestions (
   answer_strategy    text,            -- DIRECT_ANSWER | REPEAT_CLARIFYING_QUESTION | …
   confidence_reason  text,            -- one-line justification for the confidence level
   agent_next_action  text,            -- what the agent should do next (internal)
+  agent_analysis     text,            -- internal analysis: likely resolution path + what to verify
   requires_manual_system_check boolean default false, -- AI has no system access; agent must verify
   security_sensitive boolean default false,           -- roles / access / permissions ticket
   facts              jsonb,           -- source-tagged facts { from_customer, from_agent, … }

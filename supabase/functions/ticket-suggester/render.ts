@@ -267,20 +267,30 @@ export function buildContext(t: Ticket): string {
     `TICKET #${t.id} · subject: ${t.subject ?? ""} · status: ${t.status}`,
   ];
 
-  if ((t.description_text ?? "").trim()) {
-    lines.push("", "[initial] CUSTOMER:", strip(t.description_text));
-  }
-
   const convos = (t.conversations ?? [])
     .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  // The latest real (non-auto) customer message is the one the draft should
+  // respond to. If there are no incoming conversation entries, that is the
+  // ticket description.
+  const latestIncoming = [...convos].reverse().find(
+    (c) => c.incoming && !c.private && !looksLikeAutoReply(c.body_text ?? ""),
+  );
+  const RESPOND = " ← LATEST CUSTOMER MESSAGE — respond to THIS";
+
+  if ((t.description_text ?? "").trim()) {
+    const tag = latestIncoming ? "" : RESPOND;
+    lines.push("", `[initial] CUSTOMER${tag}:`, strip(t.description_text));
+  }
 
   for (const c of convos) {
     const who = c.private ? "INTERNAL NOTE (agent/internal)" : c.incoming ? "CUSTOMER" : "AGENT REPLY";
     const auto = c.incoming && looksLikeAutoReply(c.body_text ?? "")
       ? " [likely AUTOMATIC / out-of-office reply — do NOT treat as an answer]"
       : "";
-    lines.push("", `[${c.created_at}] ${who}${auto}:`, strip(c.body_text ?? ""));
+    const respond = latestIncoming && c.id === latestIncoming.id ? RESPOND : "";
+    lines.push("", `[${c.created_at}] ${who}${auto}${respond}:`, strip(c.body_text ?? ""));
   }
 
   return lines.join("\n").slice(0, 12000);
@@ -305,6 +315,7 @@ export interface NoteData {
   rationale?: string;
   ticketType?: string;
   answerStrategy?: string;
+  agentAnalysis?: string;
   agentNextAction?: string;
   unknowns?: string[];
   requiresManualCheck?: boolean;
@@ -363,6 +374,13 @@ export function renderNote(r: NoteData): string {
       ? ` — ${esc(r.confidenceReason)}`
       : "";
     out.push(`<p><strong>Suggested approach:</strong> ${esc(strategyLabel)}${reason}</p>`);
+  }
+
+  // Agent-facing analysis — always shown when present. This is what keeps a
+  // low/none note from being a hollow greeting: even without a send-ready reply,
+  // the agent gets the likely resolution path and what to verify.
+  if (r.agentAnalysis && r.agentAnalysis.trim()) {
+    out.push(`<p><strong>🔎 AI analysis (for you):</strong> ${esc(r.agentAnalysis)}</p>`);
   }
 
   // The AI has NO system access. On security-sensitive / manual-check tickets say

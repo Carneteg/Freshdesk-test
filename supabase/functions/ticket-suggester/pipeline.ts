@@ -60,6 +60,7 @@ interface Draft {
   confidence_reason: string;
   reply: string;
   agent_next_action: string;
+  agent_analysis: string;
   requires_manual_system_check: boolean;
   claims: string[];
   rationale: string;
@@ -112,6 +113,7 @@ export interface Suggestion {
   confidence_reason: string | null;
   draft: string | null;
   agent_next_action: string | null;
+  agent_analysis: string | null;
   requires_manual_system_check: boolean;
   security_sensitive: boolean;
   facts: Record<string, string[]>;
@@ -214,6 +216,7 @@ async function draftReply(
     confidence_reason: str(j.confidence_reason),
     reply: str(j.reply),
     agent_next_action: str(j.agent_next_action),
+    agent_analysis: str(j.agent_analysis),
     requires_manual_system_check: j.requires_manual_system_check === true,
     claims: strList(j.claims),
     rationale: str(j.rationale),
@@ -330,6 +333,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     rationale: draft.rationale,
     ticketType: a.ticket_type,
     answerStrategy: draft.answer_strategy,
+    agentAnalysis: draft.agent_analysis,
     agentNextAction: draft.agent_next_action,
     unknowns: a.unknowns,
     requiresManualCheck: draft.requires_manual_system_check,
@@ -358,6 +362,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     confidence_reason: draft.confidence_reason || null,
     draft: draft.reply || null,
     agent_next_action: draft.agent_next_action || null,
+    agent_analysis: draft.agent_analysis || null,
     requires_manual_system_check: draft.requires_manual_system_check,
     security_sensitive: a.security_sensitive,
     facts,
@@ -399,6 +404,7 @@ export function toRow(
     confidence_reason: s.confidence_reason,
     draft: s.draft,
     agent_next_action: s.agent_next_action,
+    agent_analysis: s.agent_analysis,
     requires_manual_system_check: s.requires_manual_system_check,
     security_sensitive: s.security_sensitive,
     facts: s.facts,
