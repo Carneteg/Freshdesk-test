@@ -257,6 +257,20 @@ export function containsFalseSystemAccess(text: string): boolean {
   return FALSE_ACCESS_PATTERNS.some((re) => re.test(text));
 }
 
+// Belt-and-suspenders for the tone rule: the model must not sign the reply with a
+// placeholder (the agent adds their own name). Strip bracketed "[Your Name]" /
+// "[Agent's Name]" / "[Ditt navn]" style tokens if one slips through.
+const SIGNATURE_PLACEHOLDER = /\[[^\]\n]*(?:name|navn|namn)[^\]\n]*\]/gi;
+
+export function stripSignaturePlaceholders(text: string): string {
+  return text
+    .replace(SIGNATURE_PLACEHOLDER, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // Build the FULL, chronological, source-labelled ticket context for the model.
 // The old pipeline only fed the customer's own messages, so later agent replies
 // and internal notes (e.g. "X already seems to be an admin") never reached the

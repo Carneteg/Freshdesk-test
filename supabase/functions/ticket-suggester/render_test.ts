@@ -17,6 +17,7 @@ import {
   similarity,
   strip,
   stripQuotes,
+  stripSignaturePlaceholders,
   ticketAsOfLatestCustomer,
   ticketBeforeFirstAgentReply,
 } from "./render.ts";
@@ -65,6 +66,17 @@ Deno.test("stripQuotes: removes verbatim quotes and tidies punctuation", () => {
 
 Deno.test("stripQuotes: no-op when quote absent", () => {
   assertEquals(stripQuotes("hello world", ["missing"]), "hello world");
+});
+
+Deno.test("stripSignaturePlaceholders: removes placeholder signers, keeps the closing", () => {
+  assertEquals(
+    stripSignaturePlaceholders("Hei Kari,\n\nTakk!\n\nVennlig hilsen,\n[Your Name]"),
+    "Hei Kari,\n\nTakk!\n\nVennlig hilsen,",
+  );
+  assertEquals(stripSignaturePlaceholders("Best,\n[Agent's Name]"), "Best,");
+  assertEquals(stripSignaturePlaceholders("Med vennlig hilsen,\n[Ditt navn]"), "Med vennlig hilsen,");
+  // Real names are untouched.
+  assertEquals(stripSignaturePlaceholders("Hei Natalie, takk!"), "Hei Natalie, takk!");
 });
 
 Deno.test("latestCustomerMessage: newest incoming defines the trigger id", () => {

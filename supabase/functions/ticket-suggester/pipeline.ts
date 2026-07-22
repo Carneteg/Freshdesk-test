@@ -28,6 +28,7 @@ import {
   similarity,
   strip,
   stripQuotes,
+  stripSignaturePlaceholders,
 } from "./render.ts";
 
 // ── Parsed model outputs ──────────────────────────────────────────────────────
@@ -312,6 +313,12 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   if (draft.reply && containsFalseSystemAccess(draft.reply)) {
     unsupportedNote = "Draft discarded: it claimed direct system access, which the AI does not have.";
     draft = { ...draft, confidence: "none", reply: "" };
+  }
+
+  // Tone guard: strip any signature placeholder the model left in the reply — the
+  // agent signs with their own name (CLAUDE.md quality bar).
+  if (draft.reply) {
+    draft = { ...draft, reply: stripSignaturePlaceholders(draft.reply) };
   }
 
   const qaTotal = draft.coverage.length || a.questions_asked.length;
