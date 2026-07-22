@@ -134,6 +134,17 @@ if (!postId) {
   } catch (e) {
     diff(`failed: ${e instanceof Error ? e.message : e}`);
   }
+
+  // 7. PUT tags — WRITE (same opt-in ticket). Additive: merges one test tag.
+  console.log("\n[7] PUT /tickets/{id}  (merge keyword tags — WRITE)");
+  try {
+    const ticket = await fd.ticketWithConversations(postId);
+    const merged = Array.from(new Set([...(ticket.tags ?? []), "ai-suggester-test"]));
+    await fd.setTags(postId, merged);
+    ok(`set tags on ticket ${postId}: ${merged.join(", ")}`);
+  } catch (e) {
+    diff(`failed: ${e instanceof Error ? e.message : e}`);
+  }
 }
 
 console.log("\nDone. Fix clients.ts to match anything marked ⚠️ above (CLAUDE.md §6 Step 1).");

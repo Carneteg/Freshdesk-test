@@ -146,8 +146,19 @@ Only after replay results look reasonable.
 
 ## 7. Known unknowns — verify, do not assume
 
-- **Freshdesk solutions search endpoint.** May not exist in that form; may
-  need `/api/v2/solutions/categories` traversal instead. Verify first.
+**Step 1 findings (2026-07-22, live `simployer` instance):**
+- ✅ `GET /search/solutions?term=` **works** and returns articles with `title` +
+  `description_text`. Retrieval is viable; the endpoint is confirmed in `clients.ts`.
+- ⚠️ `GET /search/tickets?query=` requires **field-based** queries
+  (`status:5 AND agent_id:123`), not free text — a bare term is HTTP 400. So
+  past-ticket *content* retrieval is not feasible here; **KB-only stands** and
+  the Step 3 "is the answer in the reply" check is moot for retrieval purposes.
+- Still to confirm live: conversation field names on a ticket that HAS replies
+  (`body_text`/`incoming`/`private`), the note write, and the tag write — run the
+  probe with `PROBE_TICKET_ID` + `POST_TEST_NOTE_TICKET_ID` set.
+
+- **Freshdesk solutions search endpoint.** ~~May not exist in that form.~~
+  Resolved above — it exists and returns `description_text`.
 - **Freshdesk rate limits.** Plan-dependent. Handle 429 with `Retry-After`.
   The pipeline makes several calls per ticket; batching may be needed.
 - **`updated_since` semantics.** Confirm it uses `updated_at`, and whether

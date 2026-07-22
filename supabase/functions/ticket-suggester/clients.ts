@@ -141,17 +141,20 @@ export class Freshdesk {
     return this.get<Ticket>(`/tickets/${id}?include=conversations`);
   }
 
-  // UNVERIFIED against a live instance (CLAUDE.md §7 — the endpoint I am least
-  // sure about). If this shape is wrong, fix it here; the pipeline treats a
-  // retrieval failure as "no sources", not a crash.
+  // VERIFIED 2026-07-22 against the live instance: returns solution articles with
+  // `title` and `description_text` (among others). The pipeline treats a retrieval
+  // failure as "no sources", never a crash.
   async searchSolutions(term: string): Promise<Solution[]> {
     const q = new URLSearchParams({ term });
     const res = await this.get<{ results?: Solution[] } | Solution[]>(`/search/solutions?${q}`);
     return Array.isArray(res) ? res : (res.results ?? []);
   }
 
-  // Freshdesk ticket search uses a quoted, field-oriented query string.
-  // UNVERIFIED — confirm the syntax against a live instance before trusting it.
+  // NOT usable for free-text content search: Freshdesk's ticket search only accepts
+  // field-based queries ("status:5 AND agent_id:123", space mandatory around AND) —
+  // a bare term returns HTTP 400 (verified 2026-07-22). This is why past-ticket
+  // retrieval stays out of the pipeline (KB-only). Kept for possible future
+  // field-based use; callers must pass a valid `keyword:value` query, not prose.
   searchTickets(query: string): Promise<{ results: TicketSummary[]; total: number }> {
     const q = new URLSearchParams({ query: `"${query}"` });
     return this.get<{ results: TicketSummary[]; total: number }>(`/search/tickets?${q}`);
