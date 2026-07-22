@@ -13,7 +13,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Freshdesk, LLM } from "./clients.ts";
 import { PROMPT_VERSION } from "./prompts.ts";
-import { deriveTags, latestCustomerMessage } from "./render.ts";
+import { deriveTags, isIgnorableTicket, latestCustomerMessage } from "./render.ts";
 import { reconcileUsage, runPipeline, toRow } from "./pipeline.ts";
 
 // ── Config ────────────────────────────────────────────────────────────────────
@@ -32,6 +32,7 @@ interface Config {
   lookbackMin: number;
   withRetrieval: boolean;
   excludeCategories: string[];
+  excludeSubjects: string[];
 }
 
 // Comma-separated env list -> lowercased, trimmed, non-empty.
@@ -60,6 +61,7 @@ function loadConfig(): Config {
     lookbackMin: Number(Deno.env.get("LOOKBACK_MINUTES") ?? "5"),
     withRetrieval: (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false",
     excludeCategories: envList("EXCLUDE_SOLUTION_CATEGORIES"),
+    excludeSubjects: envList("EXCLUDE_SUBJECTS"),
   };
 }
 
@@ -107,7 +109,11 @@ async function pollOnce(cfg: Config): Promise<Summary> {
 
   const since = new Date(Date.now() - cfg.lookbackMin * 60_000).toISOString();
   const updated = await fd.listUpdatedTickets(since);
-  const mine = updated.filter((t) => t.responder_id === Number(cfg.myAgentId));
+  // Only the monitored agent's tickets, and never auto-generated call-log/receipt
+  // tickets (they carry no question — user decision 2026-07-22).
+  const mine = updated
+    .filter((t) => t.responder_id === Number(cfg.myAgentId))
+    .filter((t) => !isIgnorableTicket(t.subject, cfg.excludeSubjects));
   const summary: Summary = {
     scanned: updated.length,
     mine: mine.length,

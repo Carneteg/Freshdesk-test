@@ -9,6 +9,7 @@ import {
   esc,
   extractJSON,
   firstAgentReply,
+  isIgnorableTicket,
   lastAgentReply,
   latestCustomerMessage,
   looksLikeAutoReply,
@@ -97,6 +98,17 @@ Deno.test("latestCustomerMessage: newest incoming defines the trigger id", () =>
 Deno.test("latestCustomerMessage: falls back to description when no incoming convo", () => {
   const t = { id: 7, description_text: "only the description", conversations: [] } as unknown as Ticket;
   assertEquals(latestCustomerMessage(t).triggerId, "desc:7");
+});
+
+Deno.test("isIgnorableTicket: excludes call-log/receipt tickets, keeps real ones", () => {
+  assertEquals(isIgnorableTicket("Incoming call with +4741677072 on Mon, Jul 20"), true);
+  assertEquals(isIgnorableTicket("Outgoing call with Caroline Hjellegjerde"), true);
+  assertEquals(isIgnorableTicket("Missed call with +46707750392"), true);
+  assertEquals(isIgnorableTicket("Error message to register a sick leave"), false);
+  assertEquals(isIgnorableTicket("Simployer Aon personalhåndbok tilgang"), false);
+  // EXCLUDE_SUBJECTS substrings add more exclusions.
+  assertEquals(isIgnorableTicket("Voicemail from customer", ["voicemail"]), true);
+  assertEquals(isIgnorableTicket("Real question about payroll", ["voicemail"]), false);
 });
 
 Deno.test("lastAgentReply: returns the final outgoing public message", () => {

@@ -15,6 +15,7 @@ import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.t
 import {
   classifyUsage,
   firstAgentReply,
+  isIgnorableTicket,
   similarity,
   ticketBeforeFirstAgentReply,
 } from "../supabase/functions/ticket-suggester/render.ts";
@@ -69,7 +70,10 @@ if (!ids.length) {
 
   try {
     const res = await fd.searchTickets(`status:5 AND agent_id:${agentId}`);
-    ids = (res.results ?? []).map((t) => t.id).slice(0, count);
+    ids = (res.results ?? [])
+      .filter((t) => !isIgnorableTicket(t.subject)) // skip call-log/receipt tickets
+      .map((t) => t.id)
+      .slice(0, count);
     console.log(`Auto-selected ${ids.length} recent CLOSED ticket(s) for agent ${agentId}. Set REPLAY_COUNT to change.\n`);
   } catch (err) {
     console.error(`Auto-select failed (${err instanceof Error ? err.message : err}). Pass ticket ids explicitly.`);
@@ -87,6 +91,8 @@ const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
 const llm = new LLM(env("OPENAI_API_KEY"), model);
 const withRetrieval = (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false";
 const excludeCategories = (Deno.env.get("EXCLUDE_SOLUTION_CATEGORIES") ?? "")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+const excludeSubjects = (Deno.env.get("EXCLUDE_SUBJECTS") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 // Optional: persist results to `suggestions` so you can set verdicts + read
@@ -113,9 +119,16 @@ for (const id of ids) {
     console.error(`  #${id}  FAILED to load: ${err instanceof Error ? err.message : err}`);
   }
 }
+
+// Never handle auto-generated call-log/receipt tickets, even if passed explicitly.
+const kept = tickets.filter((t) => !isIgnorableTicket(t.subject, excludeSubjects));
+const dropped = tickets.length - kept.length;
+if (dropped) {
+  console.log(`\n(excluded ${dropped} call-log/receipt ticket(s) — not handled by this framework)`);
+}
 console.log("");
 
-for (const t of tickets) {
+for (const t of kept) {
   const bar = "─".repeat(76);
   try {
     // Cold start (CLAUDE.md §6 Step 4): reason over the ticket as it stood just
