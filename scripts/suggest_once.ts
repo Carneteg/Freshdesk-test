@@ -10,7 +10,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
-import { deriveTags } from "../supabase/functions/ticket-suggester/render.ts";
+import { deriveTags, latestCustomerMessage } from "../supabase/functions/ticket-suggester/render.ts";
 import { runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
 
 function env(name: string): string {
@@ -22,9 +22,10 @@ function env(name: string): string {
   return v;
 }
 
-const id = Number(Deno.args[0]);
+const force = Deno.args.includes("--force") || (Deno.env.get("FORCE") ?? "").length > 0;
+const id = Number(Deno.args.find((a) => /^\d+$/.test(a)));
 if (!Number.isFinite(id) || id <= 0) {
-  console.error("Usage: deno task suggest <ticketId>");
+  console.error("Usage: deno task suggest <ticketId> [--force]");
   console.error("Tip: pick a ticket whose topic is covered by your KB so you get a real draft.");
   Deno.exit(1);
 }
@@ -43,6 +44,26 @@ const db = supabaseUrl && serviceKey ? createClient(supabaseUrl, serviceKey) : n
 console.log(`Loading ticket #${id} …`);
 const ticket = await fd.ticketWithConversations(id);
 console.log(`  ${ticket.subject}`);
+
+// Duplicate guard (like the live poller's dedup): skip if a note was already
+// posted for this ticket's current customer message. Needs Supabase; --force overrides.
+if (db && !force) {
+  const { triggerId } = latestCustomerMessage(ticket);
+  const { data: existing } = await db
+    .from("suggestions")
+    .select("note_id")
+    .eq("ticket_id", id)
+    .eq("trigger_message_id", triggerId)
+    .not("note_id", "is", null)
+    .limit(1);
+  if (existing && existing.length) {
+    console.log(`\nAlready posted a note (${existing[0].note_id}) for #${id}'s current customer message.`);
+    console.log("Skipping to avoid a duplicate. Re-run with --force to post anyway.");
+    Deno.exit(0);
+  }
+} else if (!db) {
+  console.log("  (no Supabase creds — duplicate guard is off; running suggest again would re-post)");
+}
 
 console.log("Running pipeline (analyse → retrieve → draft → verify) …");
 const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories }, ticket);
