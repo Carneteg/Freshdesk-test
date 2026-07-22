@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22r";
+export const PROMPT_VERSION = "g1-2026-07-22s";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -338,7 +338,13 @@ export function draftPrompt(input: {
 // LOWER confidence, never rewrites the reply (CLAUDE.md §12). It also catches
 // false claims of system access (forbidden) and marks them contradicted.
 export function verifyPrompt(
-  input: { reply: string; sources: SourceDoc[]; context: string; requiredCustomerSteps: string[] },
+  input: {
+    reply: string;
+    sources: SourceDoc[];
+    context: string;
+    requiredCustomerSteps: string[];
+    agentAnalysis: string;
+  },
 ) {
   const system = [
     "You fact-check a support reply that a colleague will review before sending. You are given the",
@@ -364,12 +370,18 @@ export function verifyPrompt(
     "present as missing_steps — this is how we stop a reply that only thanks the customer while omitting the",
     "real action.",
     "",
+    "You are ALSO given the AI's own ANALYSIS. Check whether the reply RECOMMENDS or ASSERTS anything the",
+    "analysis explicitly ruled out, said does NOT apply, or left as unknown (e.g. the analysis says a known",
+    "incident does not fit, yet the reply still tells the customer to apply that incident's fix). Return a",
+    "short contradicts_analysis describing it, or \"\" if the reply is consistent with the analysis.",
+    "",
     "Return ONLY a JSON object with exactly this shape:",
     "{",
     '  "claims": [',
     '    { "quote": "verbatim text copied from the reply", "status": "supported | unsupported | contradicted", "reason": "one short sentence" }',
     "  ],",
-    '  "missing_steps": ["each REQUIRED CUSTOMER STEP that does NOT clearly appear in the reply; [] if all present"]',
+    '  "missing_steps": ["each REQUIRED CUSTOMER STEP that does NOT clearly appear in the reply; [] if all present"],',
+    '  "contradicts_analysis": "short description if the reply recommends/asserts something the analysis ruled out or left unknown; else empty string"',
     "}",
     "",
     "Each quote MUST appear character-for-character in the reply so it can be located.",
@@ -383,6 +395,9 @@ export function verifyPrompt(
     input.requiredCustomerSteps.length
       ? input.requiredCustomerSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")
       : "(none)",
+    "",
+    "ANALYSIS (the reply must not contradict this):",
+    input.agentAnalysis || "(none)",
     "",
     "SOURCES:",
     renderSources(input.sources),

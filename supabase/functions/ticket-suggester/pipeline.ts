@@ -81,6 +81,7 @@ interface VerifyClaim {
 interface VerifyResult {
   claims: VerifyClaim[];
   missing_steps: string[];
+  contradicts_analysis: string;
 }
 
 const TICKET_TYPES = ["question", "howto", "bug", "unclear"];
@@ -299,13 +300,15 @@ async function verifyDraft(
   sources: SourceDoc[],
   context: string,
   requiredCustomerSteps: string[],
+  agentAnalysis: string,
 ): Promise<VerifyResult> {
-  const { system, user } = verifyPrompt({ reply, sources, context, requiredCustomerSteps });
+  const { system, user } = verifyPrompt({ reply, sources, context, requiredCustomerSteps, agentAnalysis });
   const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1200 });
   const j = extractJSON<Partial<VerifyResult>>(out);
   return {
     claims: Array.isArray(j.claims) ? j.claims : [],
     missing_steps: strList(j.missing_steps),
+    contradicts_analysis: str(j.contradicts_analysis),
   };
 }
 
@@ -366,7 +369,14 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   let unsupportedNote = "";
   let notSendReady = false;
   if (draft.confidence !== "none" && draft.reply.trim()) {
-    verify = await verifyDraft(deps, draft.reply, sources, context, draft.required_customer_steps);
+    verify = await verifyDraft(
+      deps,
+      draft.reply,
+      sources,
+      context,
+      draft.required_customer_steps,
+      draft.agent_analysis,
+    );
     const contradicted = verify.claims.filter((c) => c.status === "contradicted");
     const unsupported = verify.claims.filter((c) => c.status === "unsupported");
 
@@ -386,8 +396,23 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     if (draft.reply.trim() && missing.length) {
       notSendReady = true;
       draft = { ...draft, confidence: draft.confidence === "high" ? "low" : draft.confidence };
-      unsupportedNote = `⚠️ NOT send-ready: the reply is missing required customer step(s): ` +
-        `${missing.join("; ")}. Add them before sending.`;
+      unsupportedNote = [
+        unsupportedNote,
+        `⚠️ NOT send-ready: the reply is missing required customer step(s): ${missing.join("; ")}. ` +
+        `Add them before sending.`,
+      ].filter(Boolean).join(" ");
+    }
+
+    // Consistency gate: the reply must not recommend/assert what the analysis ruled
+    // out (mechanical version of the prompt rule — a prompt nudge wasn't enough, cf. #86002).
+    const contradiction = (verify.contradicts_analysis ?? "").trim();
+    if (draft.reply.trim() && contradiction) {
+      notSendReady = true;
+      draft = { ...draft, confidence: draft.confidence === "high" ? "low" : draft.confidence };
+      unsupportedNote = [
+        unsupportedNote,
+        `⚠️ Reply contradicts the analysis: ${contradiction}. Fix before sending.`,
+      ].filter(Boolean).join(" ");
     }
   }
 
