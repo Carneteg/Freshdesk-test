@@ -10,13 +10,14 @@
 // Note: replaying real closed tickets sends real customer content to the LLM
 // provider (OpenAI). The DPA position is confirmed OK for Gate 1 (CLAUDE.md §11).
 
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import {
   classifyUsage,
   lastAgentReply,
   similarity,
 } from "../supabase/functions/ticket-suggester/render.ts";
-import { runPipeline } from "../supabase/functions/ticket-suggester/pipeline.ts";
+import { runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
 
 function env(name: string): string {
   const v = Deno.env.get(name) ?? "";
@@ -48,6 +49,18 @@ const withRetrieval = (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false";
 const excludeCategories = (Deno.env.get("EXCLUDE_SOLUTION_CATEGORIES") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
+// Optional: persist results to `suggestions` so you can set verdicts + read
+// gate1_scorecard. Upsert on (ticket_id, trigger_message_id) so re-runs update
+// the row and never clobber a verdict you've set (verdict isn't in the payload).
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const db = supabaseUrl && serviceKey ? createClient(supabaseUrl, serviceKey) : null;
+console.log(
+  db
+    ? "(persisting each result to Supabase `suggestions` — set verdicts there)\n"
+    : "(not persisting — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to save results)\n",
+);
+
 // Show which tickets before sending anything to OpenAI.
 console.log("Tickets to replay (nothing will be posted):\n");
 const tickets = [];
@@ -69,6 +82,14 @@ for (const t of tickets) {
     const actual = lastAgentReply(t);
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);
+
+    if (db) {
+      const { error } = await db.from("suggestions").upsert(
+        toRow(s, { used, similarity: sim }),
+        { onConflict: "ticket_id,trigger_message_id" },
+      );
+      if (error) console.error(`  (db save failed for #${t.id}: ${error.message})`);
+    }
 
     console.log(bar);
     console.log(`#${t.id}  ${t.subject}`);
