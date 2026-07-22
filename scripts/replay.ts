@@ -45,6 +45,8 @@ const fd = new Freshdesk(env("FRESHDESK_DOMAIN"), env("FRESHDESK_API_KEY"));
 const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
 const llm = new LLM(env("OPENAI_API_KEY"), model);
 const withRetrieval = (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false";
+const excludeCategories = (Deno.env.get("EXCLUDE_SOLUTION_CATEGORIES") ?? "")
+  .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
 // Show which tickets before sending anything to OpenAI.
 console.log("Tickets to replay (nothing will be posted):\n");
@@ -63,7 +65,7 @@ console.log("");
 for (const t of tickets) {
   const bar = "─".repeat(76);
   try {
-    const s = await runPipeline({ fd, llm, model, withRetrieval }, t);
+    const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories }, t);
     const actual = lastAgentReply(t);
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);
