@@ -69,13 +69,25 @@ if (!ids.length) {
     }
   }
 
+  // Holdout support: REPLAY_EXCLUDE_IDS keeps the already-evaluated tickets out of
+  // the auto-pick, so you can grab a FRESH set the playbook wasn't built from.
+  const excludeIds = new Set(
+    (Deno.env.get("REPLAY_EXCLUDE_IDS") ?? "")
+      .split(",").map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0),
+  );
   try {
-    const res = await fd.searchTickets(`status:5 AND agent_id:${agentId}`);
-    ids = (res.results ?? [])
-      .filter((t) => !isIgnorableTicket(t.subject)) // skip call-log/receipt tickets
-      .map((t) => t.id)
-      .slice(0, count);
-    console.log(`Auto-selected ${ids.length} recent CLOSED ticket(s) for agent ${agentId}. Set REPLAY_COUNT to change.\n`);
+    // Paginate (call-logs + excluded ids removed) until we have enough fresh ones.
+    const picked: number[] = [];
+    for (let page = 1; page <= 10 && picked.length < count; page++) {
+      const res = await fd.searchTickets(`status:5 AND agent_id:${agentId}`, page);
+      if (!(res.results ?? []).length) break;
+      for (const t of res.results ?? []) {
+        if (!isIgnorableTicket(t.subject) && !excludeIds.has(t.id)) picked.push(t.id);
+      }
+    }
+    ids = picked.slice(0, count);
+    const exNote = excludeIds.size ? `, excluding ${excludeIds.size} id(s)` : "";
+    console.log(`Auto-selected ${ids.length} recent CLOSED ticket(s) for agent ${agentId}${exNote}. Set REPLAY_COUNT to change.\n`);
   } catch (err) {
     console.error(`Auto-select failed (${err instanceof Error ? err.message : err}). Pass ticket ids explicitly.`);
     Deno.exit(1);
