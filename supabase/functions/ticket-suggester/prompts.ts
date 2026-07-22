@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22t";
+export const PROMPT_VERSION = "g1-2026-07-22u";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -26,6 +26,8 @@ export interface Incident {
   affected?: string | null; // versions / scope / distinguishing symptoms
   workaround?: string | null; // interim workaround while unresolved
   customer_action?: string | null; // what the customer does (esp. after a fix)
+  fix_released_at?: string | null; // date the fix went live ("resolved as of …")
+  post_fix_instructions?: string | null; // which records auto-corrected vs. fix manually, and how
 }
 
 function renderPlaybook(incidents: Incident[]): string {
@@ -37,6 +39,8 @@ function renderPlaybook(incidents: Incident[]): string {
       if (i.affected) lines.push(`  scope: ${i.affected}`);
       lines.push(`  resolution: ${i.resolution}`);
       if (i.workaround) lines.push(`  workaround: ${i.workaround}`);
+      if (i.fix_released_at) lines.push(`  fix released: ${i.fix_released_at}`);
+      if (i.post_fix_instructions) lines.push(`  after the fix: ${i.post_fix_instructions}`);
       if (i.customer_action) lines.push(`  customer does: ${i.customer_action}`);
       if (i.routing) lines.push(`  route to: ${i.routing}`);
       return lines.join("\n");
@@ -253,9 +257,14 @@ export function draftPrompt(input: {
     "- When you DO apply a playbook incident, stay humble: tell the agent to VERIFY the symptoms match",
     "  before relying on it (\"this looks like known incident X — confirm before linking/acting\"), never",
     "  state it as certain, and never claim what the customer's account or settings currently are.",
-    "- Use the incident's STATUS. If 'fixed'/'closed', the fix is deployed — tell the customer how to get",
-    "  it (its customer_action, e.g. reload / clear cache) and do NOT escalate to developers. If",
-    "  'investigating'/'identified', it is a KNOWN issue already being handled — set expectations, give any",
+    "- Use the incident's STATUS. If 'fixed'/'closed', the fix is deployed — do NOT escalate to developers",
+    "  and do NOT tell the customer it is still being investigated. State it is resolved (if 'fix released'",
+    "  is given, say \"resolved as of <that date>\"), tell them how to get the fix (its customer_action, e.g.",
+    "  reload / clear cache), AND — critically — if 'after the fix' (post-fix instructions) is present, relay",
+    "  it: which records were corrected automatically versus which HISTORICAL records the customer must still",
+    "  fix by hand, and exactly how. A solved incident with old bad data left uncorrected is a real failure",
+    "  (#84553, #85607) — never say only \"it's fixed\" when historical records still need manual correction.",
+    "  If 'investigating'/'identified', it is a KNOWN issue already being handled — set expectations, give any",
     "  workaround, and do NOT re-escalate. Only link the ticket if the customer's symptoms/scope match.",
     "- Separate three certainty levels and treat them differently: (a) VERIFIED = stated in the ticket;",
     "  (b) KB-BASED = grounded in a fitting SOURCE; (c) HYPOTHESIS = a guess to check. Only (a) and (b)",

@@ -161,6 +161,10 @@ create table if not exists known_incidents (
   customer_action text,                    -- what the customer does (esp. after a fix)
   started_at  date,
   resolved_at date,
+  -- post-fix lifecycle (migration 14): so the AI stops re-escalating a solved issue
+  -- and tells the customer which historical records still need a manual correction.
+  fix_released_at       date,              -- when the fix went live ("resolved as of …")
+  post_fix_instructions text,              -- which records auto-corrected vs. fix manually, and how
   active      boolean not null default true,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()

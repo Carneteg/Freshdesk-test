@@ -233,6 +233,77 @@ export function ticketBeforeFirstAgentReply(t: Ticket): Ticket {
   return { ...t, conversations };
 }
 
+// Holding / acknowledgment replies ("Hi, thanks for reaching out, we're looking
+// into it") are NOT the substantive answer. In replay they must not be the turn we
+// grade against — the AI writes a real coaching reply, so comparing it to a filler
+// line is the wrong-turn bug (#84875, #84611). A reply that ASKS something concrete
+// (contains "?") is substantive and never counts as holding; a long reply that
+// merely opens with thanks is substantive too — only a SHORT ack with no question
+// and a holding phrase is skipped.
+const HOLDING_HINTS = [
+  "looking into", "look into this", "we'll get back", "get back to you",
+  "investigating this", "working on it", "we are on it",
+  "ser på saken", "ser paa saken", "ser nærmere", "ser naermere",
+  "återkommer", "aterkommer", "vi undersöker", "vi undersoker", "vi kollar",
+  "kommer tilbake", "undersøker", "undersoker", "vi kikker",
+  "takk for din henvendelse", "tack för att du kontaktar", "tack for att du kontaktar",
+  "thank you for reaching out", "thanks for reaching out", "thanks for contacting",
+  "takk for at du kontakter", "vi ser på det", "vi ser paa det",
+];
+
+export function looksLikeHoldingReply(text: string): boolean {
+  const t = strip(text).toLowerCase();
+  if (!t) return true; // an empty public reply is not a real turn
+  if (t.includes("?")) return false; // asks something concrete → substantive
+  return t.length < 200 && HOLDING_HINTS.some((h) => t.includes(h));
+}
+
+// REPLAY ONLY (CLAUDE.md §6 Step 4). Exact dialogue-turn synchronisation (#84875,
+// #84611): pick ONE specific public agent reply as the grading target — the first
+// SUBSTANTIVE one, skipping auto/out-of-office and short holding acknowledgments —
+// then reconstruct the ticket as it stood strictly BEFORE that turn (every later
+// customer message, agent reply and internal note hidden). The AI reasons over the
+// view and is compared against `target`. If every reply is holding/auto, fall back
+// to the first; if the agent never replied publicly, there is no turn to grade.
+export interface ReplayTurn {
+  view: Ticket; // the ticket as the agent saw it just before the target reply
+  target: string; // the specific agent reply we grade the AI against
+  targetAt: string | null; // its timestamp — also the retrieval cut-off (no leakage)
+  index: number; // which public reply (0-based); -1 if the agent never replied
+  skipped: number; // holding/auto replies skipped before the target
+}
+
+export function replayTurn(t: Ticket): ReplayTurn {
+  const outgoing = (t.conversations ?? [])
+    .filter((c) => !c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  if (!outgoing.length) {
+    return { view: { ...t }, target: "", targetAt: null, index: -1, skipped: 0 };
+  }
+
+  // First substantive public reply — skip auto-replies and holding acknowledgments
+  // so we grade against the turn that actually answered.
+  let idx = outgoing.findIndex(
+    (c) => !looksLikeAutoReply(c.body_text ?? "") && !looksLikeHoldingReply(c.body_text ?? ""),
+  );
+  if (idx === -1) idx = 0; // all holding/auto → fall back to the first reply
+
+  const target = outgoing[idx];
+  const cut = target.created_at;
+  // Strictly before the target turn: hide the target itself and everything after it
+  // (later customer/agent/internal), keep every earlier turn as real context.
+  const conversations = (t.conversations ?? []).filter((c) => c.created_at < cut);
+  return {
+    view: { ...t, conversations },
+    target: target.body_text ?? "",
+    targetAt: target.created_at,
+    index: idx,
+    skipped: idx,
+  };
+}
+
 // Out-of-office / automatic-absence detection. Such a reply must NOT be treated
 // as the customer answering an agent's clarifying question.
 const AUTO_REPLY_HINTS = [

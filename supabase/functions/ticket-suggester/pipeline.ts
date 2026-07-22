@@ -591,7 +591,9 @@ export async function loadIncidents(
   try {
     const { data } = await db
       .from("known_incidents")
-      .select("title, symptoms, resolution, routing, status, affected, workaround, customer_action")
+      .select(
+        "title, symptoms, resolution, routing, status, affected, workaround, customer_action, fix_released_at, post_fix_instructions",
+      )
       .eq("active", true)
       .limit(50);
     return (data ?? []) as Incident[];

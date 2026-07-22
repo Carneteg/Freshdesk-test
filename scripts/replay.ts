@@ -14,11 +14,9 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import {
   classifyUsage,
-  firstAgentReply,
-  firstAgentReplyAt,
   isIgnorableTicket,
+  replayTurn,
   similarity,
-  ticketBeforeFirstAgentReply,
 } from "../supabase/functions/ticket-suggester/render.ts";
 import { loadIncidents, runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
 
@@ -148,22 +146,21 @@ console.log("");
 for (const t of kept) {
   const bar = "─".repeat(76);
   try {
-    // Cold start (CLAUDE.md §6 Step 4): reason over the ticket as it stood just
-    // before the agent's FIRST reply — the customer's opening request, nothing
-    // after. This mirrors a freshly assigned live ticket and avoids grading the
-    // trivial "thanks, it worked" turn at the end of a resolved thread. Compare
-    // against the substantive first reply the agent actually sent.
-    const view = ticketBeforeFirstAgentReply(t);
+    // Exact dialogue-turn synchronisation (CLAUDE.md §6 Step 4; #84875, #84611):
+    // pick ONE specific public agent reply — the first SUBSTANTIVE one, skipping
+    // auto/holding acknowledgments — reason over the ticket as it stood strictly
+    // BEFORE that turn (everything later hidden), and compare against THAT reply.
+    const turn = replayTurn(t);
     const s = await runPipeline(
       {
         fd, llm, model, withRetrieval, excludeCategories, incidents,
         db: db ?? undefined,
-        // No leakage: exclude past tickets resolved at/after this ticket's reply time.
-        retrievalBefore: firstAgentReplyAt(t) ?? undefined,
+        // No leakage: exclude past tickets resolved at/after the graded turn's time.
+        retrievalBefore: turn.targetAt ?? undefined,
       },
-      view,
+      turn.view,
     );
-    const actual = firstAgentReply(t);
+    const actual = turn.target;
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);
 
@@ -207,7 +204,12 @@ for (const t of kept) {
     if (s.bug_guidance.customer_steps.length) {
       console.log("\nCUSTOMER STEPS:\n  - " + s.bug_guidance.customer_steps.join("\n  - "));
     }
-    console.log("\nACTUALLY SENT BY AGENT:\n" + (actual || "(none found)"));
+    const turnNote = turn.index < 0
+      ? " (agent never replied publicly)"
+      : turn.skipped
+      ? ` (graded against agent reply #${turn.index + 1}; skipped ${turn.skipped} holding/auto reply(ies))`
+      : ` (graded against the agent's first substantive reply)`;
+    console.log("\nACTUALLY SENT BY AGENT" + turnNote + ":\n" + (actual || "(none found)"));
     console.log("");
   } catch (err) {
     console.log(bar);
