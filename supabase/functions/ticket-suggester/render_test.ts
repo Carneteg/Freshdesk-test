@@ -156,7 +156,7 @@ Deno.test("renderNote: none-confidence still produces a note with the gap report
     qaTotal: 2,
   });
   assertStringIncludes(html, "NONE");
-  assertStringIncludes(html, "answers 0 of 2 question(s)");
+  assertStringIncludes(html, "Coach action");
   assertStringIncludes(html, "Searched for:");
   assertStringIncludes(html, "knowledge-base gap");
 });
@@ -165,6 +165,7 @@ Deno.test("renderNote: high-confidence shows scores, draft, and a linked source"
   const html = renderNote({
     confidence: "high",
     draft: "Line one\nLine two",
+    answerStrategy: "DIRECT_ANSWER",
     promptVersion: "test",
     searchQueries: [],
     sources: [{

@@ -415,10 +415,18 @@ function renderList(items: string[], ordered: boolean): string {
 export function renderNote(r: NoteData): string {
   const out: string[] = [];
   const typePart = r.ticketType ? `Type: ${esc(r.ticketType)} · ` : "";
+  // Q/A only means something for a direct answer. For a coach action (verify /
+  // route / clarify / abstain) "answers 0 of N" reads as a failure when it isn't —
+  // show the coach status instead (QA feedback).
+  const isAnswer = r.answerStrategy === "DIRECT_ANSWER" ||
+    r.answerStrategy === "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS";
+  const scorePart = isAnswer
+    ? `Q/A: answers ${r.qaAnswered} of ${r.qaTotal} question(s)`
+    : `Coach action (verify / route / clarify — not a direct answer)`;
   out.push(
     `<p><strong>🤝 AI assist for the agent</strong> — decision support, not an automatic answer<br>` +
       `${typePart}Confidence: ${esc(BADGE[r.confidence])} · ` +
-      `Q/A: answers ${r.qaAnswered} of ${r.qaTotal} question(s) · ` +
+      `${scorePart} · ` +
       `<em>${esc(r.promptVersion)}</em></p>`,
   );
 

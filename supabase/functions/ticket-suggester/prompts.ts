@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22q";
+export const PROMPT_VERSION = "g1-2026-07-22r";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -271,6 +271,11 @@ export function draftPrompt(input: {
     "- Do NOT write a signature, a name, or any placeholder like \"[Your Name]\", \"[Agent's Name]\" or",
     "  \"Simployer Support\" — the agent adds their own name. End with a warm closing line only.",
     "- Never let empathy replace substance: still give the concrete answer or next step.",
+    "",
+    "- Your reply must be CONSISTENT with your own analysis: never recommend an action or setting that",
+    "  your analysis ruled out or said does not apply (e.g. do not tell the customer to change setting X",
+    "  while your analysis says the incident about X does not fit). If you cannot tell which of two causes",
+    "  it is, ask / verify first instead of recommending one.",
     "",
     "FINAL CHECK before you output: does the reply actually contain the customer-facing action, the",
     "ownership (\"I will…\" / who does what), and the next step your analysis / matched incident",
