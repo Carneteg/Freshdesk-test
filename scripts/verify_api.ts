@@ -30,14 +30,20 @@ const has = (o: unknown, k: string) => o !== null && typeof o === "object" && k 
 
 // 1. agents/me — confirm the agent id (and name).
 console.log("\n[1] GET /agents/me");
-let agentId: number | null = null;
+// The key is the SERVICE account (posts notes); MY_AGENT_ID is the MONITORED
+// agent (whose tickets we watch). They are decoupled, so a difference is fine.
+const envId = Deno.env.get("MY_AGENT_ID");
+const monitoredId = envId ? Number(envId) : null;
 try {
   const me = await fd.me();
-  agentId = me.id;
-  ok(`agent id = ${me.id}, name = "${me.contact?.name}"`);
-  const envId = Deno.env.get("MY_AGENT_ID");
-  if (envId && String(me.id) !== envId) diff(`MY_AGENT_ID=${envId} does NOT match /agents/me id ${me.id}`);
-  else if (envId) ok("MY_AGENT_ID matches /agents/me");
+  ok(`service account (posts notes): id = ${me.id}, name = "${me.contact?.name}"`);
+  if (monitoredId != null && String(me.id) !== envId) {
+    info(`monitored agent MY_AGENT_ID=${envId} differs from the key owner — expected (decoupled roles).`);
+  } else if (monitoredId != null) {
+    info("MY_AGENT_ID equals the key owner (service account also being monitored).");
+  } else {
+    info("MY_AGENT_ID not set — set it to the agent whose tickets you want watched.");
+  }
 } catch (e) {
   diff(`failed: ${e instanceof Error ? e.message : e}`);
 }
@@ -54,9 +60,9 @@ try {
     sampleTicketId = t.id;
     has(t, "responder_id") ? ok('field "responder_id" present') : diff('field "responder_id" MISSING');
     has(t, "updated_at") ? ok('field "updated_at" present') : diff('field "updated_at" MISSING');
-    if (agentId != null) {
-      const mine = tickets.filter((x) => x.responder_id === agentId).length;
-      info(`${mine}/${tickets.length} in this window are assigned to you`);
+    if (monitoredId != null) {
+      const mine = tickets.filter((x) => x.responder_id === monitoredId).length;
+      info(`${mine}/${tickets.length} in this window are assigned to the monitored agent (MY_AGENT_ID=${monitoredId})`);
     }
   } else {
     info("no tickets in the last 30 days — widen the window or check the key's scope");
