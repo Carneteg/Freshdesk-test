@@ -68,6 +68,8 @@ export interface PipelineDeps {
   llm: LLM;
   model: string;
   withRetrieval: boolean;
+  // KB categories/folders to exclude from retrieval, lowercased (e.g. "expert no").
+  excludeCategories: string[];
 }
 
 export interface Suggestion {
@@ -126,6 +128,14 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
     for (const s of solutions.slice(0, 3)) {
       const ref = `kb:${s.id}`;
       if (seen.has(ref)) continue;
+
+      // Skip excluded categories/folders (e.g. "Expert NO" — wrong market/language).
+      const cat = (s.category_name ?? "").toLowerCase();
+      const folder = (s.folder_name ?? "").toLowerCase();
+      if (deps.excludeCategories.some((x) => cat.includes(x) || folder.includes(x))) {
+        continue;
+      }
+
       seen.add(ref);
       const body = strip(s.description_text ?? s.description ?? "");
       docs.push({

@@ -214,7 +214,9 @@ export class LLM {
       },
       body: JSON.stringify({
         model: this.model,
-        temperature: 0.3,
+        // temperature 0 for reproducibility — the golden set (§8) re-runs the
+        // same tickets, and drift between runs muddies the comparison.
+        temperature: 0,
         max_tokens: opts.maxTokens ?? 1500,
         // OpenAI takes the system prompt as the first message.
         messages: [{ role: "system", content: system }, ...messages],

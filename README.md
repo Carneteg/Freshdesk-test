@@ -126,8 +126,7 @@ After any prompt change, bump `PROMPT_VERSION` in `prompts.ts` and re-run the
 
 ## Data protection
 
-Ticket content may contain employee personal data. The DPA position was cleared
-for **Anthropic** + Supabase — but the LLM provider is now **OpenAI**, a different
-processor, so that clearance does **not** cover the reasoning calls. Confirm the
-DPA position on OpenAI before sending real ticket PII (including via the replay
-harness); until then use synthetic data. See CLAUDE.md §11–§12.
+Ticket content may contain employee personal data. The DPA position on **OpenAI**
++ Supabase is confirmed OK for Gate 1 (2026-07-22), so real ticket text may be
+sent to OpenAI — including via the replay harness. Any *new* data source or a
+further provider change needs its own sign-off. See CLAUDE.md §11–§12.

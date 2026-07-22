@@ -31,6 +31,12 @@ interface Config {
   maxPerRun: number;
   lookbackMin: number;
   withRetrieval: boolean;
+  excludeCategories: string[];
+}
+
+// Comma-separated env list -> lowercased, trimmed, non-empty.
+function envList(name: string): string[] {
+  return (Deno.env.get(name) ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 
 function env(name: string): string {
@@ -53,6 +59,7 @@ function loadConfig(): Config {
     maxPerRun: Number(Deno.env.get("MAX_PER_RUN") ?? "5"),
     lookbackMin: Number(Deno.env.get("LOOKBACK_MINUTES") ?? "5"),
     withRetrieval: (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false",
+    excludeCategories: envList("EXCLUDE_SOLUTION_CATEGORIES"),
   };
 }
 
@@ -128,7 +135,13 @@ async function pollOnce(cfg: Config): Promise<Summary> {
         continue;
       }
 
-      const s = await runPipeline({ fd, llm, model: cfg.model, withRetrieval: cfg.withRetrieval }, ticket);
+      const s = await runPipeline({
+        fd,
+        llm,
+        model: cfg.model,
+        withRetrieval: cfg.withRetrieval,
+        excludeCategories: cfg.excludeCategories,
+      }, ticket);
       const noteId = await fd.postPrivateNote(t.id, s.note_html);
       await db.from("suggestions").insert(toRow(s, { noteId }));
       summary.processed++;
