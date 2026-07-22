@@ -62,8 +62,10 @@ pg_cron (every minute)
 Three systems total: **Freshdesk** (trigger + data + KB + destination),
 **Supabase** (compute + log), **Claude API** (reasoning). Nothing else.
 
-**The only write to any external system** is the private note. Everything else
-is read-only. Keep it that way — it is what keeps the security review narrow.
+**The only write to any external system** is the private note — plus, as of
+2026-07-21, up to three single-word keyword tags on the same ticket (see §12,
+"Ticket tagging"). Everything else is read-only. Keep it that way — the two
+writes both target one ticket, which is what keeps the security review narrow.
 
 ---
 
@@ -90,10 +92,10 @@ Read all of it before changing anything.
 
 ```
 FRESHDESK_DOMAIN      e.g. "simployer"  (→ simployer.freshdesk.com)
-FRESHDESK_API_KEY     basic auth: base64(apikey + ":X")
-MY_AGENT_ID           from GET /api/v2/agents/me
-ANTHROPIC_API_KEY
-CLAUDE_MODEL          default claude-sonnet-5
+FRESHDESK_API_KEY     service account key that POSTS notes; base64(apikey + ":X")
+MY_AGENT_ID           the MONITORED agent whose tickets we watch (may differ from key owner)
+OPENAI_API_KEY        LLM provider — the three reasoning calls (see §12)
+OPENAI_MODEL          default gpt-4o
 CRON_SECRET           guards the function; pg_cron sends it as x-cron-secret
 SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY   (injected by Supabase)
 ```
@@ -144,13 +146,24 @@ Only after replay results look reasonable.
 
 ## 7. Known unknowns — verify, do not assume
 
-- **Freshdesk solutions search endpoint.** May not exist in that form; may
-  need `/api/v2/solutions/categories` traversal instead. Verify first.
+**Step 1 findings (2026-07-22, live `simployer` instance):**
+- ✅ `GET /search/solutions?term=` **works** and returns articles with `title` +
+  `description_text`. Retrieval is viable; the endpoint is confirmed in `clients.ts`.
+- ⚠️ `GET /search/tickets?query=` requires **field-based** queries
+  (`status:5 AND agent_id:123`), not free text — a bare term is HTTP 400. So
+  past-ticket *content* retrieval is not feasible here; **KB-only stands** and
+  the Step 3 "is the answer in the reply" check is moot for retrieval purposes.
+- Still to confirm live: conversation field names on a ticket that HAS replies
+  (`body_text`/`incoming`/`private`), the note write, and the tag write — run the
+  probe with `PROBE_TICKET_ID` + `POST_TEST_NOTE_TICKET_ID` set.
+
+- **Freshdesk solutions search endpoint.** ~~May not exist in that form.~~
+  Resolved above — it exists and returns `description_text`.
 - **Freshdesk rate limits.** Plan-dependent. Handle 429 with `Retry-After`.
   The pipeline makes several calls per ticket; batching may be needed.
 - **`updated_since` semantics.** Confirm it uses `updated_at`, and whether
-  reopened/updated tickets re-trigger. Deduplication relies on the unique
-  index on `suggestions.ticket_id`.
+  reopened/updated tickets re-trigger. Deduplication is on
+  `(ticket_id, trigger_message_id)`, not `ticket_id` alone — see Section 12.
 - **Edge Function timeout.** Three Claude calls plus searches may approach the
   limit. If so, process fewer tickets per run (`MAX_PER_RUN`) rather than
   parallelising into rate limits.
@@ -217,3 +230,122 @@ Ticket content may contain employee personal data. Before running against
 **live** tickets, the DPA position on Anthropic and Supabase must be confirmed
 by legal. Until then, use closed tickets via the replay harness, or synthetic
 data. If asked to run live before that is settled, flag it rather than proceed.
+
+Note: replaying real closed tickets (Section 6, Step 4) still sends real
+customer PII to Anthropic on every call. The DPA gate therefore applies to the
+replay harness too, not only the live scheduler. Flag at run time; do not
+proceed silently.
+
+---
+
+## 12. Resolved design questions (2026-07-21)
+
+These refine Sections 3, 6 and 7. Where they conflict with an earlier line,
+these win.
+
+**Verify step (Claude call 3) — failure behaviour.**
+Verify only ever *lowers* confidence, never raises it, and never freely
+rewrites the draft (free rewriting reintroduces ungrounded text). It classifies
+each claim against the retrieved sources:
+- Any claim **contradicted** by sources → confidence drops to `none`; discard
+  the draft and post the standard "no confident answer" note (what was
+  searched, what was missing).
+- Any claim **unsupported** (not in sources, not contradicted) → drop one
+  confidence level and strip those sentences before posting.
+- All claims **supported** → post as drafted.
+Always log the verify verdict to `suggestions` so the `calibration` view is
+meaningful. Effect: a HIGH draft that fails verify becomes NONE, so the
+`high + unusable` cell is structurally near-impossible.
+
+**Re-triggering on customer response.**
+A new customer reply is treated exactly like a new ticket: generate a fresh
+suggestion. Dedup is therefore **not** a unique index on `ticket_id` alone.
+Store the id of the latest customer message the suggestion was based on
+(`trigger_message_id` — the newest conversation entry with `incoming: true`,
+or the ticket description for the first reply) and make the unique key
+`(ticket_id, trigger_message_id)`. Skip a ticket only when a suggestion already
+exists for its *current* latest customer message; a newer customer message
+produces a new row. Agent/internal updates do not re-trigger.
+
+**Replay harness — first run.**
+Default to **5 tickets**, not 50, for the first run. Before sending anything to
+Anthropic, print the chosen ticket ids and subjects and stop for approval.
+Scale to 50 only after that first batch looks right. (DPA caveat in Section 11
+applies — these are real closed tickets carrying real PII.)
+
+**Edge Function timeout — what it means and what to do.**
+Each ticket makes ~5 sequential network calls (analyse → KB search → ticket
+search → draft → verify), each waiting on the one before; three Claude calls
+alone can be 10–30s. Supabase Edge Functions have a hard wall-clock limit per
+invocation, so a few slow tickets in one run can get the function killed
+mid-flight — possibly after a note is posted but before its log row is written.
+Mitigation: an explicit timeout on every fetch (AbortController) and a
+per-ticket time budget; on breach, log to `suggestions.error` and move on.
+Unfinished tickets are picked up on the next minute's poll. `MAX_PER_RUN` still
+caps tickets per run but does not bound a single slow ticket.
+
+**`MY_AGENT_ID` — source of truth.**
+The `MY_AGENT_ID` env var is authoritative for **which tickets to watch**; both
+the poll filter and the `responder_id` re-check use it.
+
+**Service account vs monitored agent (decoupled, 2026-07-22).** Per Tobias, the
+API key is a **service account** that *posts* the notes, deliberately separate
+from `MY_AGENT_ID`, the **monitored agent** whose tickets we watch — so more
+monitored agents can be added later without re-keying. This amends the earlier
+rule that `/agents/me` must equal `MY_AGENT_ID`: that assertion is **removed**.
+The safety property ("never suggest on a colleague's ticket") is unchanged — it
+is enforced entirely by the `responder_id == MY_AGENT_ID` filter + re-check,
+regardless of who owns the key. Startup now: (a) calls `/agents/me` to confirm
+the key authenticates and logs the service account, (b) requires `MY_AGENT_ID`
+to be a numeric id, and (c) best-effort `GET /agents/{MY_AGENT_ID}` to warn if
+the monitored agent's name ≠ `EXPECTED_AGENT_NAME` (needs admin API; a failure
+only warns). For Gate 1 there is still exactly **one** monitored agent
+(`EXPECTED_AGENT_NAME`, default **Tobias Carneteg**); notes are authored by the
+service account, which is fine since notes are private/internal.
+
+**LLM provider — OpenAI (2026-07-22).** Per Tobias the Anthropic key is
+unavailable, so the three reasoning calls (analyse → draft → verify) now run on
+**OpenAI** (`OPENAI_API_KEY`, `OPENAI_MODEL` default `gpt-4o`). The provider is
+isolated in the `LLM` class in `clients.ts`; prompts and pipeline are unchanged,
+so switching back is a one-file change. Historical "Claude"/"Anthropic" mentions
+elsewhere in this doc describe the same pipeline — read them as "the LLM provider".
+
+**DPA — Anthropic clearance does NOT cover OpenAI (re-opened 2026-07-22).** Per
+Tobias (2026-07-21) the DPA position on *Anthropic* and Supabase was confirmed OK.
+The provider is now **OpenAI** — a different processor — so that clearance no
+longer applies to the reasoning calls. Per §11 (non-negotiable), sending real
+ticket PII to OpenAI — **including via the replay harness** — requires the DPA
+position on **OpenAI** to be confirmed first. Until then: synthetic data, or
+tickets with no personal data. Flag at run time; do not proceed silently.
+
+**Supabase project (provisioned).** `simployer-ticket-suggester`, ref
+`pqwnpcibymtmcpnqlkle`, region `eu-central-1` (Frankfurt, per §2). Schema applied;
+`suggestions` has RLS enabled (service role bypasses it) and all views run
+`security_invoker`.
+
+**Note contents & feedback signal.** The private note shows, beyond the draft:
+a **Confidence** badge, a **Q/A score** (questions answered of asked), a short
+**rationale** (why the answer fits *this* customer's wording), and **hyperlinked
+sources** (KB solution → article, past ticket → ticket). Two feedback axes are
+logged: `verdict` (the human "would I have sent this", gold standard) and `used`
+(used/partly/not, auto-derived from draft-vs-sent similarity) — the latter is the
+signal a Gate 2 learning loop would train on. Views: `gate1_scorecard` (human
+verdict), `usage_scorecard` (usage + coverage), `calibration`, `failures`.
+The learning loop itself (feeding accepted replies back into generation) is
+deliberately deferred to Gate 2 — it needs the corpus these fields now collect.
+
+**Triage, follow-ups, bug guidance.** analyse also classifies `ticket_type`
+(question | howto | bug | unclear) and extracts topic `keywords`. The draft adds
+`follow_up_questions` (shown when the request is unclear, instead of a bare "no
+answer") and `bug_guidance` (reproduction steps for the agent + safe step-by-step
+for the customer, for bug tickets). All grounded in sources; nothing invented.
+
+**Ticket tagging (visibility) — §3 amended.** Per Tobias (2026-07-21) the system
+now also writes up to **3 single-word** keyword tags onto the Freshdesk ticket,
+**merged** with existing tags (never clobbering them). This is a deliberate
+SECOND external write, amending §3's "only write is the private note": the
+security review must now also cover ticket tag updates (`PUT /tickets/{id}`, the
+`tags` field). The full keyword list still lives internally in
+`suggestions.keywords`; the ticket receives at most the first three, one word
+each. A tag-write failure is logged and skipped — it never fails the ticket,
+since the note is the real deliverable.
