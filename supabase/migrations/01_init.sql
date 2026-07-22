@@ -152,6 +152,15 @@ create table if not exists known_incidents (
   symptoms    text not null,               -- how the customer describes it (match signal)
   resolution  text not null,               -- what the agent actually does / the answer
   routing     text,                        -- where to send it, if applicable
+  -- lifecycle (migration 11): so the AI tells the customer to load a FIX vs. sets
+  -- expectations on a live incident, and links only when the scope matches.
+  status      text not null default 'investigating'
+                check (status in ('identified', 'investigating', 'fixed', 'closed')),
+  affected    text,                        -- versions / scope / distinguishing symptoms
+  workaround  text,                        -- interim workaround while unresolved
+  customer_action text,                    -- what the customer does (esp. after a fix)
+  started_at  date,
+  resolved_at date,
   active      boolean not null default true,
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()

@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22m";
+export const PROMPT_VERSION = "g1-2026-07-22n";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -22,15 +22,25 @@ export interface Incident {
   symptoms: string;
   resolution: string;
   routing?: string | null;
+  status?: string | null; // identified | investigating | fixed | closed
+  affected?: string | null; // versions / scope / distinguishing symptoms
+  workaround?: string | null; // interim workaround while unresolved
+  customer_action?: string | null; // what the customer does (esp. after a fix)
 }
 
 function renderPlaybook(incidents: Incident[]): string {
   if (!incidents.length) return "(no known incidents on file)";
   return incidents
-    .map((i, n) =>
-      `[P${n + 1}] ${i.title}\n  symptoms: ${i.symptoms}\n  resolution: ${i.resolution}` +
-      (i.routing ? `\n  route to: ${i.routing}` : "")
-    )
+    .map((i, n) => {
+      const lines = [`[P${n + 1}] ${i.title}${i.status ? ` (status: ${i.status})` : ""}`];
+      lines.push(`  symptoms: ${i.symptoms}`);
+      if (i.affected) lines.push(`  scope: ${i.affected}`);
+      lines.push(`  resolution: ${i.resolution}`);
+      if (i.workaround) lines.push(`  workaround: ${i.workaround}`);
+      if (i.customer_action) lines.push(`  customer does: ${i.customer_action}`);
+      if (i.routing) lines.push(`  route to: ${i.routing}`);
+      return lines.join("\n");
+    })
     .join("\n\n");
 }
 
@@ -214,6 +224,10 @@ export function draftPrompt(input: {
     "- When you DO apply a playbook incident, stay humble: tell the agent to VERIFY the symptoms match",
     "  before relying on it (\"this looks like known incident X — confirm before linking/acting\"), never",
     "  state it as certain, and never claim what the customer's account or settings currently are.",
+    "- Use the incident's STATUS. If 'fixed'/'closed', the fix is deployed — tell the customer how to get",
+    "  it (its customer_action, e.g. reload / clear cache) and do NOT escalate to developers. If",
+    "  'investigating'/'identified', it is a KNOWN issue already being handled — set expectations, give any",
+    "  workaround, and do NOT re-escalate. Only link the ticket if the customer's symptoms/scope match.",
     "- Separate three certainty levels and treat them differently: (a) VERIFIED = stated in the ticket;",
     "  (b) KB-BASED = grounded in a fitting SOURCE; (c) HYPOTHESIS = a guess to check. Only (a) and (b)",
     "  may appear as statements in the customer reply. (c) goes ONLY into resolution_steps / agent_analysis",
@@ -237,6 +251,9 @@ export function draftPrompt(input: {
     "  facts as certain, but DO offer a supportive, clearly-hedged direction (\"this is typically handled",
     "  by…\", \"the usual next step is…\") grounded in adjacent SOURCES or standard support practice, and",
     "  mark it for the agent to confirm. Always fill agent_analysis regardless of confidence.",
+    "- LOW confidence must also soften the REPLY: never write categorically (\"this must be linked to the",
+    "  incident and needs a developer\"). Write tentatively — \"this MAY match known incident X; please",
+    "  verify its status and that the symptoms line up before linking\" — keeping firm claims out.",
     `- Write the reply ONLY in the ticket's detected language (${input.language}) — never drift into`,
     "  another language. Use complete, well-formed sentences; never start mid-sentence or trail off, and",
     "  never reference a value (a date, a timeframe, a name) that you have not actually stated.",
@@ -248,6 +265,11 @@ export function draftPrompt(input: {
     "- Do NOT write a signature, a name, or any placeholder like \"[Your Name]\", \"[Agent's Name]\" or",
     "  \"Simployer Support\" — the agent adds their own name. End with a warm closing line only.",
     "- Never let empathy replace substance: still give the concrete answer or next step.",
+    "",
+    "FINAL CHECK before you output: does the reply actually contain the customer-facing action, the",
+    "ownership (\"I will…\" / who does what), and the next step your analysis / matched incident",
+    "established? If your analysis says the customer must do X, the reply must say X. A reply that only",
+    "thanks or apologises when you have a concrete step is a failure — fix it before returning.",
     "",
     "Confidence = how confident you are that the SUGGESTED ACTION (strategy + reply) is the right",
     "next step for this ticket — not whether you have a complete factual answer.",
