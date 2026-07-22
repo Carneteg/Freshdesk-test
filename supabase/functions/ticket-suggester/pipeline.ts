@@ -9,6 +9,7 @@ import {
   ANSWER_STRATEGIES,
   analysePrompt,
   draftPrompt,
+  type Incident,
   PROMPT_VERSION,
   type SourceDoc,
   verifyPrompt,
@@ -61,6 +62,7 @@ interface Draft {
   confidence_reason: string;
   reply: string;
   resolution_steps: string[];
+  required_customer_steps: string[];
   agent_analysis: string;
   requires_manual_system_check: boolean;
   claims: string[];
@@ -78,6 +80,7 @@ interface VerifyClaim {
 
 interface VerifyResult {
   claims: VerifyClaim[];
+  missing_steps: string[];
 }
 
 const TICKET_TYPES = ["question", "howto", "bug", "unclear"];
@@ -98,6 +101,8 @@ export interface PipelineDeps {
   withRetrieval: boolean;
   // KB categories/folders to exclude from retrieval, lowercased (e.g. "expert no").
   excludeCategories: string[];
+  // Team-curated known incidents fed into the draft as an internal playbook.
+  incidents?: Incident[];
 }
 
 export interface Suggestion {
@@ -202,10 +207,17 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
 
 async function draftReply(
   deps: PipelineDeps,
-  input: { subject: string; language: string; context: string; analysisJson: string; sources: SourceDoc[] },
+  input: {
+    subject: string;
+    language: string;
+    context: string;
+    analysisJson: string;
+    sources: SourceDoc[];
+    incidents: Incident[];
+  },
 ): Promise<Draft> {
   const { system, user } = draftPrompt(input);
-  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1800 });
+  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 2200 });
   const j = extractJSON<Partial<Draft>>(out);
   const confidence: Confidence = j.confidence === "high" || j.confidence === "low" ? j.confidence : "none";
   const strategy = (ANSWER_STRATEGIES as readonly string[]).includes(j.answer_strategy ?? "")
@@ -217,6 +229,7 @@ async function draftReply(
     confidence_reason: str(j.confidence_reason),
     reply: str(j.reply),
     resolution_steps: strList(j.resolution_steps),
+    required_customer_steps: strList(j.required_customer_steps),
     agent_analysis: str(j.agent_analysis),
     requires_manual_system_check: j.requires_manual_system_check === true,
     claims: strList(j.claims),
@@ -240,11 +253,15 @@ async function verifyDraft(
   reply: string,
   sources: SourceDoc[],
   context: string,
+  requiredCustomerSteps: string[],
 ): Promise<VerifyResult> {
-  const { system, user } = verifyPrompt({ reply, sources, context });
+  const { system, user } = verifyPrompt({ reply, sources, context, requiredCustomerSteps });
   const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1200 });
   const j = extractJSON<Partial<VerifyResult>>(out);
-  return { claims: Array.isArray(j.claims) ? j.claims : [] };
+  return {
+    claims: Array.isArray(j.claims) ? j.claims : [],
+    missing_steps: strList(j.missing_steps),
+  };
 }
 
 // Analyse -> retrieve -> draft -> verify. Returns a Suggestion; posts nothing.
@@ -288,14 +305,16 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     context,
     analysisJson,
     sources,
+    incidents: deps.incidents ?? [],
   });
 
   // Verify against sources AND ticket context. Can only lower confidence / strip /
   // discard, never rewrite (CLAUDE.md §12).
   let verify: VerifyResult | null = null;
   let unsupportedNote = "";
+  let notSendReady = false;
   if (draft.confidence !== "none" && draft.reply.trim()) {
-    verify = await verifyDraft(deps, draft.reply, sources, context);
+    verify = await verifyDraft(deps, draft.reply, sources, context, draft.required_customer_steps);
     const contradicted = verify.claims.filter((c) => c.status === "contradicted");
     const unsupported = verify.claims.filter((c) => c.status === "unsupported");
 
@@ -306,6 +325,17 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
       const cleaned = stripQuotes(draft.reply, unsupported.map((c) => c.quote));
       draft = { ...draft, confidence: lower(draft.confidence), reply: cleaned };
       unsupportedNote = `Confidence lowered: ${unsupported.length} statement(s) not grounded in the sources/ticket were removed.`;
+    }
+
+    // Send-ready gate (user rule): every required customer step must be in the reply.
+    // If any is missing, the reply is NOT send-ready — cap confidence and say what's
+    // missing, so a "thanks, let us know" reply can't pass while omitting the action.
+    const missing = verify.missing_steps ?? [];
+    if (draft.reply.trim() && missing.length) {
+      notSendReady = true;
+      draft = { ...draft, confidence: draft.confidence === "high" ? "low" : draft.confidence };
+      unsupportedNote = `⚠️ NOT send-ready: the reply is missing required customer step(s): ` +
+        `${missing.join("; ")}. Add them before sending.`;
     }
   }
 
@@ -322,7 +352,9 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   }
 
   const qaTotal = draft.coverage.length || a.questions_asked.length;
-  const qaAnswered = draft.confidence === "none"
+  // A reply that isn't send-ready (missing a required step) answers nothing yet —
+  // this fixes the Q/A=1/1 that hid the missing action (QA feedback #85844).
+  const qaAnswered = (draft.confidence === "none" || notSendReady)
     ? 0
     : draft.coverage.filter((c) => c.answered).length;
 
@@ -433,6 +465,24 @@ export function toRow(
     latency_ms: s.latency_ms,
     error: s.error,
   };
+}
+
+// Load the active known-incidents playbook (knowledge layer stage 1). A failure
+// or missing table just means "no playbook" — never a crashed pipeline.
+export async function loadIncidents(
+  // deno-lint-ignore no-explicit-any
+  db: any,
+): Promise<Incident[]> {
+  try {
+    const { data } = await db
+      .from("known_incidents")
+      .select("title, symptoms, resolution, routing, status, affected, workaround, customer_action")
+      .eq("active", true)
+      .limit(50);
+    return (data ?? []) as Incident[];
+  } catch {
+    return [];
+  }
 }
 
 // Usage capture (CLAUDE.md §12): for suggestions we posted but haven't yet

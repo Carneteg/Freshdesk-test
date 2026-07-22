@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22k";
+export const PROMPT_VERSION = "g1-2026-07-22o";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -13,6 +13,35 @@ export interface SourceDoc {
   title: string;
   text: string;
   url?: string; // agent-facing link, filled where the Freshdesk domain is known
+}
+
+// A team-curated known incident / routing rule (knowledge layer stage 1). These
+// outrank a generic KB keyword match: they are what the agents actually know.
+export interface Incident {
+  title: string;
+  symptoms: string;
+  resolution: string;
+  routing?: string | null;
+  status?: string | null; // identified | investigating | fixed | closed
+  affected?: string | null; // versions / scope / distinguishing symptoms
+  workaround?: string | null; // interim workaround while unresolved
+  customer_action?: string | null; // what the customer does (esp. after a fix)
+}
+
+function renderPlaybook(incidents: Incident[]): string {
+  if (!incidents.length) return "(no known incidents on file)";
+  return incidents
+    .map((i, n) => {
+      const lines = [`[P${n + 1}] ${i.title}${i.status ? ` (status: ${i.status})` : ""}`];
+      lines.push(`  symptoms: ${i.symptoms}`);
+      if (i.affected) lines.push(`  scope: ${i.affected}`);
+      lines.push(`  resolution: ${i.resolution}`);
+      if (i.workaround) lines.push(`  workaround: ${i.workaround}`);
+      if (i.customer_action) lines.push(`  customer does: ${i.customer_action}`);
+      if (i.routing) lines.push(`  route to: ${i.routing}`);
+      return lines.join("\n");
+    })
+    .join("\n\n");
 }
 
 export const ANSWER_STRATEGIES = [
@@ -123,6 +152,7 @@ export function draftPrompt(input: {
   context: string;
   analysisJson: string;
   sources: SourceDoc[];
+  incidents: Incident[];
 }) {
   const system = [
     "You are a support COACH for a Simployer agent — decision support, NOT an autonomous answer",
@@ -152,6 +182,11 @@ export function draftPrompt(input: {
     "  • resolution_steps = WHAT TO DO to solve the case (internal actions for the agent: investigate,",
     "                       verify identity, request access, reindex, escalate to a team, etc.).",
     "Never put internal actions into the reply, and never phrase resolution_steps as customer text.",
+    "BUT do not hollow the reply out: if a step is something the CUSTOMER must do or know (e.g. \"ask your",
+    "manager to create a new agreement\", \"click 'Gi Simployer tilgang'\"), that step MUST appear IN the",
+    "reply — empathy PLUS the concrete step, never empathy + \"we'll look into it\" while the real step hides",
+    "in resolution_steps. Whatever your analysis or a matched playbook incident concretely establishes, the",
+    "final reply must actually carry it (adapted for the customer).",
     "",
     "Pick ONE answer_strategy:",
     "- DIRECT_ANSWER: sources + context fully answer the question as asked.",
@@ -182,6 +217,17 @@ export function draftPrompt(input: {
     "  you have, the cause is UNKNOWN: say so, and do not build a reply around the guess.",
     "- A SOURCE only counts as grounding if its CONTENT addresses THIS problem — not because it shares a",
     "  word like \"access\", \"role\" or \"sick leave\". If no source truly fits, treat it as a KB gap.",
+    "- You are given an INTERNAL PLAYBOOK of known incidents / routing. If one clearly matches this ticket,",
+    "  it is STRONGER grounding than a generic KB article — follow its resolution/routing and reference it",
+    "  (\"this matches a known issue\"). It counts as KB-BASED grounding, not a hypothesis. If none matches,",
+    "  do not force one.",
+    "- When you DO apply a playbook incident, stay humble: tell the agent to VERIFY the symptoms match",
+    "  before relying on it (\"this looks like known incident X — confirm before linking/acting\"), never",
+    "  state it as certain, and never claim what the customer's account or settings currently are.",
+    "- Use the incident's STATUS. If 'fixed'/'closed', the fix is deployed — tell the customer how to get",
+    "  it (its customer_action, e.g. reload / clear cache) and do NOT escalate to developers. If",
+    "  'investigating'/'identified', it is a KNOWN issue already being handled — set expectations, give any",
+    "  workaround, and do NOT re-escalate. Only link the ticket if the customer's symptoms/scope match.",
     "- Separate three certainty levels and treat them differently: (a) VERIFIED = stated in the ticket;",
     "  (b) KB-BASED = grounded in a fitting SOURCE; (c) HYPOTHESIS = a guess to check. Only (a) and (b)",
     "  may appear as statements in the customer reply. (c) goes ONLY into resolution_steps / agent_analysis",
@@ -205,7 +251,12 @@ export function draftPrompt(input: {
     "  facts as certain, but DO offer a supportive, clearly-hedged direction (\"this is typically handled",
     "  by…\", \"the usual next step is…\") grounded in adjacent SOURCES or standard support practice, and",
     "  mark it for the agent to confirm. Always fill agent_analysis regardless of confidence.",
-    `- Write the reply in the customer's language (${input.language}).`,
+    "- LOW confidence must also soften the REPLY: never write categorically (\"this must be linked to the",
+    "  incident and needs a developer\"). Write tentatively — \"this MAY match known incident X; please",
+    "  verify its status and that the symptoms line up before linking\" — keeping firm claims out.",
+    `- Write the reply ONLY in the ticket's detected language (${input.language}) — never drift into`,
+    "  another language. Use complete, well-formed sentences; never start mid-sentence or trail off, and",
+    "  never reference a value (a date, a timeframe, a name) that you have not actually stated.",
     "",
     "TONE — warmth & empathy (the reply is customer-facing once the agent sends it):",
     "- Open by briefly acknowledging the customer's situation with genuine warmth. If they report a",
@@ -214,6 +265,11 @@ export function draftPrompt(input: {
     "- Do NOT write a signature, a name, or any placeholder like \"[Your Name]\", \"[Agent's Name]\" or",
     "  \"Simployer Support\" — the agent adds their own name. End with a warm closing line only.",
     "- Never let empathy replace substance: still give the concrete answer or next step.",
+    "",
+    "FINAL CHECK before you output: does the reply actually contain the customer-facing action, the",
+    "ownership (\"I will…\" / who does what), and the next step your analysis / matched incident",
+    "established? If your analysis says the customer must do X, the reply must say X. A reply that only",
+    "thanks or apologises when you have a concrete step is a failure — fix it before returning.",
     "",
     "Confidence = how confident you are that the SUGGESTED ACTION (strategy + reply) is the right",
     "next step for this ticket — not whether you have a complete factual answer.",
@@ -231,6 +287,7 @@ export function draftPrompt(input: {
     '  "confidence_reason": "one short sentence",',
     '  "reply": "WHAT TO SAY to the customer — the message to send, in their language, or empty string if nothing is sendable yet",',
     '  "resolution_steps": ["WHAT TO DO to resolve the case — concrete internal actions for the agent, one per item (investigate/verify/request access/reindex/escalate to X). Keep these OUT of the reply. [] only if truly nothing to do."],',
+    '  "required_customer_steps": ["concrete actions the CUSTOMER must take for this ticket (e.g. click Gi Simployer tilgang; tell us when access is granted). EACH one MUST also appear in the reply, or the reply is not send-ready. [] if the customer need not do anything."],',
     '  "agent_analysis": "1-2 sentence diagnosis for the agent: what is going on and any KB gap. NOT actions (those go in resolution_steps). Always fill, in the ticket language.",',
     '  "requires_manual_system_check": true,',
     '  "claims": ["each factual statement in the reply, one per item"],',
@@ -253,6 +310,9 @@ export function draftPrompt(input: {
     "FULL TICKET CONTEXT (chronological):",
     input.context,
     "",
+    "INTERNAL PLAYBOOK (known incidents — outrank generic KB when they match):",
+    renderPlaybook(input.incidents),
+    "",
     "SOURCES (knowledge base):",
     renderSources(input.sources),
     "",
@@ -266,7 +326,9 @@ export function draftPrompt(input: {
 // Check the draft against BOTH the sources and the ticket text. It can only
 // LOWER confidence, never rewrites the reply (CLAUDE.md §12). It also catches
 // false claims of system access (forbidden) and marks them contradicted.
-export function verifyPrompt(input: { reply: string; sources: SourceDoc[]; context: string }) {
+export function verifyPrompt(
+  input: { reply: string; sources: SourceDoc[]; context: string; requiredCustomerSteps: string[] },
+) {
   const system = [
     "You fact-check a support reply that a colleague will review before sending. You are given the",
     "drafted REPLY, the approved SOURCES, and the full TICKET CONTEXT.",
@@ -286,11 +348,17 @@ export function verifyPrompt(input: { reply: string; sources: SourceDoc[]; conte
     "When unsure whether something is a hard factual claim, prefer \"supported\" — do not strip helpful",
     "hedged guidance. Reserve unsupported/contradicted for claims that could actually mislead a customer.",
     "",
+    "You are ALSO given REQUIRED CUSTOMER STEPS — actions the customer must take for this ticket. Check",
+    "whether EACH one is clearly present in the reply (a paraphrase counts). Return the ones that are NOT",
+    "present as missing_steps — this is how we stop a reply that only thanks the customer while omitting the",
+    "real action.",
+    "",
     "Return ONLY a JSON object with exactly this shape:",
     "{",
     '  "claims": [',
     '    { "quote": "verbatim text copied from the reply", "status": "supported | unsupported | contradicted", "reason": "one short sentence" }',
-    "  ]",
+    "  ],",
+    '  "missing_steps": ["each REQUIRED CUSTOMER STEP that does NOT clearly appear in the reply; [] if all present"]',
     "}",
     "",
     "Each quote MUST appear character-for-character in the reply so it can be located.",
@@ -299,6 +367,11 @@ export function verifyPrompt(input: { reply: string; sources: SourceDoc[]; conte
   const user = [
     "REPLY:",
     input.reply,
+    "",
+    "REQUIRED CUSTOMER STEPS (each must appear in the reply):",
+    input.requiredCustomerSteps.length
+      ? input.requiredCustomerSteps.map((s, i) => `${i + 1}. ${s}`).join("\n")
+      : "(none)",
     "",
     "SOURCES:",
     renderSources(input.sources),
