@@ -29,21 +29,40 @@ function env(name: string): string {
   return v;
 }
 
+const fd = new Freshdesk(env("FRESHDESK_DOMAIN"), env("FRESHDESK_API_KEY"));
+
 const raw = Deno.args.length
   ? Deno.args
   : (Deno.env.get("REPLAY_TICKET_IDS") ?? "").split(",");
-const ids = raw.map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
+let ids = raw.map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
 
+// No ids given → auto-pick the monitored agent's recent CLOSED tickets so the
+// evaluation is easy to scale (CLAUDE.md §6 Step 4). Uses Freshdesk's field-based
+// filter (free-text search returns 400 — see clients.ts). REPLAY_COUNT sets how many.
 if (!ids.length) {
-  console.error("Usage: deno task replay <ticketId> [ticketId ...]   (or REPLAY_TICKET_IDS=1,2,3)");
-  console.error("Tip: start with 5 CLOSED tickets whose correct answer you already know.");
-  Deno.exit(1);
+  const agentId = Deno.env.get("MY_AGENT_ID") ?? "";
+  const count = Number(Deno.env.get("REPLAY_COUNT") ?? "10");
+  if (!agentId) {
+    console.error("Usage: deno task replay <ticketId ...>   (or REPLAY_TICKET_IDS=1,2,3)");
+    console.error("Or set MY_AGENT_ID to auto-pick recent CLOSED tickets (REPLAY_COUNT to change how many).");
+    Deno.exit(1);
+  }
+  try {
+    const res = await fd.searchTickets(`status:5 AND agent_id:${agentId}`);
+    ids = (res.results ?? []).map((t) => t.id).slice(0, count);
+    console.log(`Auto-selected ${ids.length} recent CLOSED ticket(s) for agent ${agentId}. Set REPLAY_COUNT to change.\n`);
+  } catch (err) {
+    console.error(`Auto-select failed (${err instanceof Error ? err.message : err}). Pass ticket ids explicitly.`);
+    Deno.exit(1);
+  }
+  if (!ids.length) {
+    console.error("No closed tickets found for that agent. Pass ticket ids explicitly.");
+    Deno.exit(1);
+  }
 }
 if (ids.length > 5) {
-  console.warn(`\n⚠  ${ids.length} tickets requested. CLAUDE.md §12 says start with 5. Review first.\n`);
+  console.warn(`\n⚠  ${ids.length} tickets. CLAUDE.md §12: start with 5, scale once it looks right.\n`);
 }
-
-const fd = new Freshdesk(env("FRESHDESK_DOMAIN"), env("FRESHDESK_API_KEY"));
 const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
 const llm = new LLM(env("OPENAI_API_KEY"), model);
 const withRetrieval = (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false";
