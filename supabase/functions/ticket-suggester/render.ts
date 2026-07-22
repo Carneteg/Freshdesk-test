@@ -138,11 +138,105 @@ export function lastAgentReply(t: Ticket): string {
   return outgoing.length ? (outgoing[outgoing.length - 1].body_text ?? "") : "";
 }
 
+// Out-of-office / automatic-absence detection. Such a reply must NOT be treated
+// as the customer answering an agent's clarifying question.
+const AUTO_REPLY_HINTS = [
+  "out of office",
+  "out-of-office",
+  "automatic reply",
+  "auto reply",
+  "autoreply",
+  "on vacation",
+  "annual leave",
+  "parental leave",
+  "frånvaro",
+  "franvaro",
+  "semester",
+  "autosvar",
+  "är inte på kontoret",
+  "föräldraledig",
+  "sjukskriven",
+  "fravær",
+  "ferie",
+  "jeg er tilbake",
+  "ute av kontoret",
+  "ikke til stede",
+  "abwesenheit",
+];
+
+export function looksLikeAutoReply(text: string): boolean {
+  const t = strip(text).toLowerCase();
+  return t.length > 0 && AUTO_REPLY_HINTS.some((h) => t.includes(h));
+}
+
+// Belt-and-suspenders guard: the AI has NO system access, so it must never claim
+// to have checked/verified/seen the customer's system. This catches the most
+// explicit first-person phrasings if they slip past the prompt (NO/SV/EN/DA).
+const FALSE_ACCESS_PATTERNS: RegExp[] = [
+  /\bjag (kan )?ser? (i|att)[^.]*\b(system|konto|behörighet|roll)/i,
+  /\bjag har (kontrollerat|verifierat|bekräftat|granskat)\b/i,
+  /\bjeg (kan )?ser? (i|at)[^.]*\b(system|konto|tilgang|rolle|administrator)/i,
+  /\bjeg har (kontrollert|verifisert|bekreftet|sjekket)\b/i,
+  /\bi (can )?see (in|that)[^.]*\b(system|account|role|permission|admin)/i,
+  /\bi have (checked|verified|confirmed|reviewed)\b/i,
+];
+
+export function containsFalseSystemAccess(text: string): boolean {
+  return FALSE_ACCESS_PATTERNS.some((re) => re.test(text));
+}
+
+// Build the FULL, chronological, source-labelled ticket context for the model.
+// The old pipeline only fed the customer's own messages, so later agent replies
+// and internal notes (e.g. "X already seems to be an admin") never reached the
+// model. This includes description + every conversation entry, labelled by who
+// wrote it, with auto-reply flagged.
+export function buildContext(t: Ticket): string {
+  const lines: string[] = [
+    `TICKET #${t.id} · subject: ${t.subject ?? ""} · status: ${t.status}`,
+  ];
+
+  if ((t.description_text ?? "").trim()) {
+    lines.push("", "[initial] CUSTOMER:", strip(t.description_text));
+  }
+
+  const convos = (t.conversations ?? [])
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  for (const c of convos) {
+    const who = c.private ? "INTERNAL NOTE (agent/internal)" : c.incoming ? "CUSTOMER" : "AGENT REPLY";
+    const auto = c.incoming && looksLikeAutoReply(c.body_text ?? "")
+      ? " [likely AUTOMATIC / out-of-office reply — do NOT treat as an answer]"
+      : "";
+    lines.push("", `[${c.created_at}] ${who}${auto}:`, strip(c.body_text ?? ""));
+  }
+
+  return lines.join("\n").slice(0, 12000);
+}
+
+// Human-readable label for each answer strategy, shown in the note header so the
+// agent immediately sees WHAT the AI decided to do (answer / ask / verify / …).
+const STRATEGY_LABEL: Record<string, string> = {
+  DIRECT_ANSWER: "Direct answer",
+  REPEAT_CLARIFYING_QUESTION: "Repeat the open clarifying question",
+  REQUEST_MISSING_INFORMATION: "Ask for missing information",
+  RECOMMEND_AGENT_VERIFICATION: "You should verify this manually",
+  PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS: "General how-to from the knowledge base",
+  ESCALATE: "Escalate",
+  ABSTAIN: "No grounded answer",
+};
+
 export interface NoteData {
   confidence: Confidence;
+  confidenceReason?: string;
   draft: string;
   rationale?: string;
   ticketType?: string;
+  answerStrategy?: string;
+  agentNextAction?: string;
+  unknowns?: string[];
+  requiresManualCheck?: boolean;
+  securitySensitive?: boolean;
   followUpQuestions?: string[];
   bugGuidance?: BugGuidance;
   promptVersion: string;
@@ -187,6 +281,28 @@ export function renderNote(r: NoteData): string {
       `<em>${esc(r.promptVersion)}</em></p>`,
   );
 
+  // What the AI decided to do, and (briefly) why — so the agent can sanity-check
+  // the strategy before reading the draft.
+  const strategyLabel = r.answerStrategy
+    ? (STRATEGY_LABEL[r.answerStrategy] ?? r.answerStrategy)
+    : "";
+  if (strategyLabel) {
+    const reason = r.confidenceReason && r.confidenceReason.trim()
+      ? ` — ${esc(r.confidenceReason)}`
+      : "";
+    out.push(`<p><strong>Suggested approach:</strong> ${esc(strategyLabel)}${reason}</p>`);
+  }
+
+  // The AI has NO system access. On security-sensitive / manual-check tickets say
+  // so explicitly, so nobody mistakes the draft for a verified system lookup.
+  if (r.requiresManualCheck || r.securitySensitive) {
+    out.push(
+      `<p><strong>⚠️ Verify manually:</strong> this is based only on the ticket text and ` +
+        `knowledge base — the AI cannot see the customer's account, roles, or permissions. ` +
+        `Confirm identity/access yourself before acting.</p>`,
+    );
+  }
+
   if (r.confidence !== "none" && r.draft.trim()) {
     out.push(`<div>${esc(r.draft).replace(/\n/g, "<br>")}</div>`);
     if (r.rationale && r.rationale.trim()) {
@@ -196,6 +312,17 @@ export function renderNote(r: NoteData): string {
     out.push(
       "<p>No grounded answer was found in the knowledge base or past resolved tickets.</p>",
     );
+  }
+
+  // What the agent should do next (internal — may reference the manual check above).
+  if (r.agentNextAction && r.agentNextAction.trim()) {
+    out.push(`<p><strong>Next action for you:</strong> ${esc(r.agentNextAction)}</p>`);
+  }
+
+  // Things the AI could not establish from the text — a to-confirm list.
+  if (r.unknowns && r.unknowns.length) {
+    out.push(`<p><strong>Not established from the ticket (confirm before relying on it):</strong></p>`);
+    out.push(renderList(r.unknowns, false));
   }
 
   // When the customer's request is unclear, suggest what to ask them.
