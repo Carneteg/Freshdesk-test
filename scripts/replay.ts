@@ -113,6 +113,7 @@ for (const t of tickets) {
       console.log("sources: none");
     }
     console.log("\nSUGGESTED:\n" + (s.draft ?? "(no confident answer)"));
+    if (s.agent_analysis) console.log("\nAI ANALYSIS (for the agent):\n" + s.agent_analysis);
     if (s.rationale) console.log("\nWHY (rationale):\n" + s.rationale);
     if (s.follow_up_questions.length) {
       console.log("\nFOLLOW-UP QUESTIONS:\n  - " + s.follow_up_questions.join("\n  - "));
