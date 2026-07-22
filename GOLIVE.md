@@ -4,9 +4,8 @@ Turnkey steps to take the system from **deployed-but-dormant** to **running**.
 Nothing here runs automatically — each step is deliberate. Follow in order.
 
 ## 0. Gates before ANY real-ticket run
-- [ ] **OpenAI DPA confirmed.** Real ticket text (incl. the replay harness) may
-      contain employee personal data; the DPA was cleared for Anthropic, not
-      OpenAI. Until confirmed → **synthetic / no-PII tickets only** (CLAUDE.md §11–§12).
+- [x] **OpenAI DPA confirmed** (2026-07-22) — real ticket text may go to OpenAI,
+      replay harness included (CLAUDE.md §11–§12).
 - [ ] **OpenAI key rotated.** The key shown in an earlier screenshot is exposed —
       revoke it at platform.openai.com and use a fresh one below.
 

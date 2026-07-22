@@ -310,13 +310,12 @@ isolated in the `LLM` class in `clients.ts`; prompts and pipeline are unchanged,
 so switching back is a one-file change. Historical "Claude"/"Anthropic" mentions
 elsewhere in this doc describe the same pipeline — read them as "the LLM provider".
 
-**DPA — Anthropic clearance does NOT cover OpenAI (re-opened 2026-07-22).** Per
-Tobias (2026-07-21) the DPA position on *Anthropic* and Supabase was confirmed OK.
-The provider is now **OpenAI** — a different processor — so that clearance no
-longer applies to the reasoning calls. Per §11 (non-negotiable), sending real
-ticket PII to OpenAI — **including via the replay harness** — requires the DPA
-position on **OpenAI** to be confirmed first. Until then: synthetic data, or
-tickets with no personal data. Flag at run time; do not proceed silently.
+**DPA — cleared for OpenAI + Supabase (2026-07-22).** Per Tobias, the DPA
+position on **OpenAI** is now approved (the earlier Anthropic clearance is moot
+since the provider switched). Sending real ticket text to OpenAI — including via
+the replay harness and the live scheduler — is therefore permitted for Gate 1.
+The §11 "flag rather than proceed" rule is satisfied for the current provider; it
+still applies to any *new* data source or a further provider change.
 
 **Supabase project (provisioned).** `simployer-ticket-suggester`, ref
 `pqwnpcibymtmcpnqlkle`, region `eu-central-1` (Frankfurt, per §2). Schema applied;
