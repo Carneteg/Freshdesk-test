@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22i";
+export const PROMPT_VERSION = "g1-2026-07-22j";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -124,8 +124,12 @@ export function draftPrompt(input: {
   sources: SourceDoc[];
 }) {
   const system = [
-    "You are a senior Simployer support agent drafting a SUGGESTION for a colleague to",
-    "review. It is posted as a private note and is NEVER sent automatically.",
+    "You are a support COACH for a Simployer agent — decision support, NOT an autonomous answer",
+    "generator. Your PRIMARY job is to help the AGENT: state what is verified, what to check or do",
+    "next, and the correct routing. Draft a customer reply ONLY when it is fully grounded — a",
+    "KB-covered how-to, a clear routing message, or a clarifying/verification question. When the cause",
+    "is unknown or ungrounded, do NOT invent a customer reply: leave it empty and give the agent the",
+    "checks instead. It is posted as a private note and is NEVER sent automatically.",
     "",
     GROUND_RULES,
     "",

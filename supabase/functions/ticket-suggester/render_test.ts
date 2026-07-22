@@ -384,7 +384,7 @@ Deno.test("renderNote: security-sensitive note shows manual-verify disclaimer an
   assertStringIncludes(html, "Repeat the open clarifying question");
   assertStringIncludes(html, "Verify manually");
   assertStringIncludes(html, "cannot see the customer's account");
-  assertStringIncludes(html, "How to resolve this (for you):");
+  assertStringIncludes(html, "What to check / do (for you):");
   assertStringIncludes(html, "Confirm the admin&#39;s identity before granting access.");
   assertStringIncludes(html, "Not established from the ticket");
   assertStringIncludes(html, "Which person should hold the admin role");
@@ -404,15 +404,15 @@ Deno.test("renderNote: reply and resolution steps are separate sections", () => 
     qaAnswered: 0,
     qaTotal: 1,
   });
-  assertStringIncludes(html, "💬 Reply to the customer:");
+  assertStringIncludes(html, "💬 Draft to the customer (only when grounded):");
   assertStringIncludes(html, "Hei, vi ser på saken");
-  assertStringIncludes(html, "🔧 How to resolve this (for you):");
+  assertStringIncludes(html, "🔧 What to check / do (for you):");
   assertStringIncludes(html, "Reindex the customer&#39;s search");
   assertStringIncludes(html, "AI analysis (for you)");
-  // Reply comes before the resolution steps in the note.
-  const replyIdx = html.indexOf("💬 Reply to the customer:");
-  const stepsIdx = html.indexOf("🔧 How to resolve this");
-  assertEquals(replyIdx > -1 && stepsIdx > replyIdx, true);
+  // Coach steps come BEFORE the customer draft (coach role, not answer-first).
+  const stepsIdx = html.indexOf("🔧 What to check / do");
+  const replyIdx = html.indexOf("💬 Draft to the customer");
+  assertEquals(stepsIdx > -1 && replyIdx > stepsIdx, true);
 });
 
 // At confidence none there is no send-ready reply, but the resolution track and
@@ -429,8 +429,8 @@ Deno.test("renderNote: none confidence still shows resolution steps, not just a 
     qaAnswered: 0,
     qaTotal: 1,
   });
-  assertStringIncludes(html, "No send-ready reply yet");
-  assertStringIncludes(html, "How to resolve this (for you):");
+  assertStringIncludes(html, "No grounded reply");
+  assertStringIncludes(html, "What to check / do (for you):");
   assertStringIncludes(html, "Ask the manager to re-issue the contract");
 });
 
