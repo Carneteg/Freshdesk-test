@@ -74,6 +74,7 @@ export interface PipelineDeps {
 
 export interface Suggestion {
   ticket_id: number;
+  ticket_url: string;
   trigger_message_id: string;
   subject: string;
   language: string;
@@ -259,6 +260,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
 
   return {
     ticket_id: ticket.id,
+    ticket_url: deps.fd.ticketUrl(ticket.id),
     trigger_message_id: triggerId,
     subject: ticket.subject,
     language: a.language,
@@ -291,6 +293,7 @@ export function toRow(
 ) {
   return {
     ticket_id: s.ticket_id,
+    ticket_url: s.ticket_url,
     trigger_message_id: s.trigger_message_id,
     subject: s.subject,
     language: s.language,

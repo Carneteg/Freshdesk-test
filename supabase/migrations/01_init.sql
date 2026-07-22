@@ -7,6 +7,7 @@ create table if not exists suggestions (
 
   -- what it ran on
   ticket_id          bigint not null,
+  ticket_url         text,             -- agent-facing link to the Freshdesk ticket
   -- newest customer message the draft answered. NOT ticket_id alone: a new
   -- customer reply is treated like a new ticket and gets its own row (§12).
   trigger_message_id text   not null,
