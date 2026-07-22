@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-21b";
+export const PROMPT_VERSION = "g1-2026-07-22";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -80,8 +80,14 @@ export function draftPrompt(input: {
     "",
     "Confidence levels:",
     '- "high": every question is fully and unambiguously answered by the sources.',
-    '- "low":  the sources are partially relevant but incomplete or indirect.',
-    '- "none": the sources do not answer the questions.',
+    '- "low":  the sources are on-topic and let you give useful GENERAL guidance,',
+    "           even if they don't resolve the customer's exact/account-specific case.",
+    '- "none": the sources are off-topic or absent, or answering needs facts not present.',
+    "",
+    'Prefer a "low"-confidence DRAFT over "none" whenever the sources are relevant to the',
+    "topic — a grounded general answer is a useful starting point the agent refines. Only",
+    'use "none" when you genuinely have nothing grounded to say. (The verify step will',
+    "still strip anything the sources do not support, so a good-faith low draft is safe.)",
     "",
     "Return ONLY a JSON object with exactly this shape:",
     "{",
