@@ -89,6 +89,9 @@ for (const id of finalIds) {
       subject: ticket.subject ?? null,
       question: question.slice(0, 8000),
       resolution: resolution.slice(0, 8000),
+      // ~when the ticket was resolved; used to keep replay from citing a ticket
+      // that was only resolved after the one being answered (no leakage).
+      resolved_at: ticket.updated_at ?? null,
       embedding,
       synced_at: new Date().toISOString(),
     }, { onConflict: "ticket_id" });

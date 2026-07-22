@@ -110,6 +110,8 @@ export interface PipelineDeps {
   db?: Db;
   // Search the past-ticket index for similar resolved tickets (default on when db set).
   withPastTickets?: boolean;
+  // Replay only: only use past tickets resolved BEFORE this ISO time (no leakage).
+  retrievalBefore?: string;
 }
 
 export interface Suggestion {
@@ -215,7 +217,11 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
 // ticket's question and pulls the nearest RESOLVED tickets as `ticket` sources,
 // so the draft can reference how a similar case was actually handled. Fail-safe:
 // no db, no embedding, or an empty/unsynced index all just mean "no past tickets".
-async function retrievePastTickets(deps: PipelineDeps, queryText: string): Promise<SourceDoc[]> {
+async function retrievePastTickets(
+  deps: PipelineDeps,
+  queryText: string,
+  excludeId?: number,
+): Promise<SourceDoc[]> {
   if (!deps.db || !queryText.trim()) return [];
   try {
     const embedding = await deps.llm.embed(queryText);
@@ -224,6 +230,10 @@ async function retrievePastTickets(deps: PipelineDeps, queryText: string): Promi
       query_embedding: embedding,
       match_count: 3,
       min_similarity: 0.35,
+      // No leakage: never cite the ticket being answered, and (in replay) never a
+      // ticket resolved after this one's reply time.
+      exclude_ticket_id: excludeId ?? null,
+      before_ts: deps.retrievalBefore ?? null,
     });
     return (data ?? [])
       .filter((r: { resolution?: string | null }) => r && r.resolution)
@@ -320,7 +330,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   // resolutions. Default on whenever a db is available.
   const wantPast = deps.withPastTickets ?? Boolean(deps.db);
   const pastSources = wantPast
-    ? await retrievePastTickets(deps, `${ticket.subject}\n${a.questions_asked.join("\n")}`)
+    ? await retrievePastTickets(deps, `${ticket.subject}\n${a.questions_asked.join("\n")}`, ticket.id)
     : [];
   const sources = [...pastSources, ...kbSources];
 

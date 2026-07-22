@@ -185,10 +185,14 @@ alter table past_tickets enable row level security;
 create index if not exists past_tickets_embedding_idx
   on past_tickets using hnsw (embedding vector_cosine_ops);
 
+-- match_count similar resolved tickets, excluding the ticket being answered and
+-- (in replay) any ticket resolved after the simulated reply time — no leakage (13).
 create or replace function match_past_tickets(
   query_embedding vector(1536),
   match_count int default 5,
-  min_similarity float default 0.3
+  min_similarity float default 0.3,
+  exclude_ticket_id bigint default null,
+  before_ts timestamptz default null
 )
 returns table (ticket_id bigint, subject text, resolution text, similarity float)
 language sql stable
@@ -198,6 +202,8 @@ as $$
   from past_tickets p
   where p.embedding is not null
     and p.resolution is not null
+    and (exclude_ticket_id is null or p.ticket_id <> exclude_ticket_id)
+    and (before_ts is null or (p.resolved_at is not null and p.resolved_at < before_ts))
     and 1 - (p.embedding <=> query_embedding) >= min_similarity
   order by p.embedding <=> query_embedding
   limit match_count;

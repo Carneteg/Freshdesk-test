@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22p";
+export const PROMPT_VERSION = "g1-2026-07-22q";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -210,6 +210,9 @@ export function draftPrompt(input: {
     "  change. When unsure, put the investigation step in resolution_steps for the agent to try first.",
     "- NEVER ask the customer for information already on the ticket (their email/identity is on file —",
     "  see CUSTOMER ON FILE). Use it; ask only for details that are genuinely not present.",
+    "- If the context notes ATTACHMENTS, you cannot read them. Do NOT ask the customer to send a",
+    "  screenshot/file they already attached — say you cannot access the attachment yourself and ask",
+    "  the agent to open it.",
     "- DO NOT propose roles, permissions, access levels, or system settings as the cause OR the",
     "  solution unless there is EXPLICIT support in the ticket text or a SOURCE whose content actually",
     "  addresses it. \"This could be a permissions issue\" / \"verify the customer's role\" is a HYPOTHESIS,",

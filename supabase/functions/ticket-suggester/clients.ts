@@ -63,17 +63,24 @@ export interface TicketSummary {
   status: number;
 }
 
+export interface Attachment {
+  name?: string;
+  content_type?: string;
+}
+
 export interface Conversation {
   id: number;
   body_text: string;
   incoming: boolean; // true = from the customer
   private: boolean; // true = internal note
   created_at: string;
+  attachments?: Attachment[];
 }
 
 export interface Ticket extends TicketSummary {
   description_text: string;
   tags?: string[];
+  attachments?: Attachment[];
   conversations?: Conversation[];
   // Requester (the customer) — already on file because they contacted us. Surfaced
   // so the model never asks the customer for an email/identity we already hold.

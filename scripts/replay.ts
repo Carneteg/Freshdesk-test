@@ -15,6 +15,7 @@ import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.t
 import {
   classifyUsage,
   firstAgentReply,
+  firstAgentReplyAt,
   isIgnorableTicket,
   similarity,
   ticketBeforeFirstAgentReply,
@@ -142,7 +143,12 @@ for (const t of kept) {
     // against the substantive first reply the agent actually sent.
     const view = ticketBeforeFirstAgentReply(t);
     const s = await runPipeline(
-      { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined },
+      {
+        fd, llm, model, withRetrieval, excludeCategories, incidents,
+        db: db ?? undefined,
+        // No leakage: exclude past tickets resolved at/after this ticket's reply time.
+        retrievalBefore: firstAgentReplyAt(t) ?? undefined,
+      },
       view,
     );
     const actual = firstAgentReply(t);

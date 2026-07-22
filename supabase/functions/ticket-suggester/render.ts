@@ -206,6 +206,16 @@ export function firstAgentReply(t: Ticket): string {
   return outgoing.length ? (outgoing[0].body_text ?? "") : "";
 }
 
+// When the agent's first reply was sent — the simulated "reply time" for replay.
+// Used to exclude past tickets that were only resolved AFTER this one (no leakage).
+export function firstAgentReplyAt(t: Ticket): string | null {
+  const outgoing = (t.conversations ?? [])
+    .filter((c) => !c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return outgoing.length ? outgoing[0].created_at : null;
+}
+
 // REPLAY ONLY (cold start). The ticket as it stood just before the agent's FIRST
 // public reply: the customer's opening request (plus any pre-reply notes),
 // nothing after. This mirrors what the live scheduler actually sees on a newly
@@ -307,6 +317,16 @@ export function buildContext(t: Ticket): string {
   const convos = (t.conversations ?? [])
     .slice()
     .sort((a, b) => a.created_at.localeCompare(b.created_at));
+
+  // Attachments (e.g. screenshots) exist on the ticket but the AI cannot read them.
+  // Flag them so it acknowledges that instead of asking for what is already sent.
+  const attachN = (t.attachments?.length ?? 0) +
+    convos.reduce((n, c) => n + (c.attachments?.length ?? 0), 0);
+  if (attachN) {
+    lines.push(
+      `ATTACHMENTS: ${attachN} file(s) are attached (e.g. a screenshot) that you CANNOT read. Do NOT ask the customer to send what is already attached — say you cannot access the attachment and ask the agent to look at it.`,
+    );
+  }
 
   // The latest real (non-auto) customer message is the one the draft should
   // respond to. If there are no incoming conversation entries, that is the
