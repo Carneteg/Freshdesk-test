@@ -59,7 +59,7 @@ interface Draft {
   confidence: Confidence;
   confidence_reason: string;
   reply: string;
-  agent_next_action: string;
+  resolution_steps: string[];
   agent_analysis: string;
   requires_manual_system_check: boolean;
   claims: string[];
@@ -112,7 +112,7 @@ export interface Suggestion {
   confidence: Confidence;
   confidence_reason: string | null;
   draft: string | null;
-  agent_next_action: string | null;
+  resolution_steps: string[];
   agent_analysis: string | null;
   requires_manual_system_check: boolean;
   security_sensitive: boolean;
@@ -215,7 +215,7 @@ async function draftReply(
     confidence,
     confidence_reason: str(j.confidence_reason),
     reply: str(j.reply),
-    agent_next_action: str(j.agent_next_action),
+    resolution_steps: strList(j.resolution_steps),
     agent_analysis: str(j.agent_analysis),
     requires_manual_system_check: j.requires_manual_system_check === true,
     claims: strList(j.claims),
@@ -334,7 +334,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     ticketType: a.ticket_type,
     answerStrategy: draft.answer_strategy,
     agentAnalysis: draft.agent_analysis,
-    agentNextAction: draft.agent_next_action,
+    resolutionSteps: draft.resolution_steps,
     unknowns: a.unknowns,
     requiresManualCheck: draft.requires_manual_system_check,
     securitySensitive: a.security_sensitive,
@@ -361,7 +361,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     confidence: draft.confidence,
     confidence_reason: draft.confidence_reason || null,
     draft: draft.reply || null,
-    agent_next_action: draft.agent_next_action || null,
+    resolution_steps: draft.resolution_steps,
     agent_analysis: draft.agent_analysis || null,
     requires_manual_system_check: draft.requires_manual_system_check,
     security_sensitive: a.security_sensitive,
@@ -403,7 +403,7 @@ export function toRow(
     confidence: s.confidence,
     confidence_reason: s.confidence_reason,
     draft: s.draft,
-    agent_next_action: s.agent_next_action,
+    resolution_steps: s.resolution_steps,
     agent_analysis: s.agent_analysis,
     requires_manual_system_check: s.requires_manual_system_check,
     security_sensitive: s.security_sensitive,

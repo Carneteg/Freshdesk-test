@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22d";
+export const PROMPT_VERSION = "g1-2026-07-22e";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -117,6 +117,12 @@ export function draftPrompt(input: {
     "Respond to the customer's LATEST message (marked in the context); use earlier turns as context and",
     "do NOT re-answer what an earlier agent reply already handled.",
     "",
+    "Keep TWO things strictly SEPARATE — do not merge them:",
+    "  • reply            = WHAT TO SAY to the customer (the sendable message only).",
+    "  • resolution_steps = WHAT TO DO to solve the case (internal actions for the agent: investigate,",
+    "                       verify identity, request access, reindex, escalate to a team, etc.).",
+    "Never put internal actions into the reply, and never phrase resolution_steps as customer text.",
+    "",
     "Pick ONE answer_strategy:",
     "- DIRECT_ANSWER: sources + context fully answer the question as asked.",
     "- REPEAT_CLARIFYING_QUESTION: an agent already asked something still unanswered — repeat/keep it.",
@@ -156,9 +162,9 @@ export function draftPrompt(input: {
     `  "answer_strategy": "${ANSWER_STRATEGIES.join(" | ")}",`,
     '  "confidence": "high | low | none",',
     '  "confidence_reason": "one short sentence",',
-    '  "reply": "the suggested customer reply, or empty string if strategy is ABSTAIN/none",',
-    '  "agent_next_action": "what the agent should do next (internal; may reference a manual check)",',
-    '  "agent_analysis": "ALWAYS fill this, in the ticket language: 1-3 sentences to the AGENT giving the likely resolution path as a hypothesis, what to verify, and any missing knowledge (KB gap). Internal — be candid; never leave empty.",',
+    '  "reply": "WHAT TO SAY to the customer — the message to send, in their language, or empty string if nothing is sendable yet",',
+    '  "resolution_steps": ["WHAT TO DO to resolve the case — concrete internal actions for the agent, one per item (investigate/verify/request access/reindex/escalate to X). Keep these OUT of the reply. [] only if truly nothing to do."],',
+    '  "agent_analysis": "1-2 sentence diagnosis for the agent: what is going on and any KB gap. NOT actions (those go in resolution_steps). Always fill, in the ticket language.",',
     '  "requires_manual_system_check": true,',
     '  "claims": ["each factual statement in the reply, one per item"],',
     '  "rationale": "1-2 sentences: why this fits THIS ticket, noting where each fact comes from",',

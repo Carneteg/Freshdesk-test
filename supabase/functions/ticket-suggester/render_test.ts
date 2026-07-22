@@ -319,7 +319,7 @@ Deno.test("renderNote: security-sensitive note shows manual-verify disclaimer an
     confidenceReason: "An agent already asked who should be admin and it is unanswered.",
     draft: "Kan du bekräfta vilken person som ska ha administratörsbehörighet?",
     answerStrategy: "REPEAT_CLARIFYING_QUESTION",
-    agentNextAction: "Confirm the admin's identity before granting access.",
+    resolutionSteps: ["Confirm the admin's identity before granting access."],
     unknowns: ["Which person should hold the admin role"],
     requiresManualCheck: true,
     securitySensitive: true,
@@ -333,9 +333,54 @@ Deno.test("renderNote: security-sensitive note shows manual-verify disclaimer an
   assertStringIncludes(html, "Repeat the open clarifying question");
   assertStringIncludes(html, "Verify manually");
   assertStringIncludes(html, "cannot see the customer's account");
-  assertStringIncludes(html, "Next action for you:");
+  assertStringIncludes(html, "How to resolve this (for you):");
+  assertStringIncludes(html, "Confirm the admin&#39;s identity before granting access.");
   assertStringIncludes(html, "Not established from the ticket");
   assertStringIncludes(html, "Which person should hold the admin role");
+});
+
+// The two tracks are rendered as distinct, labelled sections.
+Deno.test("renderNote: reply and resolution steps are separate sections", () => {
+  const html = renderNote({
+    confidence: "low",
+    draft: "Hei, vi ser på saken og kommer tilbake.",
+    answerStrategy: "ESCALATE",
+    agentAnalysis: "404s in AI search usually mean a reindex is needed; not covered by the KB.",
+    resolutionSteps: ["Reindex the customer's search", "Request system access if needed", "Escalate to the technical team"],
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+  });
+  assertStringIncludes(html, "💬 Reply to the customer:");
+  assertStringIncludes(html, "Hei, vi ser på saken");
+  assertStringIncludes(html, "🔧 How to resolve this (for you):");
+  assertStringIncludes(html, "Reindex the customer&#39;s search");
+  assertStringIncludes(html, "AI analysis (for you)");
+  // Reply comes before the resolution steps in the note.
+  const replyIdx = html.indexOf("💬 Reply to the customer:");
+  const stepsIdx = html.indexOf("🔧 How to resolve this");
+  assertEquals(replyIdx > -1 && stepsIdx > replyIdx, true);
+});
+
+// At confidence none there is no send-ready reply, but the resolution track and
+// analysis still carry substance — never a hollow note.
+Deno.test("renderNote: none confidence still shows resolution steps, not just a greeting", () => {
+  const html = renderNote({
+    confidence: "none",
+    draft: "",
+    agentAnalysis: "Likely a policy question the KB does not cover.",
+    resolutionSteps: ["Confirm the customer's identity", "Ask the manager to re-issue the contract"],
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+  });
+  assertStringIncludes(html, "No send-ready reply yet");
+  assertStringIncludes(html, "How to resolve this (for you):");
+  assertStringIncludes(html, "Ask the manager to re-issue the contract");
 });
 
 // ── Replay fairness (CLAUDE.md §6 Step 4) ───────────────────────────────────────

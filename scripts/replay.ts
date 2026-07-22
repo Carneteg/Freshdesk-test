@@ -112,7 +112,10 @@ for (const t of tickets) {
     } else {
       console.log("sources: none");
     }
-    console.log("\nSUGGESTED:\n" + (s.draft ?? "(no confident answer)"));
+    console.log("\nREPLY TO CUSTOMER:\n" + (s.draft ?? "(no send-ready reply yet)"));
+    if (s.resolution_steps.length) {
+      console.log("\nHOW TO RESOLVE (for the agent):\n  - " + s.resolution_steps.join("\n  - "));
+    }
     if (s.agent_analysis) console.log("\nAI ANALYSIS (for the agent):\n" + s.agent_analysis);
     if (s.rationale) console.log("\nWHY (rationale):\n" + s.rationale);
     if (s.follow_up_questions.length) {

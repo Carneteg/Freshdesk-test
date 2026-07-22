@@ -20,8 +20,9 @@ create table if not exists suggestions (
   -- how the AI reasoned over the FULL ticket (QA rework, CLAUDE.md §12).
   answer_strategy    text,            -- DIRECT_ANSWER | REPEAT_CLARIFYING_QUESTION | …
   confidence_reason  text,            -- one-line justification for the confidence level
-  agent_next_action  text,            -- what the agent should do next (internal)
-  agent_analysis     text,            -- internal analysis: likely resolution path + what to verify
+  agent_next_action  text,            -- (legacy) superseded by resolution_steps
+  resolution_steps   jsonb,           -- what to DO to solve the case (internal action list)
+  agent_analysis     text,            -- 1-2 sentence diagnosis + KB gap (not actions)
   requires_manual_system_check boolean default false, -- AI has no system access; agent must verify
   security_sensitive boolean default false,           -- roles / access / permissions ticket
   facts              jsonb,           -- source-tagged facts { from_customer, from_agent, … }

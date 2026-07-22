@@ -316,7 +316,7 @@ export interface NoteData {
   ticketType?: string;
   answerStrategy?: string;
   agentAnalysis?: string;
-  agentNextAction?: string;
+  resolutionSteps?: string[];
   unknowns?: string[];
   requiresManualCheck?: boolean;
   securitySensitive?: boolean;
@@ -393,6 +393,8 @@ export function renderNote(r: NoteData): string {
     );
   }
 
+  // Track 1 — what to SAY to the customer.
+  out.push(`<p><strong>💬 Reply to the customer:</strong></p>`);
   if (r.confidence !== "none" && r.draft.trim()) {
     out.push(`<div>${esc(r.draft).replace(/\n/g, "<br>")}</div>`);
     if (r.rationale && r.rationale.trim()) {
@@ -400,13 +402,14 @@ export function renderNote(r: NoteData): string {
     }
   } else {
     out.push(
-      "<p>No grounded answer was found in the knowledge base or past resolved tickets.</p>",
+      "<p><em>No send-ready reply yet — see the resolution steps and analysis below.</em></p>",
     );
   }
 
-  // What the agent should do next (internal — may reference the manual check above).
-  if (r.agentNextAction && r.agentNextAction.trim()) {
-    out.push(`<p><strong>Next action for you:</strong> ${esc(r.agentNextAction)}</p>`);
+  // Track 2 — what to DO to resolve the case (internal actions, kept separate).
+  if (r.resolutionSteps && r.resolutionSteps.length) {
+    out.push(`<p><strong>🔧 How to resolve this (for you):</strong></p>`);
+    out.push(renderList(r.resolutionSteps, true));
   }
 
   // Things the AI could not establish from the text — a to-confirm list.
