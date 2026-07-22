@@ -165,3 +165,40 @@ create table if not exists known_incidents (
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now()
 );
+
+-- Knowledge layer stage 2 (migration 12): our own semantic index of resolved
+-- tickets. Freshdesk can't search ticket content, so scripts/sync_tickets.ts fills
+-- this and the pipeline pulls the nearest resolved tickets by embedding similarity.
+create extension if not exists vector;
+
+create table if not exists past_tickets (
+  ticket_id   bigint primary key,
+  subject     text,
+  question    text not null,          -- customer's question(s)
+  resolution  text,                   -- the agent's resolving public reply
+  language    text,
+  resolved_at timestamptz,
+  embedding   vector(1536),           -- text-embedding-3-small of subject + question
+  synced_at   timestamptz not null default now()
+);
+alter table past_tickets enable row level security;
+create index if not exists past_tickets_embedding_idx
+  on past_tickets using hnsw (embedding vector_cosine_ops);
+
+create or replace function match_past_tickets(
+  query_embedding vector(1536),
+  match_count int default 5,
+  min_similarity float default 0.3
+)
+returns table (ticket_id bigint, subject text, resolution text, similarity float)
+language sql stable
+as $$
+  select p.ticket_id, p.subject, p.resolution,
+         1 - (p.embedding <=> query_embedding) as similarity
+  from past_tickets p
+  where p.embedding is not null
+    and p.resolution is not null
+    and 1 - (p.embedding <=> query_embedding) >= min_similarity
+  order by p.embedding <=> query_embedding
+  limit match_count;
+$$;

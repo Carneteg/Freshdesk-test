@@ -94,6 +94,9 @@ function str(v: unknown): string {
 
 // ── Pipeline ──────────────────────────────────────────────────────────────────
 
+// deno-lint-ignore no-explicit-any
+type Db = any;
+
 export interface PipelineDeps {
   fd: Freshdesk;
   llm: LLM;
@@ -103,6 +106,10 @@ export interface PipelineDeps {
   excludeCategories: string[];
   // Team-curated known incidents fed into the draft as an internal playbook.
   incidents?: Incident[];
+  // Supabase client — enables the past-ticket semantic search (stage 2).
+  db?: Db;
+  // Search the past-ticket index for similar resolved tickets (default on when db set).
+  withPastTickets?: boolean;
 }
 
 export interface Suggestion {
@@ -202,7 +209,35 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
     }
   }
   return docs;
-  // NOTE: past-RESOLVED-ticket retrieval is deliberately NOT wired in yet (§6 Step 3).
+}
+
+// Stage 2: semantic search of our own past-ticket index. Embeds the current
+// ticket's question and pulls the nearest RESOLVED tickets as `ticket` sources,
+// so the draft can reference how a similar case was actually handled. Fail-safe:
+// no db, no embedding, or an empty/unsynced index all just mean "no past tickets".
+async function retrievePastTickets(deps: PipelineDeps, queryText: string): Promise<SourceDoc[]> {
+  if (!deps.db || !queryText.trim()) return [];
+  try {
+    const embedding = await deps.llm.embed(queryText);
+    if (!embedding.length) return [];
+    const { data } = await deps.db.rpc("match_past_tickets", {
+      query_embedding: embedding,
+      match_count: 3,
+      min_similarity: 0.35,
+    });
+    return (data ?? [])
+      .filter((r: { resolution?: string | null }) => r && r.resolution)
+      .map((r: { ticket_id: number; subject?: string; resolution: string }) => ({
+        ref: `ticket:${r.ticket_id}`,
+        kind: "ticket" as const,
+        id: r.ticket_id,
+        title: r.subject ?? `Ticket #${r.ticket_id}`,
+        text: strip(String(r.resolution)).slice(0, 1200),
+        url: deps.fd.ticketUrl(r.ticket_id),
+      }));
+  } catch {
+    return [];
+  }
 }
 
 async function draftReply(
@@ -280,7 +315,14 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   const latestCustomer = incoming.length ? (incoming[incoming.length - 1].body_text ?? "") : (ticket.description_text ?? "");
   a.latest_customer_is_auto_reply = a.latest_customer_is_auto_reply || looksLikeAutoReply(latestCustomer);
 
-  const sources = deps.withRetrieval ? await retrieve(deps, a.search_queries) : [];
+  const kbSources = deps.withRetrieval ? await retrieve(deps, a.search_queries) : [];
+  // Similar RESOLVED past tickets (stage 2) — listed first as they show real
+  // resolutions. Default on whenever a db is available.
+  const wantPast = deps.withPastTickets ?? Boolean(deps.db);
+  const pastSources = wantPast
+    ? await retrievePastTickets(deps, `${ticket.subject}\n${a.questions_asked.join("\n")}`)
+    : [];
+  const sources = [...pastSources, ...kbSources];
 
   const analysisJson = JSON.stringify(
     {

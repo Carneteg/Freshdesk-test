@@ -151,6 +151,7 @@ async function pollOnce(cfg: Config): Promise<Summary> {
         withRetrieval: cfg.withRetrieval,
         excludeCategories: cfg.excludeCategories,
         incidents,
+        db,
       }, ticket);
       const noteId = await fd.postPrivateNote(t.id, s.note_html);
       await db.from("suggestions").insert(toRow(s, { noteId }));

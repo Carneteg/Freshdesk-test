@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22o";
+export const PROMPT_VERSION = "g1-2026-07-22p";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -217,6 +217,9 @@ export function draftPrompt(input: {
     "  you have, the cause is UNKNOWN: say so, and do not build a reply around the guess.",
     "- A SOURCE only counts as grounding if its CONTENT addresses THIS problem — not because it shares a",
     "  word like \"access\", \"role\" or \"sick leave\". If no source truly fits, treat it as a KB gap.",
+    "- SOURCES may include past RESOLVED tickets (ref \"ticket:*\") showing how a SIMILAR case was actually",
+    "  handled. Treat a close match as useful precedent and reference it, but the customer's situation may",
+    "  differ — verify the match before reusing the resolution; it is grounding, not a guarantee.",
     "- You are given an INTERNAL PLAYBOOK of known incidents / routing. If one clearly matches this ticket,",
     "  it is STRONGER grounding than a generic KB article — follow its resolution/routing and reference it",
     "  (\"this matches a known issue\"). It counts as KB-BASED grounding, not a hypothesis. If none matches,",
@@ -313,7 +316,7 @@ export function draftPrompt(input: {
     "INTERNAL PLAYBOOK (known incidents — outrank generic KB when they match):",
     renderPlaybook(input.incidents),
     "",
-    "SOURCES (knowledge base):",
+    "SOURCES (knowledge base + similar past resolved tickets, ref ticket:*):",
     renderSources(input.sources),
     "",
     "Choose the strategy and draft the suggestion now.",

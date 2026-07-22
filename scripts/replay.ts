@@ -141,7 +141,10 @@ for (const t of kept) {
     // trivial "thanks, it worked" turn at the end of a resolved thread. Compare
     // against the substantive first reply the agent actually sent.
     const view = ticketBeforeFirstAgentReply(t);
-    const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories, incidents }, view);
+    const s = await runPipeline(
+      { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined },
+      view,
+    );
     const actual = firstAgentReply(t);
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);
