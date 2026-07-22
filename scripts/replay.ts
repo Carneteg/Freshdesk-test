@@ -157,7 +157,10 @@ for (const t of kept) {
         `language=${s.language}  ${s.latency_ms}ms`,
     );
     if (s.keywords.length) console.log(`keywords: ${s.keywords.join(", ")}`);
-    console.log(`usage: ${used} (similarity ${sim} vs the agent's real reply)`);
+    // NOTE: text-overlap is a WEAK proxy — low overlap usually means the agent had a
+    // concrete answer and the AI was generic, NOT that the AI was ignored. Judge on
+    // cause + action + grounding (the verdict column), not this number.
+    console.log(`text-overlap: ${sim} vs agent (weak proxy — judge cause/action/grounding, not this)`);
     if (s.sources.length) {
       console.log("sources:");
       for (const x of s.sources) console.log(`  - ${x.title} [${x.ref}] ${x.url ?? ""}`);

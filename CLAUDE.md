@@ -348,3 +348,31 @@ security review must now also cover ticket tag updates (`PUT /tickets/{id}`, the
 `suggestions.keywords`; the ticket receives at most the first three, one word
 each. A tag-write failure is logged and skipped — it never fails the ticket,
 since the note is the real deliverable.
+
+**Gate 1 outcome — reframed to an agent COACH (2026-07-22).** A QA review of 16
+written tickets (Johanna's) scored the AI ~2.4/5 vs the agent ~4.6, agent better
+in 15/16, AI never clearly better. Root cause is NOT tone: the model defaulted to
+ungrounded "this is probably a permissions/role issue" guesses and used the KB by
+keyword, not content. The agent's edge was operational knowledge not written down
+anywhere (known incidents, reindexing fixes 404s, a user on a read-link, exact
+profile settings, "legal → Expert"). Conclusion: **autonomous solution-drafting
+on KB-only does not clear the >50% "would I have sent this" bar**, and more prompt
+tuning yields diminishing returns because the gap is *knowledge*, not wording.
+
+Decision (Tobias): **reposition the AI as decision support / a coach for the
+agent, not an autonomous answer generator.** Its job is to surface what is
+VERIFIED in the ticket, propose concrete verification/next steps, route correctly
+(sales/consultant; legal → Simployer Expert), and polish tone/structure — and to
+draft a customer reply ONLY when it is genuinely grounded (a KB-covered how-to, a
+clear routing message, or a clarifying question). When the cause is unknown it
+must ABSTAIN from a customer reply and hand the judgement back. Encoded in
+`prompts.ts` (g1-2026-07-22i grounding rules → g1-2026-07-22j coach framing) and
+the note layout (`renderNote`: agent checks first, customer draft conditional).
+
+Related eval hygiene: auto-generated phone/call-log tickets ("Incoming call
+with…") are excluded everywhere (they carry no question); `similarity` is treated
+as a weak text-overlap proxy, not a quality score — judge on cause/action/
+grounding via `verdict`. The real growth lever (weighting known incidents /
+similar concurrent tickets over generic KB) needs ticket-content retrieval, which
+Freshdesk's search does not allow (free-text → 400) — a Gate 2 problem, or an
+interim curated incident/routing list fed into the prompt.

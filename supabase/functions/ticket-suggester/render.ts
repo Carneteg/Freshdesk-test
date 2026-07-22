@@ -341,6 +341,7 @@ const STRATEGY_LABEL: Record<string, string> = {
   REQUEST_MISSING_INFORMATION: "Ask for missing information",
   RECOMMEND_AGENT_VERIFICATION: "You should verify this manually",
   PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS: "General how-to from the knowledge base",
+  ROUTE: "Route to the right team",
   ESCALATE: "Escalate",
   ABSTAIN: "No grounded answer",
 };
@@ -395,7 +396,7 @@ export function renderNote(r: NoteData): string {
   const out: string[] = [];
   const typePart = r.ticketType ? `Type: ${esc(r.ticketType)} · ` : "";
   out.push(
-    `<p><strong>AI suggested reply</strong><br>` +
+    `<p><strong>🤝 AI assist for the agent</strong> — decision support, not an automatic answer<br>` +
       `${typePart}Confidence: ${esc(BADGE[r.confidence])} · ` +
       `Q/A: answers ${r.qaAnswered} of ${r.qaTotal} question(s) · ` +
       `<em>${esc(r.promptVersion)}</em></p>`,
@@ -430,23 +431,24 @@ export function renderNote(r: NoteData): string {
     );
   }
 
-  // Track 1 — what to SAY to the customer.
-  out.push(`<p><strong>💬 Reply to the customer:</strong></p>`);
+  // Coach output first — what the agent should check / do (the primary value).
+  if (r.resolutionSteps && r.resolutionSteps.length) {
+    out.push(`<p><strong>🔧 What to check / do (for you):</strong></p>`);
+    out.push(renderList(r.resolutionSteps, true));
+  }
+
+  // A customer draft only when it is grounded; otherwise say so plainly and hand
+  // the judgement back to the agent (coach role, not solution-decider).
+  out.push(`<p><strong>💬 Draft to the customer (only when grounded):</strong></p>`);
   if (r.confidence !== "none" && r.draft.trim()) {
     out.push(`<div>${esc(r.draft).replace(/\n/g, "<br>")}</div>`);
     if (r.rationale && r.rationale.trim()) {
-      out.push(`<p><strong>Why this answers the ticket:</strong> ${esc(r.rationale)}</p>`);
+      out.push(`<p><strong>Why this fits:</strong> ${esc(r.rationale)}</p>`);
     }
   } else {
     out.push(
-      "<p><em>No send-ready reply yet — see the resolution steps and analysis below.</em></p>",
+      "<p><em>No grounded reply — this one needs your judgement. Use the checks above.</em></p>",
     );
-  }
-
-  // Track 2 — what to DO to resolve the case (internal actions, kept separate).
-  if (r.resolutionSteps && r.resolutionSteps.length) {
-    out.push(`<p><strong>🔧 How to resolve this (for you):</strong></p>`);
-    out.push(renderList(r.resolutionSteps, true));
   }
 
   // Things the AI could not establish from the text — a to-confirm list.
