@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22l";
+export const PROMPT_VERSION = "g1-2026-07-22m";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -172,6 +172,11 @@ export function draftPrompt(input: {
     "  • resolution_steps = WHAT TO DO to solve the case (internal actions for the agent: investigate,",
     "                       verify identity, request access, reindex, escalate to a team, etc.).",
     "Never put internal actions into the reply, and never phrase resolution_steps as customer text.",
+    "BUT do not hollow the reply out: if a step is something the CUSTOMER must do or know (e.g. \"ask your",
+    "manager to create a new agreement\", \"click 'Gi Simployer tilgang'\"), that step MUST appear IN the",
+    "reply — empathy PLUS the concrete step, never empathy + \"we'll look into it\" while the real step hides",
+    "in resolution_steps. Whatever your analysis or a matched playbook incident concretely establishes, the",
+    "final reply must actually carry it (adapted for the customer).",
     "",
     "Pick ONE answer_strategy:",
     "- DIRECT_ANSWER: sources + context fully answer the question as asked.",
@@ -206,6 +211,9 @@ export function draftPrompt(input: {
     "  it is STRONGER grounding than a generic KB article — follow its resolution/routing and reference it",
     "  (\"this matches a known issue\"). It counts as KB-BASED grounding, not a hypothesis. If none matches,",
     "  do not force one.",
+    "- When you DO apply a playbook incident, stay humble: tell the agent to VERIFY the symptoms match",
+    "  before relying on it (\"this looks like known incident X — confirm before linking/acting\"), never",
+    "  state it as certain, and never claim what the customer's account or settings currently are.",
     "- Separate three certainty levels and treat them differently: (a) VERIFIED = stated in the ticket;",
     "  (b) KB-BASED = grounded in a fitting SOURCE; (c) HYPOTHESIS = a guess to check. Only (a) and (b)",
     "  may appear as statements in the customer reply. (c) goes ONLY into resolution_steps / agent_analysis",
@@ -229,7 +237,9 @@ export function draftPrompt(input: {
     "  facts as certain, but DO offer a supportive, clearly-hedged direction (\"this is typically handled",
     "  by…\", \"the usual next step is…\") grounded in adjacent SOURCES or standard support practice, and",
     "  mark it for the agent to confirm. Always fill agent_analysis regardless of confidence.",
-    `- Write the reply in the customer's language (${input.language}).`,
+    `- Write the reply ONLY in the ticket's detected language (${input.language}) — never drift into`,
+    "  another language. Use complete, well-formed sentences; never start mid-sentence or trail off, and",
+    "  never reference a value (a date, a timeframe, a name) that you have not actually stated.",
     "",
     "TONE — warmth & empathy (the reply is customer-facing once the agent sends it):",
     "- Open by briefly acknowledging the customer's situation with genuine warmth. If they report a",

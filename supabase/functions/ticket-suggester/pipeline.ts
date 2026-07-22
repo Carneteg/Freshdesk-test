@@ -215,7 +215,7 @@ async function draftReply(
   },
 ): Promise<Draft> {
   const { system, user } = draftPrompt(input);
-  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1800 });
+  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 2200 });
   const j = extractJSON<Partial<Draft>>(out);
   const confidence: Confidence = j.confidence === "high" || j.confidence === "low" ? j.confidence : "none";
   const strategy = (ANSWER_STRATEGIES as readonly string[]).includes(j.answer_strategy ?? "")
