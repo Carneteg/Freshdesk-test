@@ -182,6 +182,34 @@ export function agentReplyToLatestCustomer(t: Ticket): string {
   return outgoing.length ? (outgoing[outgoing.length - 1].body_text ?? "") : "";
 }
 
+// The agent's FIRST public reply — the substantive "cold start" answer the live
+// tool would face on a freshly assigned ticket. Empty if the agent never replied
+// publicly.
+export function firstAgentReply(t: Ticket): string {
+  const outgoing = (t.conversations ?? [])
+    .filter((c) => !c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  return outgoing.length ? (outgoing[0].body_text ?? "") : "";
+}
+
+// REPLAY ONLY (cold start). The ticket as it stood just before the agent's FIRST
+// public reply: the customer's opening request (plus any pre-reply notes),
+// nothing after. This mirrors what the live scheduler actually sees on a newly
+// assigned ticket, and avoids grading trivial end-of-thread pleasantries. If the
+// agent never replied, the whole ticket is kept (there is nothing to hide).
+export function ticketBeforeFirstAgentReply(t: Ticket): Ticket {
+  const outgoing = (t.conversations ?? [])
+    .filter((c) => !c.incoming && !c.private)
+    .slice()
+    .sort((a, b) => a.created_at.localeCompare(b.created_at));
+  const firstReplyAt = outgoing.length ? outgoing[0].created_at : null;
+  const conversations = (t.conversations ?? []).filter((c) =>
+    firstReplyAt ? c.created_at < firstReplyAt : true
+  );
+  return { ...t, conversations };
+}
+
 // Out-of-office / automatic-absence detection. Such a reply must NOT be treated
 // as the customer answering an agent's clarifying question.
 const AUTO_REPLY_HINTS = [

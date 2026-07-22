@@ -8,6 +8,7 @@ import {
   deriveTags,
   esc,
   extractJSON,
+  firstAgentReply,
   lastAgentReply,
   latestCustomerMessage,
   looksLikeAutoReply,
@@ -17,6 +18,7 @@ import {
   strip,
   stripQuotes,
   ticketAsOfLatestCustomer,
+  ticketBeforeFirstAgentReply,
 } from "./render.ts";
 import type { Ticket } from "./clients.ts";
 
@@ -380,6 +382,36 @@ Deno.test("ticketAsOfLatestCustomer: no incoming message drops all conversations
 
 Deno.test("agentReplyToLatestCustomer: returns the reply sent AFTER the trigger", () => {
   assertEquals(agentReplyToLatestCustomer(CLOSED_TICKET), "Done — you now have admin access.");
+});
+
+// Cold start: test the ticket before the agent's FIRST reply, so we grade the
+// substantive opening turn — not a mid-thread follow-up already answered above.
+Deno.test("ticketBeforeFirstAgentReply: keeps only the opening request, hides all replies", () => {
+  const view = ticketBeforeFirstAgentReply(CLOSED_TICKET);
+  const ctx = buildContext(view);
+  assertStringIncludes(ctx, "Please give me admin access."); // the opening request stays
+  // Everything from the first agent reply onward is hidden.
+  assertEquals(view.conversations?.length, 0);
+  assertEquals(ctx.includes("Who should be the admin?"), false);
+  assertEquals(ctx.includes("you now have admin access"), false);
+});
+
+Deno.test("firstAgentReply: returns the first public reply, not the last", () => {
+  assertEquals(firstAgentReply(CLOSED_TICKET), "Who should be the admin?");
+});
+
+Deno.test("ticketBeforeFirstAgentReply: no agent reply keeps the whole ticket", () => {
+  const t = {
+    id: 502,
+    subject: "x",
+    status: 2,
+    description_text: "opening",
+    conversations: [
+      { id: 1, body_text: "more detail", incoming: true, private: false, created_at: "2026-01-02T00:00:00Z" },
+    ],
+  } as unknown as Ticket;
+  assertEquals(ticketBeforeFirstAgentReply(t).conversations?.length, 1);
+  assertEquals(firstAgentReply(t), "");
 });
 
 // Case C — a straightforward how-to answer needs no manual-verify banner.

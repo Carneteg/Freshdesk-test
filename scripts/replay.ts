@@ -13,10 +13,10 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import {
-  agentReplyToLatestCustomer,
   classifyUsage,
+  firstAgentReply,
   similarity,
-  ticketAsOfLatestCustomer,
+  ticketBeforeFirstAgentReply,
 } from "../supabase/functions/ticket-suggester/render.ts";
 import { runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
 
@@ -79,12 +79,14 @@ console.log("");
 for (const t of tickets) {
   const bar = "─".repeat(76);
   try {
-    // Fair test: reason over the ticket as the agent saw it (before their reply),
-    // not the resolved/closed version — otherwise the model reads the answer and
-    // just says "already handled" (CLAUDE.md §6 Step 4).
-    const view = ticketAsOfLatestCustomer(t);
+    // Cold start (CLAUDE.md §6 Step 4): reason over the ticket as it stood just
+    // before the agent's FIRST reply — the customer's opening request, nothing
+    // after. This mirrors a freshly assigned live ticket and avoids grading the
+    // trivial "thanks, it worked" turn at the end of a resolved thread. Compare
+    // against the substantive first reply the agent actually sent.
+    const view = ticketBeforeFirstAgentReply(t);
     const s = await runPipeline({ fd, llm, model, withRetrieval, excludeCategories }, view);
-    const actual = agentReplyToLatestCustomer(t);
+    const actual = firstAgentReply(t);
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);
 
