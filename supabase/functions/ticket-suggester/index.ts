@@ -33,6 +33,11 @@ interface Config {
   withRetrieval: boolean;
   excludeCategories: string[];
   excludeSubjects: string[];
+  // Safety flag for the first live runs (CLAUDE.md §4: never run live before).
+  // When true, the full pipeline runs and every suggestion is logged, but NO note
+  // or tag is written to Freshdesk. Defaults to TRUE — posting must be turned on
+  // deliberately with DRY_RUN=false, so a first deploy/cron can never surprise-post.
+  dryRun: boolean;
 }
 
 // Comma-separated env list -> lowercased, trimmed, non-empty.
@@ -62,6 +67,8 @@ function loadConfig(): Config {
     withRetrieval: (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false",
     excludeCategories: envList("EXCLUDE_SOLUTION_CATEGORIES"),
     excludeSubjects: envList("EXCLUDE_SUBJECTS"),
+    // Safe by default: post only when DRY_RUN is explicitly "false".
+    dryRun: (Deno.env.get("DRY_RUN") ?? "true") !== "false",
   };
 }
 
@@ -71,9 +78,11 @@ function nameMatches(name: string | undefined, expected: string): boolean {
 }
 
 interface Summary {
+  dry_run: boolean;
   scanned: number;
   mine: number;
   processed: number;
+  posted: number;
   skipped: number;
   errors: number;
   usage_scored: number;
@@ -92,6 +101,9 @@ async function pollOnce(cfg: Config): Promise<Summary> {
   // responder_id re-check below, which only ever act on MY_AGENT_ID's tickets.
   const service = await fd.me(); // throws on a bad key -> fail fast
   console.log(`posting as service account ${service.id} (${service.contact?.name})`);
+  if (cfg.dryRun) {
+    console.log("DRY_RUN is on — running the full pipeline and logging suggestions, but posting NO notes/tags to Freshdesk. Set DRY_RUN=false to enable posting.");
+  }
 
   if (!Number.isFinite(Number(cfg.myAgentId))) {
     throw new Error("refusing to run: MY_AGENT_ID is not set to a numeric agent id");
@@ -118,9 +130,11 @@ async function pollOnce(cfg: Config): Promise<Summary> {
     .filter((t) => t.responder_id === Number(cfg.myAgentId))
     .filter((t) => !isIgnorableTicket(t.subject, cfg.excludeSubjects));
   const summary: Summary = {
+    dry_run: cfg.dryRun,
     scanned: updated.length,
     mine: mine.length,
     processed: 0,
+    posted: 0,
     skipped: 0,
     errors: 0,
     usage_scored: 0,
@@ -153,9 +167,16 @@ async function pollOnce(cfg: Config): Promise<Summary> {
         incidents,
         db,
       }, ticket);
-      const noteId = await fd.postPrivateNote(t.id, s.note_html);
+
+      // DRY_RUN: log the suggestion for inspection but write NOTHING to Freshdesk.
+      // The two external writes (note, tags) are the only side effects, so gating
+      // them here makes a live run fully observable without touching a ticket.
+      const noteId = cfg.dryRun ? null : await fd.postPrivateNote(t.id, s.note_html);
       await db.from("suggestions").insert(toRow(s, { noteId }));
       summary.processed++;
+
+      if (cfg.dryRun) continue; // logged; skip the ticket writes
+      summary.posted++;
 
       // Visibility (CLAUDE.md §12): write up to 3 single-word keyword tags onto
       // the ticket, merged with its existing tags. A tag failure must not fail
