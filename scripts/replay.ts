@@ -36,17 +36,37 @@ const raw = Deno.args.length
   : (Deno.env.get("REPLAY_TICKET_IDS") ?? "").split(",");
 let ids = raw.map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
 
-// No ids given → auto-pick the monitored agent's recent CLOSED tickets so the
-// evaluation is easy to scale (CLAUDE.md §6 Step 4). Uses Freshdesk's field-based
-// filter (free-text search returns 400 — see clients.ts). REPLAY_COUNT sets how many.
+// No ids given → auto-pick a chosen agent's recent CLOSED tickets so the
+// evaluation is easy to scale (CLAUDE.md §6 Step 4). REPLAY_AGENT selects WHO
+// (name, email, or numeric id); defaults to MY_AGENT_ID. Uses Freshdesk's
+// field-based filter (free-text search returns 400 — see clients.ts).
 if (!ids.length) {
-  const agentId = Deno.env.get("MY_AGENT_ID") ?? "";
   const count = Number(Deno.env.get("REPLAY_COUNT") ?? "10");
-  if (!agentId) {
+  const sel = (Deno.env.get("REPLAY_AGENT") ?? Deno.env.get("MY_AGENT_ID") ?? "").trim();
+  if (!sel) {
     console.error("Usage: deno task replay <ticketId ...>   (or REPLAY_TICKET_IDS=1,2,3)");
-    console.error("Or set MY_AGENT_ID to auto-pick recent CLOSED tickets (REPLAY_COUNT to change how many).");
+    console.error("Or set REPLAY_AGENT (name / email / id) — or MY_AGENT_ID — to auto-pick closed tickets.");
     Deno.exit(1);
   }
+
+  // Resolve the agent selector to a numeric id.
+  let agentId = sel;
+  if (!/^\d+$/.test(sel)) {
+    try {
+      const agent = await fd.findAgent(sel);
+      if (!agent) {
+        console.error(`No agent matched "${sel}". Try their exact email, or set REPLAY_AGENT to the numeric agent id.`);
+        Deno.exit(1);
+      }
+      agentId = String(agent.id);
+      console.log(`Matched agent "${agent.contact?.name}" (id ${agentId}, ${agent.contact?.email}).`);
+    } catch (err) {
+      console.error(`Agent lookup failed (${err instanceof Error ? err.message : err}) — needs admin API.`);
+      console.error(`Set REPLAY_AGENT to the numeric agent id instead.`);
+      Deno.exit(1);
+    }
+  }
+
   try {
     const res = await fd.searchTickets(`status:5 AND agent_id:${agentId}`);
     ids = (res.results ?? []).map((t) => t.id).slice(0, count);

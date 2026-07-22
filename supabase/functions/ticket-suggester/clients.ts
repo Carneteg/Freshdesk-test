@@ -130,6 +130,23 @@ export class Freshdesk {
     return this.get<Agent>(`/agents/${id}`);
   }
 
+  // Resolve an agent by email (exact) or name (all words must appear, case-
+  // insensitive). Requires admin-scoped API access. Used only by the replay
+  // harness to target one agent's tickets; returns null if nothing matches.
+  async findAgent(query: string): Promise<Agent | null> {
+    const q = query.trim().toLowerCase();
+    if (q.includes("@")) {
+      const byEmail = await this.get<Agent[]>(`/agents?email=${encodeURIComponent(query.trim())}`);
+      return byEmail[0] ?? null;
+    }
+    const words = q.split(/\s+/).filter(Boolean);
+    const roster = await this.get<Agent[]>(`/agents?per_page=100`);
+    return roster.find((a) => {
+      const name = (a.contact?.name ?? "").toLowerCase();
+      return words.every((w) => name.includes(w));
+    }) ?? null;
+  }
+
   // Tickets updated at/after an ISO timestamp, oldest first. Freshdesk paginates.
   listUpdatedTickets(updatedSince: string): Promise<TicketSummary[]> {
     const q = new URLSearchParams({
