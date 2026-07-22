@@ -77,14 +77,25 @@ async function pollOnce(cfg: Config): Promise<Summary> {
   const claude = new Claude(cfg.anthropicKey, cfg.model);
   const db = createClient(cfg.supabaseUrl, cfg.serviceKey);
 
-  // Two independent identity checks (CLAUDE.md §12). Id mismatch is fatal so we
-  // can never suggest on another agent's tickets; name mismatch is a warning.
-  const agent = await fd.me();
-  if (String(agent.id) !== cfg.myAgentId) {
-    throw new Error(`refusing to run: /agents/me id ${agent.id} != MY_AGENT_ID ${cfg.myAgentId}`);
+  // Roles are decoupled (CLAUDE.md §12): the API key is a SERVICE account that
+  // POSTS the notes; MY_AGENT_ID is the monitored agent whose tickets we watch.
+  // Safety ("never touch a colleague's ticket") is preserved by the poll filter +
+  // responder_id re-check below, which only ever act on MY_AGENT_ID's tickets.
+  const service = await fd.me(); // throws on a bad key -> fail fast
+  console.log(`posting as service account ${service.id} (${service.contact?.name})`);
+
+  if (!Number.isFinite(Number(cfg.myAgentId))) {
+    throw new Error("refusing to run: MY_AGENT_ID is not set to a numeric agent id");
   }
-  if (!nameMatches(agent.contact?.name, cfg.expectedName)) {
-    console.warn(`agent name check: expected ~"${cfg.expectedName}", got "${agent.contact?.name}"`);
+  // Best-effort: confirm the monitored agent resolves to the expected person.
+  // Needs admin-scoped API access; a failure only warns (the id filter still holds).
+  try {
+    const monitored = await fd.getAgent(Number(cfg.myAgentId));
+    if (cfg.expectedName && !nameMatches(monitored.contact?.name, cfg.expectedName)) {
+      console.warn(`monitored-agent name check: expected ~"${cfg.expectedName}", got "${monitored.contact?.name}"`);
+    }
+  } catch (e) {
+    console.warn(`could not verify monitored agent ${cfg.myAgentId} (needs admin API): ${e instanceof Error ? e.message : e}`);
   }
 
   const since = new Date(Date.now() - cfg.lookbackMin * 60_000).toISOString();

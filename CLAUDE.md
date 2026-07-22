@@ -274,15 +274,23 @@ Unfinished tickets are picked up on the next minute's poll. `MAX_PER_RUN` still
 caps tickets per run but does not bound a single slow ticket.
 
 **`MY_AGENT_ID` — source of truth.**
-The `MY_AGENT_ID` env var is authoritative; both the poll filter and the
-`responder_id` re-check use it. At startup, call `GET /api/v2/agents/me` once
-and assert it equals `MY_AGENT_ID`; on mismatch, refuse to run and log an error
-rather than risk suggesting on the wrong agent's tickets.
+The `MY_AGENT_ID` env var is authoritative for **which tickets to watch**; both
+the poll filter and the `responder_id` re-check use it.
 
-**Agent identity.** The single monitored agent is **Tobias Carneteg**. As a
-second, defensive check the startup routine also verifies the name returned by
-`/agents/me` matches (env `EXPECTED_AGENT_NAME`, default `Tobias Carneteg`); a
-mismatch is warned, an id mismatch is fatal.
+**Service account vs monitored agent (decoupled, 2026-07-22).** Per Tobias, the
+API key is a **service account** that *posts* the notes, deliberately separate
+from `MY_AGENT_ID`, the **monitored agent** whose tickets we watch — so more
+monitored agents can be added later without re-keying. This amends the earlier
+rule that `/agents/me` must equal `MY_AGENT_ID`: that assertion is **removed**.
+The safety property ("never suggest on a colleague's ticket") is unchanged — it
+is enforced entirely by the `responder_id == MY_AGENT_ID` filter + re-check,
+regardless of who owns the key. Startup now: (a) calls `/agents/me` to confirm
+the key authenticates and logs the service account, (b) requires `MY_AGENT_ID`
+to be a numeric id, and (c) best-effort `GET /agents/{MY_AGENT_ID}` to warn if
+the monitored agent's name ≠ `EXPECTED_AGENT_NAME` (needs admin API; a failure
+only warns). For Gate 1 there is still exactly **one** monitored agent
+(`EXPECTED_AGENT_NAME`, default **Tobias Carneteg**); notes are authored by the
+service account, which is fine since notes are private/internal.
 
 **DPA — cleared for Gate 1.** Per Tobias (2026-07-21) the DPA position on
 Anthropic and Supabase is confirmed OK, so replaying real closed tickets is

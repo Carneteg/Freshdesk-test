@@ -115,8 +115,15 @@ export class Freshdesk {
     return await res.json() as T;
   }
 
+  // The API key's own account (the service account that posts notes).
   me(): Promise<Agent> {
     return this.get<Agent>("/agents/me");
+  }
+
+  // Look up a specific agent (the monitored agent). Requires admin-scoped API
+  // access; callers treat a failure here as "couldn't verify", not fatal.
+  getAgent(id: number): Promise<Agent> {
+    return this.get<Agent>(`/agents/${id}`);
   }
 
   // Tickets updated at/after an ISO timestamp, oldest first. Freshdesk paginates.
