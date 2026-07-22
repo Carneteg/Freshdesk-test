@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22";
+export const PROMPT_VERSION = "g1-2026-07-22b";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -78,16 +78,21 @@ export function draftPrompt(input: {
     `- Write the reply in the customer's language (${input.language}).`,
     "- Be concise and specific. No filler, no greetings-only padding.",
     "",
-    "Confidence levels:",
-    '- "high": every question is fully and unambiguously answered by the sources.',
-    '- "low":  the sources are on-topic and let you give useful GENERAL guidance,',
-    "           even if they don't resolve the customer's exact/account-specific case.",
-    '- "none": the sources are off-topic or absent, or answering needs facts not present.',
+    "Confidence levels. Our KB is GENERAL/how-to by design — that is expected, and a",
+    "generic article that fully answers a general question is still a HIGH-quality answer.",
+    "Judge confidence by how well the sources answer the QUESTION AS ASKED, not by whether",
+    "the article is generic:",
+    '- "high": the sources clearly and fully answer the question as asked. A general',
+    "           how-to that the KB covers well IS \"high\" — do NOT lower it just because the",
+    "           article is generic or you lack the customer's account details.",
+    '- "low":  the sources are relevant but only partial/indirect, OR the request is',
+    "           genuinely account-specific (needs data not in any KB) and you can only give",
+    "           general guidance.",
+    '- "none": the sources are off-topic or absent.',
     "",
-    'Prefer a "low"-confidence DRAFT over "none" whenever the sources are relevant to the',
-    "topic — a grounded general answer is a useful starting point the agent refines. Only",
-    'use "none" when you genuinely have nothing grounded to say. (The verify step will',
-    "still strip anything the sources do not support, so a good-faith low draft is safe.)",
+    'Prefer a "low" DRAFT over "none" whenever the sources are relevant — a grounded answer',
+    'is a useful starting point. Use "none" only when nothing is grounded. (Verify still',
+    "strips anything the sources do not support, so a good-faith draft is safe.)",
     "",
     "Return ONLY a JSON object with exactly this shape:",
     "{",
