@@ -14,7 +14,17 @@ create table if not exists suggestions (
   subject            text,
   language           text,            -- detected: no | sv | en | da | fi | other
   ticket_type        text,            -- question | howto | bug | unclear
+  detected_intent    text,            -- short snake_case intent, e.g. grant_admin_access
   keywords           jsonb,           -- topic tags for traceability (internal only, §3)
+
+  -- how the AI reasoned over the FULL ticket (QA rework, CLAUDE.md §12).
+  answer_strategy    text,            -- DIRECT_ANSWER | REPEAT_CLARIFYING_QUESTION | …
+  confidence_reason  text,            -- one-line justification for the confidence level
+  agent_next_action  text,            -- what the agent should do next (internal)
+  requires_manual_system_check boolean default false, -- AI has no system access; agent must verify
+  security_sensitive boolean default false,           -- roles / access / permissions ticket
+  facts              jsonb,           -- source-tagged facts { from_customer, from_agent, … }
+  unknowns           jsonb,           -- what the text did NOT establish (to-confirm list)
 
   -- what it produced
   confidence         text   not null, -- high | low | none

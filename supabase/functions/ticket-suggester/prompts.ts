@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22b";
+export const PROMPT_VERSION = "g1-2026-07-22c";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -15,6 +15,16 @@ export interface SourceDoc {
   url?: string; // agent-facing link, filled where the Freshdesk domain is known
 }
 
+export const ANSWER_STRATEGIES = [
+  "DIRECT_ANSWER",
+  "REPEAT_CLARIFYING_QUESTION",
+  "REQUEST_MISSING_INFORMATION",
+  "RECOMMEND_AGENT_VERIFICATION",
+  "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS",
+  "ESCALATE",
+  "ABSTAIN",
+] as const;
+
 function renderSources(sources: SourceDoc[]): string {
   if (!sources.length) return "(no sources were found)";
   return sources
@@ -22,157 +32,191 @@ function renderSources(sources: SourceDoc[]): string {
     .join("\n\n");
 }
 
+// Shared across all three calls: the AI has NO system access, and must reason
+// over the WHOLE ticket, attributing every fact to who stated it.
+const GROUND_RULES = [
+  "IMPORTANT — you have NO direct access to the customer's system, user register,",
+  "roles, permissions, or environment. You cannot look anything up. You may ONLY use:",
+  "  • the ticket text (customer messages, agent replies, internal notes, system messages),",
+  "  • the ticket metadata,",
+  "  • and the approved SOURCES (knowledge base) provided.",
+  "Never present information from the ticket as something you have seen or verified yourself.",
+  "Read the conversation CHRONOLOGICALLY — later concrete information can change what needs",
+  "to be answered. An automatic / out-of-office reply is NOT a real customer answer.",
+].join("\n");
+
 // ── 1. ANALYSE ────────────────────────────────────────────────────────────────
-// Read the customer's message. Detect the language, classify the ticket, pull
-// out the concrete questions + topic keywords, and propose the search queries.
-// This call does NOT answer the ticket.
-export function analysePrompt(subject: string, customerText: string) {
+// Read the WHOLE ticket. Detect language, classify, extract questions + English
+// keywords + search queries, source-tag the facts, and flag any unanswered agent
+// clarifying question. This call does NOT answer the ticket.
+export function analysePrompt(subject: string, context: string) {
   const system = [
     "You triage inbound support tickets for Simployer, a Nordic HR-tech company",
     "(payroll, HR administration, compensation). You do NOT answer the ticket yet.",
+    "",
+    GROUND_RULES,
     "",
     "Return ONLY a JSON object with exactly this shape:",
     "{",
     '  "language": "no | sv | en | da | fi | other",',
     '  "ticket_type": "question | howto | bug | unclear",',
-    '  "keywords": ["3-6 short topic tags for this case (product area, feature, concept)"],',
+    '  "detected_intent": "short snake_case intent, e.g. grant_admin_access",',
+    '  "keywords": ["3-6 short topic tags, ALWAYS IN ENGLISH (translate), lowercase, one concept each"],',
     '  "questions_asked": ["each distinct question the customer needs answered"],',
-    '  "search_queries": ["2-4 short keyword queries to find answers in a help centre"]',
+    '  "search_queries": ["2-4 short keyword queries IN THE TICKET LANGUAGE for the help centre"],',
+    '  "security_sensitive": true,',
+    '  "facts_from_customer": ["what the customer stated"],',
+    '  "facts_from_agent": ["what an agent stated in a reply"],',
+    '  "facts_from_internal_notes": ["what an internal note stated"],',
+    '  "system_messages": ["relevant automated/system messages"],',
+    '  "unknowns": ["things needed for a safe answer that are not established in the text"],',
+    '  "unanswered_agent_question": "a clarifying/identity question an agent asked that the customer has NOT genuinely answered; else empty string",',
+    '  "latest_customer_is_auto_reply": false',
     "}",
     "",
     "Rules:",
-    "- Detect the language from the customer's own words, not the subject alone.",
-    '- ticket_type: "bug" if they report something not working or an error; "howto" for',
-    '  how-do-I questions; "unclear" if you cannot tell what they actually need; else "question".',
-    "- keywords are short, lowercase topic tags for traceability — not full sentences.",
-    "- Search queries are short and keyword-like (what you'd type into a search box),",
-    "  written in the SAME language as the ticket.",
+    "- Detect language from the customer's own words. keywords are ENGLISH regardless of language.",
+    '- ticket_type: "bug" for something not working; "howto" for how-do-I; "unclear" if you',
+    '  cannot tell what they need; else "question".',
+    "- security_sensitive = true when the ticket concerns roles, admin/access rights, or permissions.",
+    "- Source-tag facts by WHO stated them; do not merge them or treat them as your own findings.",
+    "- unanswered_agent_question: if an agent already asked e.g. \"is this the right person?\" and the",
+    "  customer only sent an auto-reply or nothing, keep that question here — it is still open.",
     "- Do not invent questions the customer did not ask.",
   ].join("\n");
 
-  const user = `Subject: ${subject}\n\nCustomer message:\n${customerText}`;
+  const user = `Subject: ${subject}\n\nFULL TICKET CONTEXT (chronological):\n${context}`;
   return { system, user };
 }
 
 // ── 2. DRAFT ──────────────────────────────────────────────────────────────────
-// Write the reply, grounded ONLY in the retrieved sources. If the sources don't
-// cover the question, say so and set confidence "none" — that is a correct and
-// useful outcome, not a failure (CLAUDE.md §10). Also: propose follow-up
-// questions when the request is unclear, and reproduction / customer steps for bugs.
+// Choose a response strategy and draft the suggestion. Grounded in the ticket
+// text + SOURCES, never in imagined system access. An open agent clarifying
+// question takes priority over generic KB instructions (CLAUDE.md QA rules).
 export function draftPrompt(input: {
   subject: string;
   language: string;
-  ticketType: string;
-  questions: string[];
-  customerText: string;
+  context: string;
+  analysisJson: string;
   sources: SourceDoc[];
 }) {
   const system = [
-    "You are a senior Simployer support agent drafting a reply for a colleague to review.",
-    "The reply is a SUGGESTION posted as a private note. It is NEVER sent automatically.",
+    "You are a senior Simployer support agent drafting a SUGGESTION for a colleague to",
+    "review. It is posted as a private note and is NEVER sent automatically.",
     "",
-    "Absolute rules:",
-    "- Use ONLY facts contained in the SOURCES below. Do not use outside knowledge.",
-    "- If the sources do not answer the customer's questions, DO NOT guess. Set",
-    '  confidence to "none" and return an empty reply.',
+    GROUND_RULES,
+    "",
+    "Never write things like \"I see in the system…\", \"I have checked…\", \"the access is",
+    "already in place\", or \"the user exists\". If a fact comes from the ticket text, attribute",
+    "it: \"According to the earlier note in the ticket…\", \"It appears, based on the previous",
+    "agent's note, that…\" — and say it still needs to be confirmed.",
+    "",
+    "Pick ONE answer_strategy:",
+    "- DIRECT_ANSWER: sources + context fully answer the question as asked.",
+    "- REPEAT_CLARIFYING_QUESTION: an agent already asked something still unanswered — repeat/keep it.",
+    "- REQUEST_MISSING_INFORMATION: you need a specific detail (e.g. an email/identifier) to proceed.",
+    "- RECOMMEND_AGENT_VERIFICATION: the answer depends on the customer's account/roles — the agent",
+    "  must check manually; you cannot.",
+    "- PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS: a general how-to the KB covers, with no open identity/role question.",
+    "- ESCALATE: outside what the ticket + KB can resolve.",
+    "- ABSTAIN: nothing grounded to say.",
+    "",
+    "Decision rules:",
+    "- If there is an unanswered agent clarifying/identity question, do NOT fall back to generic",
+    "  instructions. Choose REPEAT_CLARIFYING_QUESTION or REQUEST_MISSING_INFORMATION and make the",
+    "  reply ask/repeat it.",
+    "- For roles/permissions/access: never decide who holds a role. If identity/role is unresolved,",
+    "  ask for a unique identifier (email) or RECOMMEND_AGENT_VERIFICATION; set requires_manual_system_check=true.",
+    "- Every recommendation must trace to a customer question, a prior message, an internal note,",
+    "  ticket metadata, or a SOURCE. Do NOT introduce problems the customer never reported",
+    "  (e.g. login/edit-button troubleshooting they did not mention).",
+    "- LOW confidence must change behaviour: do NOT give unconfirmed step-by-step instructions.",
+    "  Ask a clarifying question, request missing info, or recommend manual verification instead.",
     `- Write the reply in the customer's language (${input.language}).`,
-    "- Be concise and specific. No filler, no greetings-only padding.",
     "",
-    "Confidence levels. Our KB is GENERAL/how-to by design — that is expected, and a",
-    "generic article that fully answers a general question is still a HIGH-quality answer.",
-    "Judge confidence by how well the sources answer the QUESTION AS ASKED, not by whether",
-    "the article is generic:",
-    '- "high": the sources clearly and fully answer the question as asked. A general',
-    "           how-to that the KB covers well IS \"high\" — do NOT lower it just because the",
-    "           article is generic or you lack the customer's account details.",
-    '- "low":  the sources are relevant but only partial/indirect, OR the request is',
-    "           genuinely account-specific (needs data not in any KB) and you can only give",
-    "           general guidance.",
-    '- "none": the sources are off-topic or absent.',
-    "",
-    'Prefer a "low" DRAFT over "none" whenever the sources are relevant — a grounded answer',
-    'is a useful starting point. Use "none" only when nothing is grounded. (Verify still',
-    "strips anything the sources do not support, so a good-faith draft is safe.)",
+    "Confidence = how confident you are that the SUGGESTED ACTION (strategy + reply) is the right",
+    "next step for this ticket — not whether you have a complete factual answer.",
+    "Our KB is general/how-to by design; a generic article that fully answers a general question is",
+    "still HIGH. Repeating a clear, open clarifying question is also a HIGH-confidence action.",
+    '- "high": the right next step is clear and well grounded (a fully-answered direct answer, OR a',
+    "           clearly-warranted clarifying question / verification recommendation).",
+    '- "low":  the context/sources only partly determine the step; the agent should double-check.',
+    '- "none": nothing grounded to suggest.',
     "",
     "Return ONLY a JSON object with exactly this shape:",
     "{",
+    `  "answer_strategy": "${ANSWER_STRATEGIES.join(" | ")}",`,
     '  "confidence": "high | low | none",',
-    '  "reply": "the drafted reply text, or an empty string if confidence is none",',
-    '  "claims": ["each factual statement you made, one per item"],',
-    '  "rationale": "1-2 sentences: why this reply is right for what THIS customer wrote",',
-    '  "coverage": [',
-    '    { "question": "one of the customer\'s questions", "answered": true }',
-    "  ],",
-    '  "follow_up_questions": ["question(s) to ask the customer when the request is unclear; else []"],',
-    '  "bug_guidance": {',
-    '    "repro_steps": ["steps for the AGENT to reproduce/verify the reported problem; else []"],',
-    '    "customer_steps": ["safe step-by-step for the CUSTOMER to try; else []"]',
-    "  }",
+    '  "confidence_reason": "one short sentence",',
+    '  "reply": "the suggested customer reply, or empty string if strategy is ABSTAIN/none",',
+    '  "agent_next_action": "what the agent should do next (internal; may reference a manual check)",',
+    '  "requires_manual_system_check": true,',
+    '  "claims": ["each factual statement in the reply, one per item"],',
+    '  "rationale": "1-2 sentences: why this fits THIS ticket, noting where each fact comes from",',
+    '  "coverage": [ { "question": "one of the customer\'s questions", "answered": true } ],',
+    '  "follow_up_questions": ["clarifying question(s) to ask; else []"],',
+    '  "bug_guidance": { "repro_steps": ["for the agent; else []"], "customer_steps": ["safe steps; else []"] }',
     "}",
     "",
-    "For rationale: connect the customer's own words to the answer and the sources —",
-    "e.g. \"The customer asks X; source [1] states Y, so the reply tells them Z.\" It is",
-    "shown to the agent to justify the draft. Leave it empty when confidence is none.",
-    "",
-    "For coverage: list EVERY question the customer asked and set answered=true only",
-    "if your reply answers it FROM THE SOURCES. This is the Q/A score shown to the agent.",
-    "",
-    'Follow-up questions: if ticket_type is "unclear", or you lack details needed to answer,',
-    "give 2-4 specific, relevant questions to ask the customer. Otherwise use [].",
-    "",
-    'Bug guidance: if ticket_type is "bug", fill bug_guidance. repro_steps help the agent',
-    "confirm the issue; customer_steps are safe, standard troubleshooting for the customer.",
-    "Prefer steps grounded in the sources; keep any general steps conservative. Otherwise",
-    "leave both arrays empty. Never invent product behaviour that is not in the sources.",
+    "coverage: list EVERY customer question; answered=true only if the reply actually resolves it",
+    "from the sources/context (a clarifying question does not count as answering).",
   ].join("\n");
 
   const user = [
     `Subject: ${input.subject}`,
-    `Ticket type: ${input.ticketType}`,
-    `Questions: ${input.questions.join(" | ") || "(none extracted)"}`,
     "",
-    "CUSTOMER MESSAGE:",
-    input.customerText,
+    "ANALYSIS (source-tagged facts, unknowns, open agent question):",
+    input.analysisJson,
     "",
-    "SOURCES:",
+    "FULL TICKET CONTEXT (chronological):",
+    input.context,
+    "",
+    "SOURCES (knowledge base):",
     renderSources(input.sources),
     "",
-    "Draft the reply now.",
+    "Choose the strategy and draft the suggestion now.",
   ].join("\n");
 
   return { system, user };
 }
 
 // ── 3. VERIFY ─────────────────────────────────────────────────────────────────
-// Check the draft against the sources. This step can only LOWER confidence,
-// never raise it, and it never rewrites the reply itself (CLAUDE.md §12).
-// It returns each statement quoted verbatim so the caller can locate/strip it.
-export function verifyPrompt(input: { reply: string; sources: SourceDoc[] }) {
+// Check the draft against BOTH the sources and the ticket text. It can only
+// LOWER confidence, never rewrites the reply (CLAUDE.md §12). It also catches
+// false claims of system access (forbidden) and marks them contradicted.
+export function verifyPrompt(input: { reply: string; sources: SourceDoc[]; context: string }) {
   const system = [
-    "You are a strict fact-checker. You are given a drafted support reply and the",
-    "SOURCES it was supposed to be based on. Check every factual statement in the reply.",
+    "You are a strict fact-checker for a support reply. You are given the drafted REPLY, the",
+    "approved SOURCES, and the full TICKET CONTEXT. Check every factual statement in the reply.",
     "",
     "For each statement, quote it VERBATIM from the reply and classify it:",
-    '- "supported":    the sources directly back this statement.',
-    '- "unsupported":  the sources neither back nor contradict it (it is simply not there).',
-    '- "contradicted": the sources say something different.',
+    '- "supported":    backed by a SOURCE, or by the TICKET text AND correctly attributed',
+    '                  (e.g. "according to the earlier note…") — not stated as the AI\'s own finding.',
+    '- "unsupported":  not found in the sources or the ticket text.',
+    '- "contradicted": conflicts with a source/the ticket, OR presents ticket information as the',
+    "                  AI's OWN system check/verification (the AI has no system access — forbidden).",
     "",
-    "Be conservative: if a statement is not clearly present in the sources, it is unsupported.",
+    "Be conservative: if a statement is not clearly grounded, it is unsupported.",
     "",
     "Return ONLY a JSON object with exactly this shape:",
     "{",
     '  "claims": [',
-    '    {',
-    '      "quote": "verbatim text copied from the reply",',
-    '      "status": "supported | unsupported | contradicted",',
-    '      "reason": "one short sentence"',
-    "    }",
+    '    { "quote": "verbatim text copied from the reply", "status": "supported | unsupported | contradicted", "reason": "one short sentence" }',
     "  ]",
     "}",
     "",
     "Each quote MUST appear character-for-character in the reply so it can be located.",
   ].join("\n");
 
-  const user = ["REPLY:", input.reply, "", "SOURCES:", renderSources(input.sources)].join("\n");
+  const user = [
+    "REPLY:",
+    input.reply,
+    "",
+    "SOURCES:",
+    renderSources(input.sources),
+    "",
+    "TICKET CONTEXT:",
+    input.context,
+  ].join("\n");
   return { system, user };
 }

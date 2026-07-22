@@ -1,12 +1,15 @@
 // Unit tests for the pure functions (CLAUDE.md §8). Run: `deno task test`.
 import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
 import {
+  buildContext,
   classifyUsage,
+  containsFalseSystemAccess,
   deriveTags,
   esc,
   extractJSON,
   lastAgentReply,
   latestCustomerMessage,
+  looksLikeAutoReply,
   lower,
   renderNote,
   similarity,
@@ -217,4 +220,134 @@ Deno.test("renderNote: bug ticket shows repro and customer steps", () => {
   assertStringIncludes(html, "Click export");
   assertStringIncludes(html, "Steps for the customer:");
   assertStringIncludes(html, "Clear cache");
+});
+
+// ── Full-context QA rework (CLAUDE.md §12) ──────────────────────────────────────
+// The root-cause fix: feed the WHOLE chronological ticket (customer + agent +
+// internal notes + system messages) to the model, source-labelled, so a prior
+// agent's note reaches the AI. These tests cover buildContext + the deterministic
+// guards + the note fields, mapping to the QA spec's test cases A–H.
+
+// Case A — buildContext includes the agent's internal note (the Didrik bug):
+// the note about the already-registered admin MUST reach the model.
+Deno.test("buildContext: includes internal notes and agent replies, labelled", () => {
+  const t = {
+    id: 100,
+    subject: "Ny administratör",
+    status: 2,
+    description_text: "Jag vill lägga till en administratör.",
+    conversations: [
+      {
+        id: 1,
+        body_text: "Vem ska registreras som administratör?",
+        incoming: false,
+        private: false,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: 2,
+        body_text: "Det verkar som att Didrik Salte redan är registrerad som administratör.",
+        incoming: false,
+        private: true,
+        created_at: "2026-01-02T00:00:00Z",
+      },
+    ],
+  } as unknown as Ticket;
+  const ctx = buildContext(t);
+  assertStringIncludes(ctx, "[initial] CUSTOMER:");
+  assertStringIncludes(ctx, "Jag vill lägga till en administratör.");
+  assertStringIncludes(ctx, "AGENT REPLY");
+  assertStringIncludes(ctx, "Vem ska registreras");
+  assertStringIncludes(ctx, "INTERNAL NOTE");
+  assertStringIncludes(ctx, "Didrik Salte redan är registrerad");
+});
+
+// Case F/H — an auto/OOO reply must be flagged in-context and never counted as
+// the customer answering the agent's control question.
+Deno.test("buildContext: flags an automatic out-of-office customer reply", () => {
+  const t = {
+    id: 101,
+    subject: "Re: kontrollfråga",
+    status: 2,
+    description_text: "Fråga.",
+    conversations: [
+      {
+        id: 1,
+        body_text: "Jag är på semester och läser inte min mail. Autosvar.",
+        incoming: true,
+        private: false,
+        created_at: "2026-01-03T00:00:00Z",
+      },
+    ],
+  } as unknown as Ticket;
+  const ctx = buildContext(t);
+  assertStringIncludes(ctx, "AUTOMATIC / out-of-office");
+});
+
+Deno.test("looksLikeAutoReply: detects SV/NO/EN absence replies, not normal text", () => {
+  assertEquals(looksLikeAutoReply("Jag är på semester just nu, autosvar."), true);
+  assertEquals(looksLikeAutoReply("Out of office until Monday"), true);
+  assertEquals(looksLikeAutoReply("Jeg er på ferie og svarer ikke."), true);
+  assertEquals(looksLikeAutoReply("Hei, jeg trenger hjelp med tilgang."), false);
+  assertEquals(looksLikeAutoReply(""), false);
+});
+
+// Case E — the AI has no system access. First-person "I checked / I can see in
+// the system" phrasings must be caught even if they slip past the prompt.
+Deno.test("containsFalseSystemAccess: catches first-person system-access claims", () => {
+  assertEquals(containsFalseSystemAccess("Jag har kontrollerat och rollen finns."), true);
+  assertEquals(containsFalseSystemAccess("Jeg ser i systemet at brukeren er administrator."), true);
+  assertEquals(containsFalseSystemAccess("I have verified the account exists."), true);
+  // Correct, attributed phrasing must NOT trip the guard.
+  assertEquals(
+    containsFalseSystemAccess(
+      "Det framgår av den tidigare agentens anteckning att Didrik Salte redan verkar vara registrerad.",
+    ),
+    false,
+  );
+});
+
+// Case B/D — security-sensitive / manual-check tickets get an explicit "the AI
+// cannot see the system, verify manually" disclaimer and the chosen strategy.
+Deno.test("renderNote: security-sensitive note shows manual-verify disclaimer and strategy", () => {
+  const html = renderNote({
+    confidence: "high",
+    confidenceReason: "An agent already asked who should be admin and it is unanswered.",
+    draft: "Kan du bekräfta vilken person som ska ha administratörsbehörighet?",
+    answerStrategy: "REPEAT_CLARIFYING_QUESTION",
+    agentNextAction: "Confirm the admin's identity before granting access.",
+    unknowns: ["Which person should hold the admin role"],
+    requiresManualCheck: true,
+    securitySensitive: true,
+    promptVersion: "test",
+    searchQueries: ["administrator access"],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+  });
+  assertStringIncludes(html, "Suggested approach:");
+  assertStringIncludes(html, "Repeat the open clarifying question");
+  assertStringIncludes(html, "Verify manually");
+  assertStringIncludes(html, "cannot see the customer's account");
+  assertStringIncludes(html, "Next action for you:");
+  assertStringIncludes(html, "Not established from the ticket");
+  assertStringIncludes(html, "Which person should hold the admin role");
+});
+
+// Case C — a straightforward how-to answer needs no manual-verify banner.
+Deno.test("renderNote: non-sensitive direct answer omits the manual-verify banner", () => {
+  const html = renderNote({
+    confidence: "high",
+    draft: "You can export the report from the Reports menu.",
+    answerStrategy: "DIRECT_ANSWER",
+    requiresManualCheck: false,
+    securitySensitive: false,
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 1,
+    qaTotal: 1,
+  });
+  assertStringIncludes(html, "Direct answer");
+  assertEquals(html.includes("Verify manually"), false);
 });
