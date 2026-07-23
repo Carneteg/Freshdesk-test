@@ -21,7 +21,10 @@ import { loadIncidents, reconcileUsage, runPipeline, toRow } from "./pipeline.ts
 interface Config {
   domain: string;
   apiKey: string;
-  myAgentId: string;
+  // The monitored agents (CLAUDE.md §12, 2026-07-23): MY_AGENT_ID is a comma-
+  // separated list of numeric agent ids. Only these agents' tickets are ever
+  // touched. Gate 1 started single-agent (§9); this widens it to a small, named set.
+  myAgentIds: number[];
   expectedName: string;
   openaiKey: string;
   model: string;
@@ -56,6 +59,13 @@ function envList(name: string): string[] {
   return (Deno.env.get(name) ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 }
 
+// Comma-separated env list of positive integers (e.g. MY_AGENT_ID="123,456").
+function numList(name: string): number[] {
+  return (Deno.env.get(name) ?? "").split(",")
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n) && n > 0);
+}
+
 function env(name: string): string {
   const v = Deno.env.get(name) ?? "";
   if (!v) throw new Error(`missing required env var: ${name}`);
@@ -66,7 +76,7 @@ function loadConfig(): Config {
   return {
     domain: env("FRESHDESK_DOMAIN"),
     apiKey: env("FRESHDESK_API_KEY"),
-    myAgentId: env("MY_AGENT_ID"),
+    myAgentIds: numList("MY_AGENT_ID"),
     expectedName: Deno.env.get("EXPECTED_AGENT_NAME") ?? "Tobias Carneteg",
     openaiKey: env("OPENAI_API_KEY"),
     model: Deno.env.get("OPENAI_MODEL") ?? "gpt-4o",
@@ -108,28 +118,37 @@ async function pollOnce(cfg: Config): Promise<Summary> {
   const db = createClient(cfg.supabaseUrl, cfg.serviceKey);
 
   // Roles are decoupled (CLAUDE.md §12): the API key is a SERVICE account that
-  // POSTS the notes; MY_AGENT_ID is the monitored agent whose tickets we watch.
+  // POSTS the notes; MY_AGENT_ID lists the monitored agents whose tickets we watch.
   // Safety ("never touch a colleague's ticket") is preserved by the poll filter +
-  // responder_id re-check below, which only ever act on MY_AGENT_ID's tickets.
+  // responder_id re-check below, which only ever act on tickets whose responder is
+  // one of the monitored agents.
   const service = await fd.me(); // throws on a bad key -> fail fast
   console.log(`posting as service account ${service.id} (${service.contact?.name})`);
   if (cfg.dryRun) {
     console.log("DRY_RUN is on — running the full pipeline and logging suggestions, but posting NO notes/tags to Freshdesk. Set DRY_RUN=false to enable posting.");
   }
 
-  if (!Number.isFinite(Number(cfg.myAgentId))) {
-    throw new Error("refusing to run: MY_AGENT_ID is not set to a numeric agent id");
+  if (!cfg.myAgentIds.length) {
+    throw new Error("refusing to run: MY_AGENT_ID must be one or more numeric agent ids (comma-separated)");
   }
-  // Best-effort: confirm the monitored agent resolves to the expected person.
-  // Needs admin-scoped API access; a failure only warns (the id filter still holds).
-  try {
-    const monitored = await fd.getAgent(Number(cfg.myAgentId));
-    if (cfg.expectedName && !nameMatches(monitored.contact?.name, cfg.expectedName)) {
-      console.warn(`monitored-agent name check: expected ~"${cfg.expectedName}", got "${monitored.contact?.name}"`);
+  // Best-effort: log each monitored agent's name (so the logs show exactly who is
+  // watched), and warn if none matches EXPECTED_AGENT_NAME. Needs admin-scoped API;
+  // a failure only warns — the id filter still holds.
+  let anyExpected = false;
+  for (const id of cfg.myAgentIds) {
+    try {
+      const monitored = await fd.getAgent(id);
+      const name = monitored.contact?.name ?? "(unknown)";
+      console.log(`monitoring agent ${id} (${name})`);
+      if (cfg.expectedName && nameMatches(name, cfg.expectedName)) anyExpected = true;
+    } catch (e) {
+      console.warn(`could not verify monitored agent ${id} (needs admin API): ${e instanceof Error ? e.message : e}`);
     }
-  } catch (e) {
-    console.warn(`could not verify monitored agent ${cfg.myAgentId} (needs admin API): ${e instanceof Error ? e.message : e}`);
   }
+  if (cfg.expectedName && !anyExpected) {
+    console.warn(`monitored-agent name check: none matched EXPECTED_AGENT_NAME ~"${cfg.expectedName}"`);
+  }
+  const monitoredIds = new Set(cfg.myAgentIds);
 
   // Team-curated known-incidents playbook, loaded once per run (knowledge layer).
   const incidents = await loadIncidents(db);
@@ -139,7 +158,7 @@ async function pollOnce(cfg: Config): Promise<Summary> {
   // Only the monitored agent's tickets, and never auto-generated call-log/receipt
   // tickets (they carry no question — user decision 2026-07-22).
   const mine = updated
-    .filter((t) => t.responder_id === Number(cfg.myAgentId))
+    .filter((t) => monitoredIds.has(t.responder_id))
     .filter((t) => !isIgnorableTicket(t.subject, cfg.excludeSubjects));
   const summary: Summary = {
     dry_run: cfg.dryRun,
@@ -156,6 +175,15 @@ async function pollOnce(cfg: Config): Promise<Summary> {
     const tStart = Date.now();
     try {
       const ticket = await fd.ticketWithConversations(t.id);
+
+      // Second independent filter (CLAUDE.md §2): re-check the RELOADED ticket's
+      // responder before doing anything. Never act on a ticket that isn't a
+      // monitored agent's, even if the poll list was momentarily stale/reassigned.
+      if (!monitoredIds.has(ticket.responder_id ?? -1)) {
+        summary.skipped++;
+        continue;
+      }
+
       const { triggerId } = latestCustomerMessage(ticket);
 
       // Dedup on (ticket_id, trigger_message_id): a new customer reply re-triggers.
