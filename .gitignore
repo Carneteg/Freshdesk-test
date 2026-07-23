@@ -2,6 +2,9 @@
 .deno/
 deno.lock
 
+# Node tooling (tools/ document generators)
+node_modules/
+
 # Env / secrets — never commit
 .env
 .env.*

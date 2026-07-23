@@ -385,3 +385,26 @@ grounding via `verdict`. The real growth lever (weighting known incidents /
 similar concurrent tickets over generic KB) needs ticket-content retrieval, which
 Freshdesk's search does not allow (free-text → 400) — a Gate 2 problem, or an
 interim curated incident/routing list fed into the prompt.
+
+---
+
+## 13. Repeatable workflows — Claude skills & `tools/`
+
+Recurring workflows are packaged as **project skills** under `.claude/skills/`
+(each a folder with a `SKILL.md`). Reach for these instead of redoing the steps
+by hand:
+
+| Skill | Use it when |
+|---|---|
+| `gate1-scorecard` | Reporting the "would I have sent this?" usable-% and calibration (uses the evaluation views; never invent numbers). |
+| `incident-playbook` | Adding or verifying/tightening a `known_incidents` row — the playbook outranks generic KB, so precision matters. |
+| `sync-past-tickets` | Running `deno task sync-tickets` and reporting how fresh the `past_tickets` index is (it does not auto-update). |
+| `shareable-docs` | Generating a Word / PowerPoint / HTML one-pager or deck from the status or roadmap. |
+
+**Document generators live in `tools/`** (see `tools/README.md`). They are the only
+Node code in the repo (the product is Deno); `docx`/`pptxgenjs` are Node-only, so
+they are isolated there and never imported by the pipeline. Design:
+**data vs presentation** — the content is data in `tools/content/*.js`, the renderer
+is `tools/render.js` (`renderDocx` / `renderPptx` / `renderHtml`). One spec renders
+to all three formats; the HTML is Artifact-friendly. Add a document by adding a
+content file, never by copying the renderer.
