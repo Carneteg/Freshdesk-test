@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-22u";
+export const PROMPT_VERSION = "g1-2026-07-23a";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -96,7 +96,13 @@ const ORG_CONTEXT = [
   "    (2nd-line, developers, or product) — and say which and why. Never a vague \"technical team\".",
   "  • ROUTE a commercial / sales / pricing / offer request to a consultant or the sales team.",
   "  • ROUTE a legal / employment-law question to Simployer's Expert advisors — do NOT give legal",
-  "    guidance yourself, and do NOT suggest an external advisor.",
+  "    guidance yourself, and do NOT suggest an external advisor. \"Legal\" means the INTERPRETATION of",
+  "    rights & obligations, pay / holiday / sick-pay entitlement, termination or employment terms, or a",
+  "    law / collective agreement / practice. It does NOT mean a PRODUCT question that merely happens to",
+  "    involve a contract or agreement: \"can the system do X?\", how a feature works, a signing or",
+  "    contract FLOW in the product, technical limits, or avtalemodul configuration are PRODUCT questions",
+  "    you answer or investigate yourself. Never route to Expert just because a ticket mentions a",
+  "    contract, agreement or signature — route only genuine legal-interpretation questions.",
   "  • ASK a clarifying question when the request is genuinely unclear.",
   "Prefer solving. Never use empty reassurance (\"we appreciate your patience\", \"we'll look into it\")",
   "as a substitute for a real answer or a concrete next step.",
@@ -240,6 +246,16 @@ export function draftPrompt(input: {
     "- If the context notes ATTACHMENTS, you cannot read them. Do NOT ask the customer to send a",
     "  screenshot/file they already attached — say you cannot access the attachment yourself and ask",
     "  the agent to open it.",
+    "- ERROR MESSAGE first: if the ticket contains a concrete error message (or a screenshot of one),",
+    "  the diagnosis must start from the ERROR TEXT. Do NOT jump to a profile/role/configuration setting",
+    "  the error does not point to — even if a playbook incident about that setting seems to match. An",
+    "  actual error on the ticket OUTRANKS a symptom-matched incident: read the error (or ask the agent",
+    "  to open the screenshot) and base the next step on what it says, not on the setting you'd guess.",
+    "- LEGAL vs PRODUCT: route to Expert only for genuine legal / employment-law INTERPRETATION. A",
+    "  question about what the PRODUCT can do — a feature, a signing or contract FLOW, a technical limit,",
+    "  avtalemodul configuration — is a product question you answer or investigate, NOT a legal referral,",
+    "  even when it mentions a contract, agreement or signature. When unsure which it is, ASK rather than",
+    "  route to Expert by default.",
     "- DO NOT propose roles, permissions, access levels, or system settings as the cause OR the",
     "  solution unless there is EXPLICIT support in the ticket text or a SOURCE whose content actually",
     "  addresses it. \"This could be a permissions issue\" / \"verify the customer's role\" is a HYPOTHESIS,",
