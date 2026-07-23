@@ -439,6 +439,24 @@ gating are entirely client-side + RLS.
   ideal answer. View `training_examples` is the exportable corpus. **Honest scope:**
   this BUILDS the "what good looks like" corpus; feeding it back into generation is
   the Gate 2 learning loop (§12) — nothing here fine-tunes a model yet.
+- The review UI carries a **"How to train the AI" guide** (verdict meaning; how to write
+  an ideal answer — real resolution + the operational knowledge the KB lacks + correct
+  routing; where to spend time). The page is `web/review.html`, a self-contained
+  local-file / static-host page (Supabase serves HTML as text/plain, so it is NOT hosted
+  there): raw `fetch` + email/password Supabase Auth, RLS-gated, anon key only. Published
+  to a `gh-pages` branch (app file only, no repo code) for a shareable link.
+
+**Learning loop v1 — gold answers -> prompt (Gate 2 start, 2026-07-23).** Per Tobias the
+near-term Gate 2 focus is **the AI + learning**, NOT the Planhat/Confluence/Slack/Jira
+integrations (those stay deferred). The cheapest loop: feed the reviewer-written
+`gold_answer` corpus from OTHER tickets into the **draft** prompt as **style/approach
+exemplars** (`GoldExemplar` in `prompts.ts`; `loadGoldExemplars` + `withLearning` in
+`pipeline.ts`). Guardrails: the current ticket's own gold answer is excluded (no leakage),
+and the prompt says LEARN the style/operational approach but do NOT copy their facts unless
+this ticket's own sources establish them (grounding still wins). **Opt-in** via
+`LEARNING_LOOP=true` in `replay.ts`; a learning run is stored under a **`+gold`
+prompt_version** so `gate1_scorecard` compares it head-to-head against the base run on the
+SAME tickets. Not fine-tuning — retrieval-style few-shot. Measure the lift before doing more.
 
 ---
 

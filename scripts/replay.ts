@@ -19,6 +19,7 @@ import {
   similarity,
 } from "../supabase/functions/ticket-suggester/render.ts";
 import {
+  loadGoldExemplars,
   loadIncidents,
   qaScoreDraft,
   runPipeline,
@@ -150,6 +151,19 @@ if (dropped) {
 // Known-incidents playbook (knowledge layer) — only when Supabase is configured.
 const incidents = db ? await loadIncidents(db) : [];
 if (incidents.length) console.log(`(playbook: ${incidents.length} known incident(s) loaded)`);
+
+// Learning loop (§12): feed reviewer-written ideal answers back into the draft as
+// style/approach exemplars. Opt-in with LEARNING_LOOP=true; stored under a
+// "+gold" prompt_version so gate1_scorecard compares it against the base run.
+const withLearning = (Deno.env.get("LEARNING_LOOP") ?? "false") === "true";
+const goldExemplars = (db && withLearning) ? await loadGoldExemplars(db) : [];
+if (withLearning) {
+  console.log(
+    goldExemplars.length
+      ? `(learning loop ON: ${goldExemplars.length} gold answer(s) fed in as exemplars → prompt_version "+gold")`
+      : `(learning loop ON, but no gold answers written yet — write some in the review app first)`,
+  );
+}
 console.log("");
 
 for (const t of kept) {
@@ -166,6 +180,7 @@ for (const t of kept) {
         db: db ?? undefined,
         // No leakage: exclude past tickets resolved at/after the graded turn's time.
         retrievalBefore: turn.targetAt ?? undefined,
+        withLearning, goldExemplars,
       },
       turn.view,
     );
