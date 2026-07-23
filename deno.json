@@ -6,6 +6,7 @@
     "replay": "deno run --env-file=.env --allow-env --allow-net scripts/replay.ts",
     "suggest": "deno run --env-file=.env --allow-env --allow-net scripts/suggest_once.ts",
     "sync-tickets": "deno run --env-file=.env --allow-env --allow-net scripts/sync_tickets.ts",
+    "upload-ui": "deno run --env-file=.env --allow-env --allow-net --allow-read scripts/upload_review_ui.ts",
     "serve": "deno run --env-file=.env --allow-env --allow-net supabase/functions/ticket-suggester/index.ts"
   },
   "imports": {
