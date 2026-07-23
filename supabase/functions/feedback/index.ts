@@ -25,10 +25,10 @@ function page(title: string, heading: string, body: string, status = 200): Respo
     `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:32rem;` +
     `margin:4rem auto;padding:0 1rem;text-align:center;color:#1a1a1a">` +
     `<h2 style="margin-bottom:.5rem">${heading}</h2>${body}</div></body></html>`;
-  return new Response(html, {
-    status,
-    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
-  });
+  const headers = new Headers();
+  headers.set("Content-Type", "text/html; charset=utf-8");
+  headers.set("Cache-Control", "no-store");
+  return new Response(html, { status, headers });
 }
 
 Deno.serve(async (req: Request) => {

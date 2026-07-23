@@ -468,6 +468,28 @@ Deno.test("renderNote: reply and resolution steps are separate sections", () => 
 
 // At confidence none there is no send-ready reply, but the resolution track and
 // analysis still carry substance — never a hollow note.
+Deno.test("renderNote: suppresses sources when asking for clarification, keeps them when answering", () => {
+  const src = [{ ref: "kb:1", kind: "kb" as const, id: 1, title: "How to contact support", text: "…", url: "u" }];
+  const base = {
+    confidence: "high" as const,
+    draft: "Kan du gi flere detaljer?",
+    promptVersion: "test",
+    searchQueries: ["contact support", "provide email"],
+    sources: src,
+    qaAnswered: 0,
+    qaTotal: 1,
+  };
+  // Asking for missing info → sources are keyword noise, hide them.
+  const clarifying = renderNote({ ...base, answerStrategy: "REQUEST_MISSING_INFORMATION" });
+  assertEquals(clarifying.includes("Sources:"), false);
+  assertEquals(clarifying.includes("Searched for:"), false);
+
+  // Actually answering from the KB → sources shown as usual.
+  const answering = renderNote({ ...base, answerStrategy: "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS" });
+  assertStringIncludes(answering, "Sources:");
+  assertStringIncludes(answering, "How to contact support");
+});
+
 Deno.test("renderNote: verdict links render only when feedback url + token are present", () => {
   const base = {
     confidence: "high" as const,

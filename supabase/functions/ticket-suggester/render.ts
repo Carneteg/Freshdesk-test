@@ -577,14 +577,22 @@ export function renderNote(r: NoteData): string {
     }
   }
 
-  if (r.searchQueries.length) {
-    out.push(`<p><strong>Searched for:</strong> ${esc(r.searchQueries.join(", "))}</p>`);
-  }
+  // When the request is unclear and we're asking for more info, the retrieved
+  // sources are keyword noise from generic search queries — showing them implies a
+  // relevance that isn't there. Suppress Sources + "Searched for" for the pure
+  // clarification strategies; keep them wherever the AI actually answers from the KB.
+  const clarifying = r.answerStrategy === "REQUEST_MISSING_INFORMATION" ||
+    r.answerStrategy === "REPEAT_CLARIFYING_QUESTION";
 
-  if (r.sources.length) {
-    out.push(`<p><strong>Sources:</strong></p><ul>${r.sources.map(renderSource).join("")}</ul>`);
-  } else {
-    out.push("<p><strong>Sources:</strong> none found — possible knowledge-base gap.</p>");
+  if (!clarifying) {
+    if (r.searchQueries.length) {
+      out.push(`<p><strong>Searched for:</strong> ${esc(r.searchQueries.join(", "))}</p>`);
+    }
+    if (r.sources.length) {
+      out.push(`<p><strong>Sources:</strong></p><ul>${r.sources.map(renderSource).join("")}</ul>`);
+    } else {
+      out.push("<p><strong>Sources:</strong> none found — possible knowledge-base gap.</p>");
+    }
   }
 
   if (r.unsupportedNote) out.push(`<p><em>${esc(r.unsupportedNote)}</em></p>`);
