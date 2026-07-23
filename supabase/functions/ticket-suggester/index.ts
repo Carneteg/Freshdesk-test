@@ -38,6 +38,17 @@ interface Config {
   // or tag is written to Freshdesk. Defaults to TRUE — posting must be turned on
   // deliberately with DRY_RUN=false, so a first deploy/cron can never surprise-post.
   dryRun: boolean;
+  // Base URL of the `feedback` Edge Function — the note's 👍/✏️/👎 links point here.
+  feedbackUrl: string;
+}
+
+// Derive the sibling `feedback` function URL from SUPABASE_URL, e.g.
+// https://<ref>.supabase.co -> https://<ref>.functions.supabase.co/feedback.
+// FEEDBACK_URL overrides it (e.g. a custom domain).
+function deriveFeedbackUrl(supabaseUrl: string): string {
+  const override = Deno.env.get("FEEDBACK_URL");
+  if (override) return override;
+  return supabaseUrl.replace(".supabase.co", ".functions.supabase.co") + "/feedback";
 }
 
 // Comma-separated env list -> lowercased, trimmed, non-empty.
@@ -69,6 +80,7 @@ function loadConfig(): Config {
     excludeSubjects: envList("EXCLUDE_SUBJECTS"),
     // Safe by default: post only when DRY_RUN is explicitly "false".
     dryRun: (Deno.env.get("DRY_RUN") ?? "true") !== "false",
+    feedbackUrl: deriveFeedbackUrl(env("SUPABASE_URL")),
   };
 }
 
@@ -166,6 +178,7 @@ async function pollOnce(cfg: Config): Promise<Summary> {
         excludeCategories: cfg.excludeCategories,
         incidents,
         db,
+        feedbackUrl: cfg.feedbackUrl,
       }, ticket);
 
       // DRY_RUN: log the suggestion for inspection but write NOTHING to Freshdesk.

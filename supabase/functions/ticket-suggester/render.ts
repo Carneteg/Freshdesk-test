@@ -457,6 +457,10 @@ export interface NoteData {
   qaAnswered: number;
   qaTotal: number;
   unsupportedNote?: string;
+  // One-click verdict links (§8/§12). Rendered only when both are present — i.e.
+  // on a posted note, never in the replay harness.
+  feedbackUrl?: string;
+  feedbackToken?: string;
 }
 
 const BADGE: Record<Confidence, string> = {
@@ -585,6 +589,21 @@ export function renderNote(r: NoteData): string {
   }
 
   if (r.unsupportedNote) out.push(`<p><em>${esc(r.unsupportedNote)}</em></p>`);
+
+  // One-click verdict — the "would I have sent this?" signal this whole experiment
+  // exists to collect (§8). Each link writes straight to `suggestions` via the
+  // feedback function, keyed by an unguessable per-note token.
+  if (r.feedbackUrl && r.feedbackToken) {
+    const link = (v: string, label: string) =>
+      `<a href="${esc(r.feedbackUrl!)}?t=${esc(r.feedbackToken!)}&amp;v=${v}">${label}</a>`;
+    out.push(
+      `<p><strong>Would you have sent this?</strong> ` +
+        `${link("usable", "👍 Yes, would send")} · ` +
+        `${link("edited", "✏️ With edits")} · ` +
+        `${link("unusable", "👎 No")}` +
+        ` <span style="color:#888">(one click — records your verdict)</span></p>`,
+    );
+  }
 
   return out.join("\n");
 }

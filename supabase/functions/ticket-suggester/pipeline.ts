@@ -116,6 +116,9 @@ export interface PipelineDeps {
   withPastTickets?: boolean;
   // Replay only: only use past tickets resolved BEFORE this ISO time (no leakage).
   retrievalBefore?: string;
+  // Base URL of the `feedback` Edge Function. When set, the note carries one-click
+  // verdict links (👍/✏️/👎). Omitted by the replay harness (which posts nothing).
+  feedbackUrl?: string;
 }
 
 export interface Suggestion {
@@ -152,6 +155,7 @@ export interface Suggestion {
   model: string;
   latency_ms: number;
   note_html: string;
+  feedback_token: string;
   error: string | null;
 }
 
@@ -331,6 +335,8 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   const start = Date.now();
   const { triggerId } = latestCustomerMessage(ticket);
   const context = buildContext(ticket); // FULL chronological, source-labelled context
+  // Unguessable per-note token for the one-click verdict links (§8).
+  const feedbackToken = crypto.randomUUID();
 
   const a = await analyse(deps, ticket.subject, context);
 
@@ -500,6 +506,8 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     qaAnswered,
     qaTotal,
     unsupportedNote,
+    feedbackUrl: deps.feedbackUrl,
+    feedbackToken,
   });
 
   return {
@@ -536,6 +544,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     model: deps.model,
     latency_ms: Date.now() - start,
     note_html: note,
+    feedback_token: feedbackToken,
     error: null,
   };
 }
@@ -578,6 +587,7 @@ export function toRow(
     prompt_version: s.prompt_version,
     model: s.model,
     latency_ms: s.latency_ms,
+    feedback_token: s.feedback_token,
     error: s.error,
   };
 }
