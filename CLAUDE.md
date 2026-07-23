@@ -299,9 +299,18 @@ regardless of who owns the key. Startup now: (a) calls `/agents/me` to confirm
 the key authenticates and logs the service account, (b) requires `MY_AGENT_ID`
 to be a numeric id, and (c) best-effort `GET /agents/{MY_AGENT_ID}` to warn if
 the monitored agent's name ≠ `EXPECTED_AGENT_NAME` (needs admin API; a failure
-only warns). For Gate 1 there is still exactly **one** monitored agent
-(`EXPECTED_AGENT_NAME`, default **Tobias Carneteg**); notes are authored by the
-service account, which is fine since notes are private/internal.
+only warns). Notes are authored by the service account, which is fine since notes
+are private/internal.
+
+**Monitored agents — a small set (2026-07-23).** Per Tobias, `MY_AGENT_ID` now
+accepts a **comma-separated list** of numeric agent ids, and the system watches
+**all** of them (currently **Tobias + Johanna**; Johanna confirmed aware,
+DPA OK). This widens the earlier single-agent rule (§9 "multi-agent support" out
+of scope) to a small, **named** set — not an open rollout. The safety property is
+unchanged and now enforced by two independent filters: the poll filter
+(`responder_id ∈ MY_AGENT_ID`) **and** a re-check of the reloaded ticket's
+responder before anything is posted. Startup logs each monitored agent's name.
+Still private-notes-only; a broad multi-agent rollout remains a Gate 2 decision.
 
 **LLM provider — OpenAI (2026-07-22).** Per Tobias the Anthropic key is
 unavailable, so the three reasoning calls (analyse → draft → verify) now run on
