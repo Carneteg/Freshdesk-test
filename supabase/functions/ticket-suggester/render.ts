@@ -233,22 +233,21 @@ export function ticketBeforeFirstAgentReply(t: Ticket): Ticket {
   return { ...t, conversations };
 }
 
-// Holding / acknowledgment replies ("Hi, thanks for reaching out, we're looking
-// into it") are NOT the substantive answer. In replay they must not be the turn we
-// grade against — the AI writes a real coaching reply, so comparing it to a filler
-// line is the wrong-turn bug (#84875, #84611). A reply that ASKS something concrete
-// (contains "?") is substantive and never counts as holding; a long reply that
-// merely opens with thanks is substantive too — only a SHORT ack with no question
-// and a holding phrase is skipped.
+// Holding / acknowledgment replies ("Hi, we're looking into it, we'll get back to
+// you") are NOT the substantive answer. In replay they must not be the turn we grade
+// against — the AI writes a real coaching reply, so comparing it to a filler line is
+// the wrong-turn bug (#84875, #84611). A reply that ASKS something concrete (contains
+// "?") is substantive and never counts as holding. Crucially these are WAIT phrases,
+// not greetings: "thanks for reaching out" alone is a greeting that often precedes a
+// real answer, so it is NOT here — only a short reply whose substance is a promise to
+// come back later is skipped.
 const HOLDING_HINTS = [
   "looking into", "look into this", "we'll get back", "get back to you",
   "investigating this", "working on it", "we are on it",
   "ser på saken", "ser paa saken", "ser nærmere", "ser naermere",
   "återkommer", "aterkommer", "vi undersöker", "vi undersoker", "vi kollar",
   "kommer tilbake", "undersøker", "undersoker", "vi kikker",
-  "takk for din henvendelse", "tack för att du kontaktar", "tack for att du kontaktar",
-  "thank you for reaching out", "thanks for reaching out", "thanks for contacting",
-  "takk for at du kontakter", "vi ser på det", "vi ser paa det",
+  "vi ser på det", "vi ser paa det",
 ];
 
 export function looksLikeHoldingReply(text: string): boolean {

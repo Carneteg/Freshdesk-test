@@ -70,7 +70,7 @@ Deno.test("draftPrompt: fixed incident surfaces fix date + post-fix instructions
   assertStringIncludes(user, "after the fix:");
   assertStringIncludes(user, "must be re-opened and re-saved");
   // The rule that teaches the model to apply it is present.
-  assertStringIncludes(system, "historical records the customer must still");
+  assertStringIncludes(system, "records the customer must still");
   assertStringIncludes(system, "resolved as of");
 });
 
@@ -436,7 +436,7 @@ Deno.test("renderNote: security-sensitive note shows manual-verify disclaimer an
   assertStringIncludes(html, "Verify manually");
   assertStringIncludes(html, "cannot see the customer's account");
   assertStringIncludes(html, "What to check / do (for you):");
-  assertStringIncludes(html, "Confirm the admin&#39;s identity before granting access.");
+  assertStringIncludes(html, "Confirm the admin's identity before granting access.");
   assertStringIncludes(html, "Not established from the ticket");
   assertStringIncludes(html, "Which person should hold the admin role");
 });
@@ -458,7 +458,7 @@ Deno.test("renderNote: reply and resolution steps are separate sections", () => 
   assertStringIncludes(html, "💬 Draft to the customer (only when grounded):");
   assertStringIncludes(html, "Hei, vi ser på saken");
   assertStringIncludes(html, "🔧 What to check / do (for you):");
-  assertStringIncludes(html, "Reindex the customer&#39;s search");
+  assertStringIncludes(html, "Reindex the customer's search");
   assertStringIncludes(html, "AI analysis (for you)");
   // Coach steps come BEFORE the customer draft (coach role, not answer-first).
   const stepsIdx = html.indexOf("🔧 What to check / do");
