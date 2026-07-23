@@ -56,7 +56,8 @@
 
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
   .chead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
-  .chead .id{font-family:var(--mono);font-size:12px;color:var(--ink-3)}
+  .chead .id{font-family:var(--mono);font-size:12px;color:var(--ink-3);text-decoration:none}
+  .chead a.id:hover{color:var(--accent);text-decoration:underline}
   .chead .subj{font-weight:650;font-size:15px}
   .tags{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 12px}
   .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:20px;background:var(--surface-2);color:var(--ink-2)}
@@ -186,7 +187,8 @@ async function loadData() {
         ").<br>If this says permission denied, your email isn't on the reviewer allowlist yet.</div>";
       return;
     }
-    rows = Array.isArray(data) ? data : [];
+    var all = Array.isArray(data) ? data : [];
+    rows = all.filter(function (r) { return !isSpam(r.subject); }); // hide any auto-reply noise
     render();
   } catch (e) {
     app.innerHTML = '<div class="empty">Network error: ' + esc(e.message) + "</div>";
@@ -230,7 +232,12 @@ function tabEl(id, label, n) {
 function cardEl(r) {
   var card = el("div", "card");
   var head = el("div", "chead");
-  head.appendChild(set(el("span", "id"), "#" + r.ticket_id));
+  var idA = document.createElement("a");
+  idA.className = "id";
+  idA.href = r.ticket_url || ("https://simployer.freshdesk.com/a/tickets/" + r.ticket_id);
+  idA.target = "_blank"; idA.rel = "noopener";
+  idA.textContent = "#" + r.ticket_id;
+  head.appendChild(idA);
   head.appendChild(set(el("span", "subj"), esc(r.subject) || "(no subject)"));
   card.appendChild(head);
 
@@ -339,6 +346,9 @@ function detail(label, text) {
   var sum = document.createElement("summary"); sum.textContent = esc(label); d.appendChild(sum);
   d.appendChild(set(el("div", "body"), esc(text)));
   return d;
+}
+function isSpam(subject) {
+  return /^\s*(automatic reply|automatisk svar|automatiskt svar|autosvar|out of office|out-of-office|frånvaro|frånvarande|ute av kontoret|auto[- ]?reply)\b/i.test(subject || "");
 }
 function tag(text, cls) { return set(el("span", "tag" + (cls ? " " + cls : "")), esc(text)); }
 function set(node, text) { node.textContent = text; return node; }
