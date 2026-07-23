@@ -21,23 +21,28 @@ if (!key) {
 
 const html = await Deno.readTextFile(new URL("../web/review.html", import.meta.url));
 
-const res = await fetch(`${url}/storage/v1/object/app/review.html`, {
+// Upload to a FRESH object name (coach.html) so we don't hit the CDN copy of
+// review.html that was cached as text/plain. The request Content-Type header
+// becomes the object's served content-type.
+const OBJECT = "coach.html";
+const res = await fetch(`${url}/storage/v1/object/app/${OBJECT}`, {
   method: "POST",
   headers: {
     authorization: `Bearer ${key}`,
     apikey: key,
-    "content-type": "text/html; charset=utf-8", // <- this becomes the object's served content-type
+    "content-type": "text/html; charset=utf-8", // <- served content-type
     "cache-control": "no-cache",
-    "x-upsert": "true", // overwrite the existing object
+    "x-upsert": "true", // overwrite if it already exists
   },
   body: html,
 });
 
-console.log(res.status, await res.text());
+const bodyText = await res.text();
+console.log("HTTP", res.status, bodyText);
 if (res.ok) {
-  console.log("\nUploaded with content-type text/html. Open (hard-refresh):");
-  console.log(`${url}/storage/v1/object/public/app/review.html`);
+  console.log("\n✅ Uploaded as text/html. Open this URL (hard-refresh):");
+  console.log(`${url}/storage/v1/object/public/app/${OBJECT}`);
 } else {
-  console.error("\nUpload failed — check the service-role key and bucket name ('app').");
+  console.error("\n❌ Upload failed. Copy the HTTP line above and send it back.");
   Deno.exit(1);
 }
