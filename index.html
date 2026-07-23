@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coach Review — Simployer Gate 1</title>
+<style>
+  :root{
+    --bg:#F5F7F9;--surface:#fff;--surface-2:#EDF1F4;--border:#DCE3E8;
+    --ink:#182029;--ink-2:#56636E;--ink-3:#8694A1;
+    --accent:#0F766E;--accent-soft:#D6E8E5;
+    --good:#2F855A;--good-soft:#DCEEE3;--warn:#B7791F;--warn-soft:#F3E8CE;
+    --crit:#C0392B;--crit-soft:#F4D9D5;--info:#5B7089;
+    --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --radius:8px;--shadow:0 1px 2px rgba(24,32,41,.05),0 4px 16px rgba(24,32,41,.05);
+  }
+  @media(prefers-color-scheme:dark){:root{
+    --bg:#0E1319;--surface:#151C24;--surface-2:#1C252F;--border:#2A3540;
+    --ink:#E8EDF1;--ink-2:#A5B2BD;--ink-3:#6E7E8B;
+    --accent:#4FD1C5;--accent-soft:#123A38;
+    --good:#4FB784;--good-soft:#14301F;--warn:#E0A64B;--warn-soft:#33280F;
+    --crit:#E86B5C;--crit-soft:#38191A;--info:#8AA0B5;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.3);
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;font-variant-numeric:tabular-nums}
+  .wrap{max-width:920px;margin:0 auto;padding:24px 16px 80px}
+  header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+  .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
+  h1{font-size:22px;margin:2px 0 0;letter-spacing:-.02em}
+  .who{margin-left:auto;font-size:13px;color:var(--ink-2);display:flex;align-items:center;gap:10px}
+  button{font-family:inherit;cursor:pointer}
+  .btn{border:1px solid var(--border);background:var(--surface);color:var(--ink);border-radius:6px;padding:7px 12px;font-size:13px;font-weight:600}
+  .btn:hover{border-color:var(--accent)}
+  .btn.small{padding:4px 9px;font-size:12px}
+  .link{background:none;border:0;color:var(--accent);font-size:13px;padding:0;text-decoration:underline;cursor:pointer}
+
+  .auth{max-width:400px;margin:8vh auto 0;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:26px;box-shadow:var(--shadow)}
+  .auth h2{margin:0 0 4px;font-size:19px}
+  .auth p{margin:0 0 18px;color:var(--ink-2);font-size:14px}
+  .field{display:flex;flex-direction:column;gap:6px;margin-bottom:14px}
+  .field label{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
+  input{font-family:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--ink)}
+  input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;padding:11px;font-size:14px}
+  .btn.primary:hover{filter:brightness(1.06)}
+  .msg{font-size:13px;margin-top:12px;padding:10px 12px;border-radius:6px}
+  .msg.ok{background:var(--good-soft);color:var(--good)}
+  .msg.err{background:var(--crit-soft);color:var(--crit)}
+
+  .bar{display:flex;gap:8px;align-items:center;margin:18px 0 16px;flex-wrap:wrap}
+  .tab{border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;color:var(--ink-2)}
+  .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .count{margin-left:auto;font-size:12.5px;color:var(--ink-3);font-family:var(--mono)}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
+  .chead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
+  .chead .id{font-family:var(--mono);font-size:12px;color:var(--ink-3);text-decoration:none}
+  .chead a.id:hover{color:var(--accent);text-decoration:underline}
+  .chead .subj{font-weight:650;font-size:15px}
+  .tags{display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 12px}
+  .tag{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:20px;background:var(--surface-2);color:var(--ink-2)}
+  .tag.c-high{background:var(--good-soft);color:var(--good)}
+  .tag.c-low{background:var(--warn-soft);color:var(--warn)}
+  .tag.c-none{background:var(--surface-2);color:var(--ink-3)}
+  .tag.qa{background:var(--accent-soft);color:var(--accent)}
+  .tag.qa.review{background:var(--crit-soft);color:var(--crit)}
+  .draft{white-space:pre-wrap;font-size:14px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin:2px 0 12px}
+  .refbox{background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent);border-radius:6px;padding:10px 12px;margin:0 0 12px;white-space:pre-wrap;font-size:13.5px}
+  .refbox .rl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--good);display:block;margin-bottom:5px}
+  .gold{margin:2px 0 12px}
+  .gold .gl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:5px}
+  textarea{width:100%;min-height:88px;font-family:inherit;font-size:14px;line-height:1.5;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--ink);resize:vertical}
+  textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .goldbar{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}
+  .goldbar .st{font-size:12px;color:var(--ink-3)}
+  .noreply{font-style:italic;color:var(--ink-3);font-size:13.5px;margin:2px 0 12px}
+  details{margin:0 0 10px}
+  details summary{cursor:pointer;font-size:12.5px;color:var(--accent);font-family:var(--mono);letter-spacing:.03em}
+  details .body{font-size:13.5px;color:var(--ink-2);white-space:pre-wrap;padding:8px 0 2px}
+  .sources{display:flex;flex-direction:column;gap:4px;padding:8px 0 2px}
+  .sources a{font-size:13px}
+  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;margin-top:4px}
+  .actions .lab{font-size:12.5px;color:var(--ink-3);margin-right:2px}
+  .vbtn{border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--ink)}
+  .vbtn[data-v=usable]:hover,.vbtn.sel[data-v=usable]{background:var(--good);border-color:var(--good);color:#fff}
+  .vbtn[data-v=edited]:hover,.vbtn.sel[data-v=edited]{background:var(--warn);border-color:var(--warn);color:#fff}
+  .vbtn[data-v=unusable]:hover,.vbtn.sel[data-v=unusable]{background:var(--crit);border-color:var(--crit);color:#fff}
+  .vstate{font-size:12.5px;color:var(--ink-3);margin-left:auto}
+  .empty{text-align:center;color:var(--ink-3);padding:48px 0;font-size:14px}
+  .ticketlink{margin-left:auto;font-size:12.5px}
+  a{color:var(--accent)}
+  :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"><div class="empty">Loading…</div></div>
+
+<script>
+// No external libraries and no module imports — pure fetch, so this renders and
+// runs from a local file (file://) without CORS/module issues. Auth is email +
+// password (no email round-trip or redirect). Security is unchanged: the anon key
+// is public, and RLS lets an allowlisted reviewer read drafts + update only the
+// verdict/gold_answer columns.
+var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
+var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
+var TOKEN_KEY = "coach_review_token";
+
+var app = document.getElementById("app");
+var esc = function (s) { return (s == null ? "" : String(s)); };
+var rows = [], tab = "todo", token = null, meEmail = null;
+
+boot();
+function boot() {
+  var saved = null;
+  try { saved = localStorage.getItem(TOKEN_KEY); } catch (e) {}
+  if (saved) {
+    var o = null; try { o = JSON.parse(saved); } catch (e) {}
+    if (o && o.access_token) { token = o.access_token; meEmail = o.email; return loadData(); }
+  }
+  renderAuth();
+}
+
+function api(path, opts) {
+  opts = opts || {};
+  var headers = { apikey: SB_ANON, "Content-Type": "application/json" };
+  if (token) headers["Authorization"] = "Bearer " + token;
+  if (opts.headers) for (var k in opts.headers) headers[k] = opts.headers[k];
+  return fetch(SB_URL + path, { method: opts.method || "GET", headers: headers, body: opts.body });
+}
+
+// ---- auth ----
+function renderAuth(msg, cls) {
+  app.innerHTML =
+    '<div class="auth">' +
+    '  <div class="eyebrow">Simployer · Gate 1</div>' +
+    '  <h2>Coach review</h2>' +
+    '  <p>Sign in with your agent email and password to review AI coach drafts and record your verdict.</p>' +
+    '  <div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="username" placeholder="you@simployer.com"></div>' +
+    '  <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" placeholder="••••••••"></div>' +
+    '  <button class="btn primary" id="signin">Sign in</button>' +
+    '  <div id="authmsg"></div>' +
+    '</div>';
+  if (msg) setAuthMsg(msg, cls);
+  var emEl = document.getElementById("em"), pwEl = document.getElementById("pw");
+  function submit() { doLogin(emEl.value.trim(), pwEl.value); }
+  document.getElementById("signin").onclick = submit;
+  pwEl.onkeydown = function (e) { if (e.key === "Enter") submit(); };
+}
+function setAuthMsg(t, cls) {
+  var m = document.getElementById("authmsg");
+  if (m) m.innerHTML = '<div class="msg ' + cls + '">' + esc(t) + "</div>";
+}
+async function doLogin(email, password) {
+  if (!email || !password) return setAuthMsg("Enter your email and password.", "err");
+  setAuthMsg("Signing in…", "ok");
+  try {
+    var res = await fetch(SB_URL + "/auth/v1/token?grant_type=password", {
+      method: "POST",
+      headers: { apikey: SB_ANON, "Content-Type": "application/json" },
+      body: JSON.stringify({ email: email, password: password }),
+    });
+    var data = await res.json();
+    if (!res.ok) return setAuthMsg(data.error_description || data.msg || data.error || "Sign-in failed.", "err");
+    token = data.access_token; meEmail = (data.user && data.user.email) || email;
+    try { localStorage.setItem(TOKEN_KEY, JSON.stringify({ access_token: token, email: meEmail })); } catch (e) {}
+    loadData();
+  } catch (e) { setAuthMsg("Network error: " + e.message, "err"); }
+}
+function signOut() {
+  token = null; meEmail = null;
+  try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+  renderAuth();
+}
+
+// ---- data ----
+async function loadData() {
+  app.innerHTML = '<div class="empty">Loading tickets…</div>';
+  var cols = "id,ticket_id,ticket_url,subject,ticket_type,language,confidence,draft,agent_analysis,rationale,sources,qa_score,qa_verdict,qa_needs_review,verdict,verdict_at,agent_sent_reply,gold_answer,gold_answer_by,prompt_version,created_at";
+  try {
+    var res = await api("/rest/v1/suggestions?select=" + cols + "&order=created_at.desc&limit=300");
+    if (res.status === 401) { signOut(); return; }
+    var data = await res.json();
+    if (!res.ok) {
+      app.innerHTML = '<div class="empty">Couldn\'t load (' + esc((data && data.message) || res.status) +
+        ").<br>If this says permission denied, your email isn't on the reviewer allowlist yet.</div>";
+      return;
+    }
+    var all = Array.isArray(data) ? data : [];
+    rows = all.filter(function (r) { return !isSpam(r.subject); }); // hide any auto-reply noise
+    render();
+  } catch (e) {
+    app.innerHTML = '<div class="empty">Network error: ' + esc(e.message) + "</div>";
+  }
+}
+
+function render() {
+  var todo = rows.filter(function (r) { return !r.verdict; });
+  var done = rows.filter(function (r) { return r.verdict; });
+  var list = tab === "todo" ? todo : tab === "done" ? done : rows;
+  app.innerHTML = "";
+
+  var top = el("header", "top");
+  top.innerHTML = '<div><div class="eyebrow">Simployer · Gate 1</div><h1>Coach review</h1></div>' +
+    '<div class="who"><span>' + esc(meEmail || "") + '</span><button class="btn small" id="out">Sign out</button></div>';
+  app.appendChild(top);
+
+  var bar = el("div", "bar");
+  bar.appendChild(tabEl("todo", "To review", todo.length));
+  bar.appendChild(tabEl("done", "Judged", done.length));
+  bar.appendChild(tabEl("all", "All", rows.length));
+  var c = el("div", "count"); c.textContent = rows.length + " loaded";
+  bar.appendChild(c);
+  app.appendChild(bar);
+  document.getElementById("out").onclick = signOut;
+
+  if (!list.length) {
+    var e = el("div", "empty"); e.textContent = tab === "todo" ? "Nothing left to review 🎉" : "Nothing here.";
+    app.appendChild(e); return;
+  }
+  for (var i = 0; i < list.length; i++) app.appendChild(cardEl(list[i]));
+}
+
+function tabEl(id, label, n) {
+  var b = el("button", "tab" + (tab === id ? " on" : ""));
+  b.textContent = label + " · " + n;
+  b.onclick = function () { tab = id; render(); };
+  return b;
+}
+
+function cardEl(r) {
+  var card = el("div", "card");
+  var head = el("div", "chead");
+  var idA = document.createElement("a");
+  idA.className = "id";
+  idA.href = r.ticket_url || ("https://simployer.freshdesk.com/a/tickets/" + r.ticket_id);
+  idA.target = "_blank"; idA.rel = "noopener";
+  idA.textContent = "#" + r.ticket_id;
+  head.appendChild(idA);
+  head.appendChild(set(el("span", "subj"), esc(r.subject) || "(no subject)"));
+  card.appendChild(head);
+
+  var tags = el("div", "tags");
+  tags.appendChild(tag(r.ticket_type || "—"));
+  tags.appendChild(tag((r.language || "—").toUpperCase()));
+  tags.appendChild(tag("conf: " + (r.confidence || "—"), "c-" + (r.confidence || "none")));
+  if (r.qa_score != null) tags.appendChild(tag("QA " + r.qa_score + " · " + (r.qa_verdict || ""), "qa" + (r.qa_needs_review ? " review" : "")));
+  tags.appendChild(tag(r.prompt_version || ""));
+  card.appendChild(tags);
+
+  if (r.draft && r.draft.trim()) card.appendChild(set(el("div", "draft"), r.draft));
+  else card.appendChild(set(el("div", "noreply"), "No send-ready customer reply (the coach abstained — agent guidance only)."));
+
+  if (r.agent_analysis) card.appendChild(detail("Agent analysis", r.agent_analysis));
+  if (r.rationale) card.appendChild(detail("Why (rationale)", r.rationale));
+  if (Array.isArray(r.sources) && r.sources.length) {
+    var d = document.createElement("details");
+    var sum = document.createElement("summary"); sum.textContent = "Sources · " + r.sources.length; d.appendChild(sum);
+    var box = el("div", "sources");
+    for (var i = 0; i < r.sources.length; i++) {
+      var s = r.sources[i], a = document.createElement("a");
+      a.href = esc(s.url || "#"); a.target = "_blank"; a.rel = "noopener";
+      a.textContent = (s.kind === "ticket" ? "🎫 " : "📄 ") + esc(s.title || s.ref);
+      box.appendChild(a);
+    }
+    d.appendChild(box); card.appendChild(d);
+  }
+
+  if (r.agent_sent_reply && r.agent_sent_reply.trim()) {
+    var ref = el("div", "refbox");
+    ref.appendChild(set(el("span", "rl"), "What the agent actually sent · reference"));
+    ref.appendChild(document.createTextNode(r.agent_sent_reply));
+    card.appendChild(ref);
+  }
+
+  var gold = el("div", "gold");
+  gold.appendChild(set(el("span", "gl"), "Ideal answer (training material)"));
+  var ta = document.createElement("textarea");
+  ta.value = r.gold_answer || "";
+  ta.placeholder = r.agent_sent_reply ? "Write the ideal answer, or start from the agent's reply above…" : "Write the ideal answer the AI should learn from…";
+  gold.appendChild(ta);
+  var gbar = el("div", "goldbar");
+  var save = el("button", "btn small"); save.textContent = "Save ideal answer";
+  var st = el("span", "st");
+  st.textContent = r.gold_answer ? ("saved" + (r.gold_answer_by ? " · " + r.gold_answer_by : "")) : "";
+  save.onclick = function () { saveGold(r, ta.value, st); };
+  gbar.appendChild(save);
+  if (r.agent_sent_reply) {
+    var useSent = el("button", "link"); useSent.textContent = "use agent's reply";
+    useSent.onclick = function () { ta.value = r.agent_sent_reply; };
+    gbar.appendChild(useSent);
+  }
+  gbar.appendChild(st); gold.appendChild(gbar); card.appendChild(gold);
+
+  var actions = el("div", "actions");
+  actions.appendChild(set(el("span", "lab"), "Would you have sent this?"));
+  ["usable", "edited", "unusable"].forEach(function (v) {
+    var b = el("button", "vbtn" + (r.verdict === v ? " sel" : ""));
+    b.setAttribute("data-v", v); b.textContent = v.charAt(0).toUpperCase() + v.slice(1);
+    b.onclick = function () { setVerdict(r, v, card); };
+    actions.appendChild(b);
+  });
+  var state = el("span", "vstate"); state.textContent = r.verdict ? "recorded: " + r.verdict : "";
+  actions.appendChild(state);
+  if (r.ticket_url) {
+    var link = document.createElement("a");
+    link.className = "ticketlink"; link.href = esc(r.ticket_url); link.target = "_blank"; link.rel = "noopener";
+    link.textContent = "Open in Freshdesk ↗";
+    actions.appendChild(link);
+  }
+  card.appendChild(actions);
+  return card;
+}
+
+async function setVerdict(r, v, card) {
+  var prev = r.verdict;
+  r.verdict = v; r.verdict_at = new Date().toISOString();
+  var btns = card.querySelectorAll(".vbtn");
+  for (var i = 0; i < btns.length; i++) btns[i].className = "vbtn" + (btns[i].getAttribute("data-v") === v ? " sel" : "");
+  card.querySelector(".vstate").textContent = "saving…";
+  try {
+    var res = await api("/rest/v1/suggestions?id=eq." + r.id, {
+      method: "PATCH", headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ verdict: v, verdict_at: r.verdict_at }),
+    });
+    if (!res.ok) { r.verdict = prev; card.querySelector(".vstate").textContent = "save failed: " + (await res.text()); }
+    else card.querySelector(".vstate").textContent = "recorded: " + v;
+  } catch (e) { r.verdict = prev; card.querySelector(".vstate").textContent = "save failed: " + e.message; }
+}
+
+async function saveGold(r, text, st) {
+  st.textContent = "saving…";
+  try {
+    var res = await api("/rest/v1/suggestions?id=eq." + r.id, {
+      method: "PATCH", headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ gold_answer: text }),
+    });
+    if (!res.ok) { st.textContent = "save failed: " + (await res.text()); return; }
+    r.gold_answer = text; st.textContent = text.trim() ? "saved ✓" : "cleared";
+  } catch (e) { st.textContent = "save failed: " + e.message; }
+}
+
+function detail(label, text) {
+  var d = document.createElement("details");
+  var sum = document.createElement("summary"); sum.textContent = esc(label); d.appendChild(sum);
+  d.appendChild(set(el("div", "body"), esc(text)));
+  return d;
+}
+function isSpam(subject) {
+  return /^\s*(automatic reply|automatisk svar|automatiskt svar|autosvar|out of office|out-of-office|frånvaro|frånvarande|ute av kontoret|auto[- ]?reply)\b/i.test(subject || "");
+}
+function tag(text, cls) { return set(el("span", "tag" + (cls ? " " + cls : "")), esc(text)); }
+function set(node, text) { node.textContent = text; return node; }
+function el(t, cls) { var e = document.createElement(t); if (cls) e.className = cls; return e; }
+</script>
+</body>
+</html>
