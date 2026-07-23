@@ -82,26 +82,58 @@ deno task serve
 curl -H "x-cron-secret: $CRON_SECRET" http://localhost:8000/
 ```
 
-## Deploy + schedule (Step 5)
+## Go live — one agent, private notes (Step 5)
+
+Gate 1 runs for **one** monitored agent (`MY_AGENT_ID`) and only ever writes
+**private notes** (plus up to 3 keyword tags) on *that agent's* tickets. It has
+never run against a live Freshdesk instance (CLAUDE.md §4), so roll out in stages
+— each step de-risks the next. This is **not** a multi-agent rollout; that is a
+Gate 2 decision and is explicitly out of scope (§9).
+
+**1. Deploy the function** (custom cron-secret auth, so `--no-verify-jwt`):
 
 ```bash
-supabase functions deploy ticket-suggester
+supabase functions deploy ticket-suggester --project-ref pqwnpcibymtmcpnqlkle --no-verify-jwt
 ```
 
-Then schedule it with `pg_cron` (every minute) so it calls the function with the
-`x-cron-secret` header. Do this **last**, only after replay results look
-reasonable:
+**2. Set the function secrets** (never commit these):
+
+```bash
+supabase secrets set --project-ref pqwnpcibymtmcpnqlkle \
+  FRESHDESK_DOMAIN=… FRESHDESK_API_KEY=… MY_AGENT_ID=… \
+  OPENAI_API_KEY=… OPENAI_MODEL=gpt-4o CRON_SECRET=…
+# DRY_RUN defaults to TRUE — the function posts nothing until you set it false.
+```
+
+**3. Supervised dry-run.** With `DRY_RUN` on (the default), trigger one run and
+inspect what it *would* have posted — nothing is written to Freshdesk:
+
+```bash
+curl -H "x-cron-secret: <CRON_SECRET>" \
+  https://pqwnpcibymtmcpnqlkle.functions.supabase.co/ticket-suggester
+# response includes "dry_run": true, "mine": N, "processed": N, "posted": 0
+```
+
+Then check the logged suggestions — confirm every row is the monitored agent's
+ticket and the notes read well:
 
 ```sql
-select cron.schedule(
-  'ticket-suggester',
-  '* * * * *',
-  $$ select net.http_post(
-       url    := 'https://<project-ref>.functions.supabase.co/ticket-suggester',
-       headers:= jsonb_build_object('x-cron-secret', '<CRON_SECRET>')
-     ); $$
-);
+select ticket_id, confidence, answer_strategy, qa_answered, qa_total, note_id
+from suggestions order by created_at desc limit 20;   -- note_id is null in dry-run
 ```
+
+**4. Enable posting.** Only once the dry-run looks right:
+
+```bash
+supabase secrets set --project-ref pqwnpcibymtmcpnqlkle DRY_RUN=false
+```
+
+**5. Schedule it.** Run `supabase/migrations/15_schedule.sql` **manually** (it needs
+the project URL + `CRON_SECRET`, so it is not part of the normal migration run and
+stores them in Vault). It schedules `pg_cron` to call the function every minute.
+Enabling the schedule while `DRY_RUN` is still true is safe — it polls and logs but
+posts nothing. Pause anytime with
+`select cron.unschedule('ticket-suggester-every-minute');`.
 
 ## Evaluating
 
