@@ -179,7 +179,8 @@ for (const t of kept) {
 
     if (db) {
       const { error } = await db.from("suggestions").upsert(
-        toRow(s, { used, similarity: sim, qa }),
+        // Store the agent's actual reply as reference/gold training material.
+        toRow(s, { used, similarity: sim, qa, agentSentReply: actual || null }),
         { onConflict: "ticket_id,trigger_message_id" },
       );
       if (error) console.error(`  (db save failed for #${t.id}: ${error.message})`);

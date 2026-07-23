@@ -638,6 +638,7 @@ export function toRow(
     used?: string | null;
     similarity?: number | null;
     qa?: QaResult | null;
+    agentSentReply?: string | null;
   } = {},
 ) {
   const qa = extra.qa ?? null;
@@ -676,6 +677,8 @@ export function toRow(
     qa_verdict: qa?.assessment.verdict ?? null,
     qa_needs_review: qa?.assessment.needsHumanReview ?? null,
     qa_assessment: qa?.assessment ?? null,
+    // The reply the agent actually sent (replay only) — reference/gold for training.
+    ...(extra.agentSentReply !== undefined ? { agent_sent_reply: extra.agentSentReply } : {}),
     used: extra.used ?? s.used,
     similarity: extra.similarity ?? s.similarity,
     prompt_version: s.prompt_version,
