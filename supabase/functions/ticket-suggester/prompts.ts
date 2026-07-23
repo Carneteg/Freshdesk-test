@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-23a";
+export const PROMPT_VERSION = "g1-2026-07-23b";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -256,6 +256,12 @@ export function draftPrompt(input: {
     "  avtalemodul configuration — is a product question you answer or investigate, NOT a legal referral,",
     "  even when it mentions a contract, agreement or signature. When unsure which it is, ASK rather than",
     "  route to Expert by default.",
+    "- CUSTOMER STEPS BELONG IN THE REPLY. If the resolution is a sequence of steps the CUSTOMER performs",
+    "  (e.g. the first-line troubleshooting flow: incognito window → hard refresh → grant Simployer access;",
+    "  or clear cache to activate a fix), then EVERY such step must go into required_customer_steps AND be",
+    "  written out, in order, in the reply. resolution_steps is for the AGENT's own internal actions only —",
+    "  never leave a customer-run step there while the reply omits it (that produced the incomplete reply in",
+    "  #85703). If you recommend a multi-step flow, the reply must contain the WHOLE flow, not the first step.",
     "- DO NOT propose roles, permissions, access levels, or system settings as the cause OR the",
     "  solution unless there is EXPLICIT support in the ticket text or a SOURCE whose content actually",
     "  addresses it. \"This could be a permissions issue\" / \"verify the customer's role\" is a HYPOTHESIS,",
