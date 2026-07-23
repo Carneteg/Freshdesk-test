@@ -458,6 +458,19 @@ this ticket's own sources establish them (grounding still wins). **Opt-in** via
 prompt_version** so `gate1_scorecard` compares it head-to-head against the base run on the
 SAME tickets. Not fine-tuning — retrieval-style few-shot. Measure the lift before doing more.
 
+**Agent-reply QA scan — triage over history (2026-07-23).** The QA Coach, pointed at
+the AGENTS' actual historical replies, becomes a triage engine: `scripts/score_history.ts`
+(`deno task score-history`) scores each agent's first substantive reply with ONE QA call,
+posts NOTHING to Freshdesk, and stores only in Supabase (`agent_qa_*`, migration 21). The
+weakest surface in the `rewrite_queue` view and a **Rewrite** tab (worst-first) in the
+review app, where a reviewer writes a better `gold_answer` (which then feeds the learning
+loop above). History-scan rows live on `suggestions` with `prompt_version='agent-scan'`
+(minimal row, no AI draft) and are EXCLUDED from `gate1_scorecard`/`calibration`. **Honest
+caveat (§12):** the coach can only judge from the given context, so Accuracy is harsh on
+the operational knowledge agents carry but don't write down — read the score as "where to
+look" (vague / non-answer / undocumented solution), NOT as a grade of the agent, and never
+rank agents by it. One QA call per ticket → scalable to the ~50k backlog; start small.
+
 ---
 
 ## 13. Repeatable workflows — Claude skills & `tools/`
