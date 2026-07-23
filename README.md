@@ -90,11 +90,17 @@ never run against a live Freshdesk instance (CLAUDE.md §4), so roll out in stag
 — each step de-risks the next. This is **not** a multi-agent rollout; that is a
 Gate 2 decision and is explicitly out of scope (§9).
 
-**1. Deploy the function** (custom cron-secret auth, so `--no-verify-jwt`):
+**1. Deploy both functions** — the poller (custom cron-secret auth) and the
+feedback endpoint the note's 👍/✏️/👎 links call (agents click from the browser):
 
 ```bash
 supabase functions deploy ticket-suggester --project-ref pqwnpcibymtmcpnqlkle --no-verify-jwt
+supabase functions deploy feedback        --project-ref pqwnpcibymtmcpnqlkle --no-verify-jwt
 ```
+
+The note's verdict links write straight to `suggestions.verdict`, so
+`gate1_scorecard` fills itself as the agent judges each note. The feedback URL is
+derived from `SUPABASE_URL` automatically; set `FEEDBACK_URL` only to override it.
 
 **2. Set the function secrets** (never commit these):
 

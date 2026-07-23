@@ -468,6 +468,32 @@ Deno.test("renderNote: reply and resolution steps are separate sections", () => 
 
 // At confidence none there is no send-ready reply, but the resolution track and
 // analysis still carry substance — never a hollow note.
+Deno.test("renderNote: verdict links render only when feedback url + token are present", () => {
+  const base = {
+    confidence: "high" as const,
+    draft: "Hei, prøv dette.",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 1,
+    qaTotal: 1,
+  };
+  // Without feedback config → no verdict links.
+  const plain = renderNote(base);
+  assertEquals(plain.includes("Would you have sent this?"), false);
+
+  // With config → three links, each carrying the token and the right verdict value.
+  const withFeedback = renderNote({
+    ...base,
+    feedbackUrl: "https://ref.functions.supabase.co/feedback",
+    feedbackToken: "tok-123",
+  });
+  assertStringIncludes(withFeedback, "Would you have sent this?");
+  assertStringIncludes(withFeedback, "https://ref.functions.supabase.co/feedback?t=tok-123&amp;v=usable");
+  assertStringIncludes(withFeedback, "t=tok-123&amp;v=edited");
+  assertStringIncludes(withFeedback, "t=tok-123&amp;v=unusable");
+});
+
 Deno.test("renderNote: none confidence still shows resolution steps, not just a greeting", () => {
   const html = renderNote({
     confidence: "none",

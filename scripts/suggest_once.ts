@@ -41,6 +41,11 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const db = supabaseUrl && serviceKey ? createClient(supabaseUrl, serviceKey) : null;
 
+// Feedback links on the posted note (needs Supabase to record the verdict).
+const feedbackUrl = supabaseUrl
+  ? (Deno.env.get("FEEDBACK_URL") ?? supabaseUrl.replace(".supabase.co", ".functions.supabase.co") + "/feedback")
+  : undefined;
+
 console.log(`Loading ticket #${id} …`);
 const ticket = await fd.ticketWithConversations(id);
 console.log(`  ${ticket.subject}`);
@@ -68,7 +73,7 @@ if (db && !force) {
 console.log("Running pipeline (analyse → retrieve → draft → verify) …");
 const incidents = db ? await loadIncidents(db) : [];
 const s = await runPipeline(
-  { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined },
+  { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined, feedbackUrl },
   ticket,
 );
 console.log(`  type=${s.ticket_type}  confidence=${s.confidence}  Q/A=${s.qa_answered}/${s.qa_total}`);
