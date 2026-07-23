@@ -256,6 +256,40 @@ export class LLM {
     return data.choices?.[0]?.message?.content ?? "";
   }
 
+  // Same chat endpoint, but constrains the model to a JSON Schema (OpenAI
+  // Structured Outputs). Used by the QA Coach (CLAUDE.md §12) so the scorecard
+  // comes back already-shaped — no fragile JSON extraction. `jsonSchema` is the
+  // `{ name, strict, schema }` object OpenAI expects under response_format.
+  async completeSchema<T>(
+    system: string,
+    user: string,
+    // deno-lint-ignore no-explicit-any
+    jsonSchema: any,
+    opts: { temperature?: number; maxTokens?: number; timeoutMs?: number } = {},
+  ): Promise<T> {
+    const url = "https://api.openai.com/v1/chat/completions";
+    const res = await fetchWithRetry(url, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${this.apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: this.model,
+        temperature: opts.temperature ?? 0,
+        max_tokens: opts.maxTokens ?? 2000,
+        messages: [{ role: "system", content: system }, { role: "user", content: user }],
+        response_format: { type: "json_schema", json_schema: jsonSchema },
+      }),
+    }, { timeoutMs: opts.timeoutMs ?? 60_000 });
+
+    if (!res.ok) throw new HttpError(res.status, url, await res.text());
+    const data = await res.json() as { choices: Array<{ message?: { content?: string } }> };
+    const content = data.choices?.[0]?.message?.content ?? "";
+    if (!content) throw new Error("LLM returned no structured content");
+    return JSON.parse(content) as T;
+  }
+
   // Embedding for semantic past-ticket search (stage 2). Fixed 1536-dim model to
   // match the past_tickets.embedding column. Callers treat a failure as "no vector".
   async embed(text: string, opts: { timeoutMs?: number } = {}): Promise<number[]> {

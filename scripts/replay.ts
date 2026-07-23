@@ -18,7 +18,12 @@ import {
   replayTurn,
   similarity,
 } from "../supabase/functions/ticket-suggester/render.ts";
-import { loadIncidents, runPipeline, toRow } from "../supabase/functions/ticket-suggester/pipeline.ts";
+import {
+  loadIncidents,
+  qaScoreDraft,
+  runPipeline,
+  toRow,
+} from "../supabase/functions/ticket-suggester/pipeline.ts";
 
 function env(name: string): string {
   const v = Deno.env.get(name) ?? "";
@@ -101,6 +106,10 @@ if (ids.length > 5) {
 const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
 const llm = new LLM(env("OPENAI_API_KEY"), model);
 const withRetrieval = (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false";
+// QA Coach (CLAUDE.md §12, "mode A"): score the AI's own draft against the rubric,
+// using the same context it had. One extra LLM call per scored ticket — default on
+// in replay, set QA_COACH=false to skip (e.g. a quick smoke run).
+const withQaCoach = (Deno.env.get("QA_COACH") ?? "true") !== "false";
 const excludeCategories = (Deno.env.get("EXCLUDE_SOLUTION_CATEGORIES") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 const excludeSubjects = (Deno.env.get("EXCLUDE_SUBJECTS") ?? "")
@@ -164,9 +173,13 @@ for (const t of kept) {
     const sim = similarity(s.draft ?? "", actual);
     const used = classifyUsage(sim);
 
+    // Score the AI draft against the QA rubric (only when there's a send-ready reply).
+    const deps = { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined };
+    const qa = withQaCoach ? await qaScoreDraft(deps, turn.view, s) : null;
+
     if (db) {
       const { error } = await db.from("suggestions").upsert(
-        toRow(s, { used, similarity: sim }),
+        toRow(s, { used, similarity: sim, qa }),
         { onConflict: "ticket_id,trigger_message_id" },
       );
       if (error) console.error(`  (db save failed for #${t.id}: ${error.message})`);
@@ -183,6 +196,18 @@ for (const t of kept) {
     // concrete answer and the AI was generic, NOT that the AI was ignored. Judge on
     // cause + action + grounding (the verdict column), not this number.
     console.log(`text-overlap: ${sim} vs agent (weak proxy — judge cause/action/grounding, not this)`);
+    if (qa) {
+      const a = qa.assessment;
+      console.log(
+        `QA coach: ${a.totalScore}/100 ${a.verdict}` +
+          `${a.needsHumanReview ? " ⚠ needs human review" : ""}  (rubric v${qa.version})`,
+      );
+      if (a.topThreeImprovements.length) {
+        console.log("  top improvements:\n    - " + a.topThreeImprovements.join("\n    - "));
+      }
+    } else if (withQaCoach) {
+      console.log("QA coach: (no send-ready draft to score)");
+    }
     if (s.sources.length) {
       console.log("sources:");
       for (const x of s.sources) console.log(`  - ${x.title} [${x.ref}] ${x.url ?? ""}`);

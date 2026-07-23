@@ -386,6 +386,40 @@ similar concurrent tickets over generic KB) needs ticket-content retrieval, whic
 Freshdesk's search does not allow (free-text → 400) — a Gate 2 problem, or an
 interim curated incident/routing list fed into the prompt.
 
+**QA Coach — an automatic rubric scorer beside the human verdict (2026-07-23).**
+Imported the "Simployer QA Coach" package as an **offline eval-scorer** ("mode A").
+It grades a finished agent reply against a fixed **7-criterion rubric** (Tone 15,
+Accuracy 20, Clarity 15, Empathy 15, Resolution intent 15, Efficiency 10,
+Follow-through signal 10; weighted 0–100 → Excellent/Good/Acceptable/Needs review)
+and returns strict JSON. **Accuracy ≤ 2 forces `needsHumanReview` + a "Needs review"
+verdict** regardless of total — the same "don't let tone paper over an unverifiable
+claim" stance as the pipeline's grounding rules.
+
+- Dropped in as the canonical **v1.0** package, kept modular (do not fold into the
+  pipeline): `qa-rubric.ts` (criteria + weights + deterministic scoring), `qa-calibration.ts`
+  (the agreed calibration rules), `qa-system-prompt.ts` (the English system prompt, built
+  FROM the rubric + calibration, and the user-prompt builder), `qa-schema.ts` (Structured-
+  Outputs schema), `qa-types.ts`, and `qa-validator.ts`. It runs through the SAME isolated
+  `LLM` class (`completeSchema()` in `clients.ts`), so the provider stays in one place (§12).
+- **The model proposes scores; TypeScript decides the outcome.** `qa-validator.ts`
+  recomputes weighted points, total, verdict and the review flag from the raw 1–5 scores
+  (`validateAndNormalizeAssessment`, called in `runQaCoach`) — the model's arithmetic and
+  verdict are discarded, so there is no arithmetic drift and the Accuracy-≤2 override is
+  enforced in code, not by trust. Unit-tested in `qa_test.ts`.
+- It is **NOT** part of the analyse→draft→verify pipeline: the pipeline *produces* a
+  reply, the coach *judges* one (`runQaCoach` / `qaScoreDraft` in `pipeline.ts`).
+- **Grounding rule (non-negotiable):** the coach NEVER fetches product facts on its
+  own — `replay.ts` passes the ticket context + the exact sources the draft had as
+  `ticketContext`, so it cannot credit a reply for information the agent never held.
+- **Human `verdict` stays the gold standard.** The QA score sits beside it as an
+  automatic, consistent second read (columns `qa_score`/`qa_verdict`/
+  `qa_needs_review`/`qa_assessment`/`qa_version`, migration 17). Views: `qa_scorecard`
+  (rubric spread per prompt version) and `qa_vs_human` (does the rubric agree with the
+  humans on judged rows — read before trusting the QA score as a proxy).
+- Wired into `replay.ts` (default on; `QA_COACH=false` to skip). One extra LLM call
+  per scored ticket; abstains (no send-ready reply) are not scored. DPA: same OpenAI
+  clearance as the rest of the pipeline (§11) — real ticket text is sent.
+
 ---
 
 ## 13. Repeatable workflows — Claude skills & `tools/`

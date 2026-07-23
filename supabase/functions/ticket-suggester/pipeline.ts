@@ -15,6 +15,14 @@ import {
   verifyPrompt,
 } from "./prompts.ts";
 import {
+  buildQaCoachUserPrompt,
+  QA_COACH_SYSTEM_PROMPT,
+  QA_COACH_VERSION,
+} from "./qa-system-prompt.ts";
+import { QA_ASSESSMENT_JSON_SCHEMA } from "./qa-schema.ts";
+import type { QaAssessment } from "./qa-types.ts";
+import { validateAndNormalizeAssessment } from "./qa-validator.ts";
+import {
   type BugGuidance,
   buildContext,
   classifyUsage,
@@ -549,10 +557,90 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   };
 }
 
+// ── QA COACH (offline eval-scorer, CLAUDE.md §12 "mode A") ─────────────────────
+
+export interface QaResult {
+  version: string;
+  assessment: QaAssessment;
+}
+
+// Render the retrieved sources as plain text so the QA judge sees EXACTLY what the
+// draft was grounded in — no more, no less. Kept local to avoid exporting the
+// pipeline's private source formatting.
+function qaSourcesBlock(sources: SourceDoc[]): string {
+  if (!sources.length) return "(no knowledge-base sources were retrieved for this ticket)";
+  return sources
+    .map((s, i) => `[${i + 1}] ${s.title} (${s.ref})\n${s.text}`)
+    .join("\n\n");
+}
+
+// Score ONE reply against the 7-criterion rubric. The judge is handed only what is
+// passed in (customer message + the SAME context/sources the draft had) — it never
+// fetches product facts on its own, so it cannot credit a reply for information the
+// agent never held. Structured output means no fragile JSON parsing, and the package's
+// validator RECOMPUTES weighted points / total / verdict / review-flag in TypeScript
+// (the model only proposes them) so the arithmetic can't drift. Returns null on any
+// failure — QA scoring is an evaluation aid and must never crash a replay run.
+export async function runQaCoach(
+  deps: PipelineDeps,
+  input: {
+    customerMessage: string;
+    ticketContext: string;
+    agentReply: string;
+    requirements?: string;
+    languageOverride?: string;
+  },
+): Promise<QaResult | null> {
+  if (!input.agentReply.trim()) return null; // nothing to score (e.g. an abstain)
+  try {
+    const raw = await deps.llm.completeSchema<QaAssessment>(
+      QA_COACH_SYSTEM_PROMPT,
+      buildQaCoachUserPrompt(input),
+      QA_ASSESSMENT_JSON_SCHEMA,
+      { maxTokens: 2000 },
+    );
+    // Deterministic recompute of the math + verdict from the model's raw scores.
+    const assessment = validateAndNormalizeAssessment(raw);
+    return { version: QA_COACH_VERSION, assessment };
+  } catch {
+    return null;
+  }
+}
+
+// Convenience: score a pipeline Suggestion's own draft using the ticket context and
+// the sources the pipeline already retrieved. `agentReply` overrides the reply to
+// judge (e.g. to score what the agent ACTUALLY sent instead of the AI draft).
+export function qaScoreDraft(
+  deps: PipelineDeps,
+  ticket: Ticket,
+  s: Suggestion,
+  agentReply?: string,
+): Promise<QaResult | null> {
+  const context = buildContext(ticket);
+  const ticketContext = [
+    "TICKET CONTEXT (chronological):",
+    context,
+    "",
+    "RETRIEVED KNOWLEDGE-BASE / PAST-TICKET SOURCES:",
+    qaSourcesBlock(s.sources),
+  ].join("\n");
+  return runQaCoach(deps, {
+    customerMessage: latestCustomerMessage(ticket).text,
+    ticketContext,
+    agentReply: agentReply ?? (s.draft ?? ""),
+  });
+}
+
 export function toRow(
   s: Suggestion,
-  extra: { noteId?: number | null; used?: string | null; similarity?: number | null } = {},
+  extra: {
+    noteId?: number | null;
+    used?: string | null;
+    similarity?: number | null;
+    qa?: QaResult | null;
+  } = {},
 ) {
+  const qa = extra.qa ?? null;
   return {
     ticket_id: s.ticket_id,
     ticket_url: s.ticket_url,
@@ -582,6 +670,12 @@ export function toRow(
     bug_guidance: s.bug_guidance,
     qa_answered: s.qa_answered,
     qa_total: s.qa_total,
+    // QA Coach (offline eval-scorer) — null when not run or nothing to score.
+    qa_version: qa?.version ?? null,
+    qa_score: qa?.assessment.totalScore ?? null,
+    qa_verdict: qa?.assessment.verdict ?? null,
+    qa_needs_review: qa?.assessment.needsHumanReview ?? null,
+    qa_assessment: qa?.assessment ?? null,
     used: extra.used ?? s.used,
     similarity: extra.similarity ?? s.similarity,
     prompt_version: s.prompt_version,

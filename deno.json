@@ -1,7 +1,7 @@
 {
   "tasks": {
     "check": "deno check supabase/functions/ticket-suggester/index.ts supabase/functions/feedback/index.ts scripts/replay.ts scripts/sync_tickets.ts scripts/suggest_once.ts",
-    "test": "deno test supabase/functions/ticket-suggester/render_test.ts",
+    "test": "deno test supabase/functions/ticket-suggester/render_test.ts supabase/functions/ticket-suggester/qa_test.ts",
     "verify-api": "deno run --env-file=.env --allow-env --allow-net scripts/verify_api.ts",
     "replay": "deno run --env-file=.env --allow-env --allow-net scripts/replay.ts",
     "suggest": "deno run --env-file=.env --allow-env --allow-net scripts/suggest_once.ts",
