@@ -49,6 +49,16 @@
   .msg.ok{background:var(--good-soft);color:var(--good)}
   .msg.err{background:var(--crit-soft);color:var(--crit)}
 
+  .help{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:0 16px;margin:16px 0 0}
+  .help>summary{cursor:pointer;padding:14px 0;font-weight:650;font-size:14px;color:var(--ink);list-style:none;display:flex;align-items:center;gap:8px}
+  .help>summary::-webkit-details-marker{display:none}
+  .help>summary::before{content:"❔";font-size:15px}
+  .help .hbody{padding:0 0 14px;font-size:13.5px;color:var(--ink-2);line-height:1.6}
+  .help .hbody>p{margin:0 0 6px}
+  .help h4{margin:14px 0 4px;font-size:11.5px;font-family:var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--accent)}
+  .help ul{margin:2px 0;padding-left:18px}
+  .help li{margin:3px 0}
+  .help b{color:var(--ink)}
   .bar{display:flex;gap:8px;align-items:center;margin:18px 0 16px;flex-wrap:wrap}
   .tab{border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;color:var(--ink-2)}
   .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
@@ -205,6 +215,7 @@ function render() {
   top.innerHTML = '<div><div class="eyebrow">Simployer · Gate 1</div><h1>Coach review</h1></div>' +
     '<div class="who"><span>' + esc(meEmail || "") + '</span><button class="btn small" id="out">Sign out</button></div>';
   app.appendChild(top);
+  app.appendChild(helpPanel());
 
   var bar = el("div", "bar");
   bar.appendChild(tabEl("todo", "To review", todo.length));
@@ -345,6 +356,36 @@ function detail(label, text) {
   var d = document.createElement("details");
   var sum = document.createElement("summary"); sum.textContent = esc(label); d.appendChild(sum);
   d.appendChild(set(el("div", "body"), esc(text)));
+  return d;
+}
+function helpPanel() {
+  var d = document.createElement("details");
+  d.className = "help";
+  d.innerHTML =
+    '<summary>How to train the AI — read me</summary>' +
+    '<div class="hbody">' +
+    '<p>Your job here is to teach the AI what a <b>great reply</b> looks like, so it drafts closer to how <b>you</b> would handle a ticket. The ideal answer you write is the real training signal.</p>' +
+    '<h4>Verdict — "Would I have sent this?"</h4>' +
+    '<ul>' +
+    '<li><b>Usable</b> — I would have sent it as-is.</li>' +
+    '<li><b>Edited</b> — a good start, but I would change something before sending.</li>' +
+    '<li><b>Unusable</b> — wrong, misleading, or faster to start over.</li>' +
+    '</ul>' +
+    '<h4>Writing the ideal answer</h4>' +
+    '<ul>' +
+    '<li>Write the reply you actually <b>would have sent</b> — complete, ready to send, in the customer\'s language.</li>' +
+    '<li>Give the <b>real resolution and concrete steps</b>, not vague reassurance ("we\'ll look into it").</li>' +
+    '<li>Add the <b>operational knowledge the AI cannot know</b> — the known incident, the exact setting, the actual fix, who to route to (sales / consultant; legal → Simployer Expert). This is where the AI is weakest, so it is the most valuable thing you add.</li>' +
+    '<li>State only what is <b>true</b>. If something must be checked in the system, say what to verify instead of guessing.</li>' +
+    '<li>Do not invent facts or promise timelines you cannot keep.</li>' +
+    '</ul>' +
+    '<h4>Where to spend your time</h4>' +
+    '<ul>' +
+    '<li>Prioritise tickets the AI got <b>wrong</b> (Unusable / Edited) where you have a clear correct answer — those teach the most.</li>' +
+    '<li>A short, correct answer beats a long, hedged one.</li>' +
+    '<li>Tip: click <b>"use agent\'s reply"</b> to start the box from what was actually sent, then tighten it.</li>' +
+    '</ul>' +
+    '</div>';
   return d;
 }
 function isSpam(subject) {
