@@ -1,0 +1,14 @@
+{
+  "name": "freshdesk-ai-tools",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shareable-document generators for the Gate 1 project: one data spec -> Word / PowerPoint / Artifact-friendly HTML. Node-only (the product code is Deno); kept isolated here.",
+  "type": "commonjs",
+  "scripts": {
+    "render": "node render.js"
+  },
+  "dependencies": {
+    "docx": "^9.0.3",
+    "pptxgenjs": "^3.12.0"
+  }
+}
