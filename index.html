@@ -187,7 +187,7 @@ function signOut() {
 // ---- data ----
 async function loadData() {
   app.innerHTML = '<div class="empty">Loading tickets…</div>';
-  var cols = "id,ticket_id,ticket_url,subject,ticket_type,language,confidence,draft,agent_analysis,rationale,sources,qa_score,qa_verdict,qa_needs_review,verdict,verdict_at,agent_sent_reply,gold_answer,gold_answer_by,prompt_version,created_at";
+  var cols = "id,ticket_id,ticket_url,subject,ticket_type,language,confidence,draft,agent_analysis,rationale,sources,qa_score,qa_verdict,qa_needs_review,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,agent_sent_reply,gold_answer,gold_answer_by,prompt_version,created_at";
   try {
     var res = await api("/rest/v1/suggestions?select=" + cols + "&order=created_at.desc&limit=300");
     if (res.status === 401) { signOut(); return; }
@@ -206,9 +206,16 @@ async function loadData() {
 }
 
 function render() {
-  var todo = rows.filter(function (r) { return !r.verdict; });
+  var todo = rows.filter(function (r) { return !r.verdict && r.prompt_version !== "agent-scan"; });
   var done = rows.filter(function (r) { return r.verdict; });
-  var list = tab === "todo" ? todo : tab === "done" ? done : rows;
+  // Rewrite queue: agent replies scored by the QA coach, worst-first, no ideal answer yet.
+  var rewrite = rows.filter(function (r) {
+    return r.agent_qa_score != null && !(r.gold_answer && r.gold_answer.trim());
+  }).sort(function (a, b) {
+    var ar = a.agent_qa_needs_review ? 1 : 0, br = b.agent_qa_needs_review ? 1 : 0;
+    return br - ar || (a.agent_qa_score || 0) - (b.agent_qa_score || 0);
+  });
+  var list = tab === "todo" ? todo : tab === "done" ? done : tab === "rewrite" ? rewrite : rows;
   app.innerHTML = "";
 
   var top = el("header", "top");
@@ -220,6 +227,7 @@ function render() {
   var bar = el("div", "bar");
   bar.appendChild(tabEl("todo", "To review", todo.length));
   bar.appendChild(tabEl("done", "Judged", done.length));
+  bar.appendChild(tabEl("rewrite", "Rewrite", rewrite.length));
   bar.appendChild(tabEl("all", "All", rows.length));
   var c = el("div", "count"); c.textContent = rows.length + " loaded";
   bar.appendChild(c);
@@ -257,6 +265,7 @@ function cardEl(r) {
   tags.appendChild(tag((r.language || "—").toUpperCase()));
   tags.appendChild(tag("conf: " + (r.confidence || "—"), "c-" + (r.confidence || "none")));
   if (r.qa_score != null) tags.appendChild(tag("QA " + r.qa_score + " · " + (r.qa_verdict || ""), "qa" + (r.qa_needs_review ? " review" : "")));
+  if (r.agent_qa_score != null) tags.appendChild(tag("agent QA " + r.agent_qa_score, "qa" + (r.agent_qa_needs_review ? " review" : "")));
   tags.appendChild(tag(r.prompt_version || ""));
   card.appendChild(tags);
 
@@ -301,6 +310,12 @@ function cardEl(r) {
     var useSent = el("button", "link"); useSent.textContent = "use agent's reply";
     useSent.onclick = function () { ta.value = r.agent_sent_reply; };
     gbar.appendChild(useSent);
+  }
+  var rec = r.agent_qa_assessment && r.agent_qa_assessment.recommendedReply;
+  if (rec) {
+    var useRec = el("button", "link"); useRec.textContent = "start from AI suggestion";
+    useRec.onclick = function () { ta.value = rec; };
+    gbar.appendChild(useRec);
   }
   gbar.appendChild(st); gold.appendChild(gbar); card.appendChild(gold);
 
