@@ -158,7 +158,7 @@ async function pollOnce(cfg: Config): Promise<Summary> {
   // Only the monitored agent's tickets, and never auto-generated call-log/receipt
   // tickets (they carry no question — user decision 2026-07-22).
   const mine = updated
-    .filter((t) => monitoredIds.has(t.responder_id))
+    .filter((t) => monitoredIds.has(t.responder_id ?? -1))
     .filter((t) => !isIgnorableTicket(t.subject, cfg.excludeSubjects));
   const summary: Summary = {
     dry_run: cfg.dryRun,
