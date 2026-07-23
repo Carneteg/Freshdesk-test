@@ -2,9 +2,13 @@
 //
 // The private note carries three links (👍/✏️/👎), each pointing here with the
 // suggestion's unguessable feedback_token and a verdict. Clicking one writes the
-// verdict straight into `suggestions` and shows a small confirmation page. This is
-// the "would I have sent this?" signal the whole experiment exists to collect (§8),
-// and the corpus a Gate 2 learning loop would train on.
+// verdict straight into `suggestions` and shows a short confirmation. This is the
+// "would I have sent this?" signal the whole experiment exists to collect (§8), and
+// the corpus a Gate 2 learning loop would train on.
+//
+// The confirmation is PLAIN TEXT on purpose: Supabase's edge-runtime would not
+// reliably serve our HTML as text/html (it rendered as raw source in the browser),
+// so a clean plain-text response is the robust choice for a throwaway confirm tab.
 //
 // Deploy with --no-verify-jwt: the agent clicks from their browser (no Supabase
 // JWT). Access is gated by the per-note token, which only appears in the private
@@ -18,17 +22,11 @@ const VERDICTS: Record<string, string> = {
   unusable: "Would not send",
 };
 
-function page(title: string, heading: string, body: string, status = 200): Response {
-  const html = `<!doctype html><html><head><meta charset="utf-8">` +
-    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
-    `<title>${title}</title></head><body>` +
-    `<div style="font-family:system-ui,-apple-system,sans-serif;max-width:32rem;` +
-    `margin:4rem auto;padding:0 1rem;text-align:center;color:#1a1a1a">` +
-    `<h2 style="margin-bottom:.5rem">${heading}</h2>${body}</div></body></html>`;
-  return new Response(html, {
-    status,
-    headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
-  });
+function text(body: string, status = 200): Response {
+  const headers = new Headers();
+  headers.set("Content-Type", "text/plain; charset=utf-8");
+  headers.set("Cache-Control", "no-store");
+  return new Response(body, { status, headers });
 }
 
 Deno.serve(async (req: Request) => {
@@ -37,13 +35,13 @@ Deno.serve(async (req: Request) => {
   const verdict = url.searchParams.get("v") ?? "";
 
   if (!token || !(verdict in VERDICTS)) {
-    return page("Feedback", "Invalid link", "<p>This feedback link is missing or malformed.</p>", 400);
+    return text("This feedback link is missing or malformed.", 400);
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
   if (!supabaseUrl || !serviceKey) {
-    return page("Feedback", "Not configured", "<p>The feedback service is not configured.</p>", 500);
+    return text("The feedback service is not configured.", 500);
   }
 
   try {
@@ -57,20 +55,19 @@ Deno.serve(async (req: Request) => {
       .maybeSingle();
 
     if (error) {
-      return page("Feedback", "Couldn't record that", "<p>Something went wrong saving your verdict. Please try again.</p>", 500);
+      return text("Something went wrong saving your verdict. Please try again.", 500);
     }
     if (!data) {
-      return page("Feedback", "Link not found", "<p>We couldn't find a matching suggestion — this may be an old or already-superseded note.</p>", 404);
+      return text("We couldn't find a matching suggestion — this may be an old or already-superseded note.", 404);
     }
 
     const label = VERDICTS[verdict];
-    return page(
-      "Feedback recorded",
-      `✅ Recorded: ${label}`,
-      `<p>Thanks — your verdict on ticket #${data.ticket_id} is saved. You can close this tab.</p>` +
-        `<p style="color:#666;font-size:.9em">Changed your mind? Just click a different option in the note.</p>`,
+    return text(
+      `✅ Recorded: ${label}.\n\n` +
+        `Your verdict on ticket #${data.ticket_id} is saved — you can close this tab.\n\n` +
+        `Changed your mind? Just click a different option in the note.`,
     );
   } catch (_e) {
-    return page("Feedback", "Couldn't record that", "<p>Something went wrong. Please try again.</p>", 500);
+    return text("Something went wrong. Please try again.", 500);
   }
 });
