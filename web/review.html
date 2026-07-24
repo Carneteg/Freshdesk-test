@@ -141,6 +141,18 @@
   .spambtn:hover{background:var(--crit);color:#fff}
   .spambtn::before{content:"🚫 "}
   kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--ink)}
+  /* structured verdict: reason codes + critical flag */
+  .reasons-panel{width:100%;border-top:1px dashed var(--border);margin-top:10px;padding-top:10px}
+  .reasons-panel .rl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);display:block;margin-bottom:6px}
+  .rchips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+  .rchip{border:1px solid var(--border);background:var(--surface);color:var(--ink-2);border-radius:20px;padding:4px 11px;font-size:12px;font-weight:600}
+  .rchip:hover{border-color:var(--warn)}
+  .rchip.on{background:var(--warn-soft);border-color:var(--warn);color:var(--warn)}
+  .crit-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+  .crit-row .cl{font-size:12px;font-weight:700;color:var(--crit)}
+  .crit-row select{font-family:inherit;font-size:12.5px;padding:6px 10px;border:1.5px solid var(--crit);border-radius:6px;background:var(--crit-soft);color:var(--crit);font-weight:650}
+  .reasons-panel textarea.other{min-height:44px;font-size:13px;margin-bottom:2px}
+  .card.critical{box-shadow:inset 4px 0 0 var(--crit),var(--shadow)}
 </style>
 </head>
 <body>
@@ -156,11 +168,39 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2025-07-24-golden4";
+var APP_VERSION = "v2025-07-24-verdict";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
 var rows = [], tab = "todo", token = null, refreshToken = null, meEmail = null;
+
+// Columns fetched for each suggestion (used by loadData AND single-row reloads).
+var COLS = "id,ticket_id,ticket_url,subject,customer_message,ticket_type,language,confidence,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,prompt_version,created_at";
+
+// Why an edited/unusable reply fell short — slug + Swedish label (CLAUDE.md / plan 1.3).
+var REASONS = [
+  ["wrong_fact", "Felaktig fakta"], ["unfounded_assumption", "Obelagt antagande"],
+  ["wrong_cause", "Felaktig problemorsak"], ["wrong_solution", "Fel lösning"],
+  ["wrong_incident", "Fel incident"], ["stale_incident", "Föråldrad incidentstatus"],
+  ["wrong_routing", "Fel routning"], ["missed_question", "Missad kundfråga"],
+  ["missed_check", "Missad kontrollpunkt"], ["wrong_language", "Fel språk"],
+  ["weak_tone", "Svag ton"], ["too_long", "För långt/otydligt"],
+  ["security_privacy", "Säkerhets-/integritetsrisk"], ["should_have_abstained", "AI borde ha avstått"],
+  ["attachment_unreadable", "Bilaga kunde inte granskas"], ["insufficient_source", "Otillräcklig kunskapskälla"],
+];
+// Severe errors — any one of these forces the verdict to unusable (enforced in the DB).
+var CRITICALS = [
+  ["legal_advice", "Felaktig juridisk rådgivning"], ["wrongful_deletion", "Felaktig radering"],
+  ["unauthorized_access", "Obehörig åtkomst"], ["pii_risk", "Personuppgiftsrisk"],
+  ["false_promise", "Felaktigt kundlöfte"], ["invented_feature", "Påhittad produktfunktion"],
+];
+var reasonLabel = function (slug) { for (var i = 0; i < REASONS.length; i++) if (REASONS[i][0] === slug) return REASONS[i][1]; return slug; };
+
+// Rows with unsaved ideal-answer edits — used to warn before leaving the page.
+var dirtyGold = {};
+window.addEventListener("beforeunload", function (e) {
+  for (var k in dirtyGold) { if (dirtyGold[k]) { e.preventDefault(); e.returnValue = ""; return ""; } }
+});
 // view state for search / filter / sort / keyboard (Fas 2)
 var search = "", fLang = "", fType = "", fConf = "", sortBy = "newest";
 var shown = [], cardEls = [], activeIdx = -1;
@@ -260,9 +300,8 @@ function signOut() {
 // ---- data ----
 async function loadData() {
   app.innerHTML = '<div class="empty">Loading tickets…</div>';
-  var cols = "id,ticket_id,ticket_url,subject,customer_message,ticket_type,language,confidence,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,agent_sent_reply,gold_answer,gold_answer_by,is_spam,prompt_version,created_at";
   try {
-    var res = await api("/rest/v1/suggestions?select=" + cols + "&order=created_at.desc&limit=300");
+    var res = await api("/rest/v1/suggestions?select=" + COLS + "&order=created_at.desc&limit=300");
     if (res.status === 401) { signOut(); return; }
     var data = await res.json();
     if (!res.ok) {
@@ -443,7 +482,8 @@ document.addEventListener("keydown", function (e) {
   else if (k === "u" || k === "e" || k === "n") {
     if (activeIdx < 0) return;
     var v = k === "u" ? "usable" : k === "e" ? "edited" : "unusable";
-    e.preventDefault(); setVerdict(shown[activeIdx], v, cardEls[activeIdx]);
+    var c = cardEls[activeIdx];
+    e.preventDefault(); if (c && c._setVerdict) c._setVerdict(v);
   } else if (k === "g") {
     if (activeIdx < 0) return;
     var ta = cardEls[activeIdx].querySelector("textarea");
@@ -563,17 +603,47 @@ function cardEl(r) {
   gbar.appendChild(gactions);
   gbar.appendChild(st); gold.appendChild(gbar); card.appendChild(gold);
 
+  // ---- structured verdict: buttons + reason codes + critical flag ----
+  // Per-card review state (kept in closure; committed together via saveReview).
+  var arr = Array.isArray(r.verdict_reasons) ? r.verdict_reasons : [];
+  var selReasons = {};
+  var otherText = "";
+  for (var ri = 0; ri < arr.length; ri++) {
+    if (typeof arr[ri] === "string" && arr[ri].indexOf("other:") === 0) otherText = arr[ri].slice(6);
+    else selReasons[arr[ri]] = true;
+  }
+  var critical = r.critical_flag || "";
+
+  function reasonsArray() {
+    var out = [];
+    for (var i = 0; i < REASONS.length; i++) if (selReasons[REASONS[i][0]]) out.push(REASONS[i][0]);
+    if (otherText.trim()) out.push("other:" + otherText.trim());
+    return out;
+  }
+  // Commit verdict + reasons + critical together, with optimistic locking.
+  function commit(newVerdict) {
+    var verdict = newVerdict !== undefined ? newVerdict : r.verdict;
+    if (critical) verdict = "unusable"; // the DB enforces this too
+    // instant feedback: highlight the chosen verdict and reveal the reasons panel
+    var bs = card.querySelectorAll(".vbtn");
+    for (var i = 0; i < bs.length; i++) bs[i].className = "vbtn" + (bs[i].getAttribute("data-v") === verdict ? " sel" : "");
+    var show = verdict === "edited" || verdict === "unusable" || reasonsArray().length > 0 || !!critical;
+    var panel = card._reasonsPanel; if (panel) panel.style.display = show ? "" : "none";
+    saveReview(r, card, { verdict: verdict, verdict_reasons: reasonsArray(), critical_flag: critical || null });
+  }
+  card._setVerdict = commit; // so keyboard shortcuts can trigger it
+
   var actions = el("div", "actions");
   actions.appendChild(set(el("span", "lab"), "Would you have sent this?"));
   ["usable", "edited", "unusable"].forEach(function (v) {
     var b = el("button", "vbtn" + (r.verdict === v ? " sel" : ""));
     b.setAttribute("data-v", v); b.textContent = v.charAt(0).toUpperCase() + v.slice(1);
-    b.onclick = function () { setVerdict(r, v, card); };
+    b.onclick = function () { commit(v); };
     actions.appendChild(b);
   });
-  var state = el("span", "vstate"); state.textContent = r.verdict ? "recorded: " + r.verdict : "";
+  var state = el("span", "vstate");
+  state.textContent = r.verdict ? ("recorded: " + r.verdict + (r.verdict_by ? " · " + r.verdict_by : "")) : "";
   actions.appendChild(state);
-  // "Spam" hides the ticket everywhere and keeps it out of the eval + rewrite queue.
   var spam = el("button", "spambtn"); spam.textContent = "Spam"; spam.title = "Mark as spam / noise and hide it";
   spam.onclick = function () { markSpam(r); };
   actions.appendChild(spam);
@@ -584,49 +654,129 @@ function cardEl(r) {
     actions.appendChild(link);
   }
   card.appendChild(actions);
+
+  // Reasons panel — shown for edited/unusable (or whenever reasons/critical exist).
+  var rp = el("div", "reasons-panel");
+  function panelVisible() { return r.verdict === "edited" || r.verdict === "unusable" || reasonsArray().length > 0 || !!critical; }
+  rp.style.display = panelVisible() ? "" : "none";
+  rp.appendChild(set(el("span", "rl"), "Varför? (felskäl — flera möjliga)"));
+  var chips = el("div", "rchips");
+  REASONS.forEach(function (rc) {
+    var c = el("button", "rchip" + (selReasons[rc[0]] ? " on" : ""));
+    c.textContent = rc[1];
+    c.onclick = function () {
+      selReasons[rc[0]] = !selReasons[rc[0]];
+      c.className = "rchip" + (selReasons[rc[0]] ? " on" : "");
+      commit();
+    };
+    chips.appendChild(c);
+  });
+  rp.appendChild(chips);
+
+  var critRow = el("div", "crit-row");
+  critRow.appendChild(set(el("span", "cl"), "⚠ Kritiskt fel:"));
+  var csel = document.createElement("select");
+  var c0 = document.createElement("option"); c0.value = ""; c0.textContent = "(inget)"; csel.appendChild(c0);
+  CRITICALS.forEach(function (cc) {
+    var o = document.createElement("option"); o.value = cc[0]; o.textContent = cc[1];
+    if (cc[0] === critical) o.selected = true;
+    csel.appendChild(o);
+  });
+  csel.onchange = function () { critical = csel.value; commit(); };
+  critRow.appendChild(csel);
+  rp.appendChild(critRow);
+
+  var other = document.createElement("textarea");
+  other.className = "other"; other.placeholder = "Annat / fritext…"; other.value = otherText;
+  other.oninput = function () {
+    otherText = other.value;
+    if (r._reasonTimer) clearTimeout(r._reasonTimer);
+    r._reasonTimer = setTimeout(function () { r._reasonTimer = null; commit(); }, 1000);
+  };
+  rp.appendChild(other);
+  card.appendChild(rp);
+  card._reasonsPanel = rp; card._panelVisible = panelVisible;
+  if (critical) card.classList.add("critical");
   return card;
 }
 
-async function setVerdict(r, v, card) {
-  var prev = r.verdict;
-  r.verdict = v; r.verdict_at = new Date().toISOString();
-  var btns = card.querySelectorAll(".vbtn");
-  for (var i = 0; i < btns.length; i++) btns[i].className = "vbtn" + (btns[i].getAttribute("data-v") === v ? " sel" : "");
-  card.querySelector(".vstate").textContent = "saving…";
+// Save verdict + reasons + critical atomically, with optimistic locking so a second
+// reviewer can't silently overwrite. Filters on the review_version we last read; a
+// stale write matches 0 rows → we reload and tell the reviewer.
+async function saveReview(r, card, patch) {
+  var vs = card.querySelector(".vstate");
+  vs.textContent = "sparar…";
+  var body = { verdict: patch.verdict, verdict_reasons: patch.verdict_reasons, critical_flag: patch.critical_flag, review_version: (r.review_version || 0) + 1 };
   try {
-    var res = await api("/rest/v1/suggestions?id=eq." + r.id, {
-      method: "PATCH", headers: { Prefer: "return=minimal" },
-      body: JSON.stringify({ verdict: v, verdict_at: r.verdict_at }),
+    var res = await api("/rest/v1/suggestions?id=eq." + r.id + "&review_version=eq." + (r.review_version || 0) + "&select=" + COLS, {
+      method: "PATCH", headers: { Prefer: "return=representation" },
+      body: JSON.stringify(body),
     });
-    if (!res.ok) { r.verdict = prev; card.querySelector(".vstate").textContent = "save failed: " + (await res.text()); }
-    else card.querySelector(".vstate").textContent = "recorded: " + v;
-  } catch (e) { r.verdict = prev; card.querySelector(".vstate").textContent = "save failed: " + e.message; }
+    if (!res.ok) { vs.textContent = "kunde inte spara: " + (await res.text()); return; }
+    var out = await res.json();
+    if (!out.length) { // someone else updated the row first
+      vs.textContent = "någon annan hann före — laddar om…";
+      await reloadRow(r, card);
+      return;
+    }
+    Object.assign(r, out[0]);
+    // reflect verdict button selection + state text
+    var btns = card.querySelectorAll(".vbtn");
+    for (var i = 0; i < btns.length; i++) btns[i].className = "vbtn" + (btns[i].getAttribute("data-v") === r.verdict ? " sel" : "");
+    vs.textContent = "sparat: " + (r.verdict || "—") + (r.verdict_by ? " · " + r.verdict_by : "");
+    card.classList.toggle("critical", !!r.critical_flag);
+    if (card._reasonsPanel && card._panelVisible) card._reasonsPanel.style.display = card._panelVisible() ? "" : "none";
+  } catch (e) { vs.textContent = "kunde inte spara: " + e.message; }
 }
 
-async function saveGold(r, text, st, mark) {
-  st.textContent = "saving…";
+// Re-fetch one row and swap its card in place (after a save conflict).
+async function reloadRow(r, card) {
+  try {
+    var res = await api("/rest/v1/suggestions?id=eq." + r.id + "&select=" + COLS);
+    var out = await res.json();
+    if (out && out[0]) {
+      Object.assign(r, out[0]);
+      var fresh = cardEl(r);
+      var i = cardEls.indexOf(card);
+      if (i >= 0) cardEls[i] = fresh;
+      card.replaceWith(fresh);
+    }
+  } catch (e) { /* leave the stale card; the status line already told the reviewer */ }
+}
+
+async function saveGold(r, text, st, mark, _retried) {
+  st.textContent = "Sparar…";
+  dirtyGold[r.id] = true; // unsaved until the write confirms
   try {
     var res = await api("/rest/v1/suggestions?id=eq." + r.id, {
       method: "PATCH", headers: { Prefer: "return=minimal" },
       body: JSON.stringify({ gold_answer: text }),
     });
-    if (!res.ok) { st.textContent = "save failed: " + (await res.text()); return; }
+    if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
     r.gold_answer = text;
+    delete dirtyGold[r.id];
     var has = !!text.trim();
-    st.textContent = has ? "saved ✓" : "cleared";
-    // reflect the golden state on the button + card so it's obvious it took
+    st.textContent = has ? "Sparat ✓" : "Rensat";
     if (mark) {
       mark.className = "btn golden" + (has ? " is-set" : "");
       mark.textContent = has ? "★ Golden — saved" : "★ Mark as golden";
       var card = mark.closest(".card");
       if (card) card.classList.toggle("golden", has);
     }
-  } catch (e) { st.textContent = "save failed: " + e.message; }
+  } catch (e) {
+    // network blip → one automatic retry after a short pause; text is kept (dirty).
+    if (!_retried) {
+      st.textContent = "Nätverksfel — försöker igen…";
+      setTimeout(function () { saveGold(r, text, st, mark, true); }, 1500);
+    } else {
+      st.textContent = "Kunde inte spara (nätverksfel) — texten är kvar, försök igen.";
+    }
+  }
 }
 
 // Debounced autosave: save ~1s after the reviewer stops typing (per-row timer).
 function scheduleGoldSave(r, ta, st, mark) {
-  st.textContent = "saving…";
+  st.textContent = "Ändrat…"; dirtyGold[r.id] = true;
   if (r._goldTimer) clearTimeout(r._goldTimer);
   r._goldTimer = setTimeout(function () { r._goldTimer = null; saveGold(r, ta.value, st, mark); }, 1000);
 }
@@ -665,6 +815,7 @@ function helpPanel() {
     '<li><b>Edited</b> — a good start, but I would change something before sending.</li>' +
     '<li><b>Unusable</b> — wrong, misleading, or faster to start over.</li>' +
     '</ul>' +
+    '<p>For <b>Edited</b> or <b>Unusable</b>, tick the <b>reason codes</b> (why it fell short) — this is what lets us see <i>why</i> the AI fails, not just that it did. If the reply carries a <b>serious risk</b> (wrong legal advice, wrongful deletion, unauthorised access, PII risk, a false promise, or an invented feature), pick a <b>Kritiskt fel</b> — that forces the verdict to Unusable automatically. Verdicts autosave and are stamped with your name; if two reviewers open the same ticket, the second save is rejected and the card reloads so no one is silently overwritten.</p>' +
     '<h4>Writing the ideal answer</h4>' +
     '<ul>' +
     '<li>Write the reply you actually <b>would have sent</b> — complete, ready to send, in the customer\'s language.</li>' +

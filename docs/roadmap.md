@@ -4,6 +4,13 @@
 Everything here is deferred per CLAUDE.md §2 ("Freshdesk only" in Gate 1) and needs
 API access + a DPA review per source — weeks of calendar time each.
 
+> **Scope note.** This file covers the *data-source expansion* track only. The
+> broader gate-by-gate quality, evaluation, governance and scaling plan (Gate 1→6,
+> Fas 1–8, roles, backlog, 90-day decision point) lives in
+> [`coach-scaling-plan.md`](./coach-scaling-plan.md). Per Tobias the near-term
+> Gate 2 focus is **AI + learning** (that plan), not these integrations — this
+> track stays deferred until the coach clears its bar.
+
 ## Guiding principles (read first)
 
 - **Gate 1 must clear its bar first.** Do not invest in integrations until
