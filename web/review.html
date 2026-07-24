@@ -127,15 +127,19 @@
   .progress .fill{height:100%;background:var(--good);border-radius:20px;transition:width .25s}
   /* active card for keyboard navigation (#4) */
   .card.active{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 4px var(--accent-soft),var(--shadow)}
-  .goldactions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-  .spambtn{margin-left:6px;border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--ink-3)}
-  .spambtn:hover{border-color:var(--crit);color:var(--crit)}
-  /* golden action — deliberately prominent so it's easy to find */
-  .btn.golden{background:#B8860B;border-color:#B8860B;color:#fff}
-  .btn.golden:hover{filter:brightness(1.08)}
-  .btn.golden.is-set{background:var(--good);border-color:var(--good)}
-  .tag.golden{background:#B8860B;color:#fff}
-  .card.golden{border-color:#B8860B;box-shadow:inset 3px 0 0 #B8860B,var(--shadow)}
+  .goldactions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  /* golden action — the hero button: big, gold, unmistakable */
+  .btn.golden{background:#C99700;border-color:#B8860B;color:#1a1400;font-size:14px;font-weight:750;
+    padding:10px 18px;border-radius:8px;letter-spacing:.01em;box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(201,151,0,.35)}
+  .btn.golden:hover{filter:brightness(1.06);transform:translateY(-1px)}
+  .btn.golden.is-set{background:var(--good);border-color:var(--good);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(47,133,90,.3)}
+  .tag.golden{background:#C99700;color:#1a1400;font-weight:700}
+  .card.golden{border-color:#C99700;box-shadow:inset 4px 0 0 #C99700,var(--shadow)}
+  /* spam action — clearly a distinct danger action, not muted */
+  .spambtn{margin-left:6px;border:1.5px solid var(--crit);background:var(--crit-soft);color:var(--crit);
+    border-radius:8px;padding:8px 16px;font-size:13.5px;font-weight:700}
+  .spambtn:hover{background:var(--crit);color:#fff}
+  .spambtn::before{content:"🚫 "}
   kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--ink)}
 </style>
 </head>
@@ -152,7 +156,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2025-07-24-golden";
+var APP_VERSION = "v2025-07-24-golden4";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -531,7 +535,7 @@ function cardEl(r) {
   var best = (r.agent_sent_reply && r.agent_sent_reply.trim()) ? r.agent_sent_reply
     : (r.agent_qa_assessment && r.agent_qa_assessment.recommendedReply) ? r.agent_qa_assessment.recommendedReply
     : (r.draft && r.draft.trim()) ? r.draft : "";
-  var mark = el("button", "btn small golden" + (hasGold ? " is-set" : ""));
+  var mark = el("button", "btn golden" + (hasGold ? " is-set" : ""));
   mark.textContent = hasGold ? "★ Golden — saved" : "★ Mark as golden";
   mark.title = "Save this as the ideal training answer for the AI";
   mark.onclick = function () {
@@ -612,7 +616,7 @@ async function saveGold(r, text, st, mark) {
     st.textContent = has ? "saved ✓" : "cleared";
     // reflect the golden state on the button + card so it's obvious it took
     if (mark) {
-      mark.className = "btn small golden" + (has ? " is-set" : "");
+      mark.className = "btn golden" + (has ? " is-set" : "");
       mark.textContent = has ? "★ Golden — saved" : "★ Mark as golden";
       var card = mark.closest(".card");
       if (card) card.classList.toggle("golden", has);
@@ -677,6 +681,27 @@ function helpPanel() {
     '<li>The ideal answer <b>autosaves</b> ~1&nbsp;second after you stop typing (the Save button still works).</li>' +
     '<li>Use <b>Search</b> and the <b>Language / Type / Confidence / Sort</b> filters to find the tickets worth your time; the bar shows how many you have <b>granskade</b> (reviewed).</li>' +
     '<li>Junk that slipped through (absence replies, marketing bounces)? Hit <b>Spam</b> to hide it and keep it out of the stats.</li>' +
+    '</ul>' +
+    '<h4>★ Mark as golden — when &amp; why</h4>' +
+    '<p>Marking a ticket <b>golden</b> saves its ideal answer as <b>training material</b>: an exemplar the AI learns its style and approach from on <i>other</i> tickets. Use it when you have a reply that is genuinely how it should be done.</p>' +
+    '<ul>' +
+    '<li><b>Use it when</b> the answer in the box is correct, complete and ready to send — either the agent nailed it, or you have written/fixed it so it is right.</li>' +
+    '<li>The button saves whatever is in the box; if the box is empty it adopts the best reply already on the ticket (agent’s sent reply → AI suggestion → draft), so you can mark a good one in a single click.</li>' +
+    '<li><b>Don’t</b> mark it golden if the answer is vague, unverified or wrong — a bad exemplar teaches the AI the wrong thing. Fix it first, or leave it.</li>' +
+    '<li>A card shows a gold <b>★ Golden</b> badge and accent once saved; re-saving updates it.</li>' +
+    '</ul>' +
+    '<p><b>Agent’s reply vs golden.</b> The <i>“What the agent actually sent”</i> box (and the <b>use agent’s reply</b> link) is <b>reference and a starting point</b> — the reply that really went out. <b>Golden</b> is the answer <b>you endorse</b> as training material. Golden is always the end result if you want the AI to learn from it; the agent’s reply is just the fastest starting material when it’s already good.</p>' +
+    '<ul>' +
+    '<li><b>Agent’s reply is already excellent</b> (often Johanna’s) → click <b>★ Mark as golden</b> straight away (an empty box adopts the agent’s reply). One click = “this is how it should look.”</li>' +
+    '<li><b>Good but needs tightening</b> → <b>use agent’s reply</b> → edit → <b>★ Mark as golden</b>.</li>' +
+    '<li><b>Weak / wrong / missing</b> (solved by phone or in a private note) → write the ideal answer from scratch → <b>★ Mark as golden</b>. This is where you add the most: the operational knowledge that isn’t written down anywhere.</li>' +
+    '</ul>' +
+    '<h4>🚫 Spam — when &amp; why</h4>' +
+    '<p>Spam hides a ticket and keeps it out of the evaluation, the rewrite queue <b>and</b> future training runs. It is for <b>noise, not bad answers</b>.</p>' +
+    '<ul>' +
+    '<li><b>Use it when</b> the ticket is not a real support question: out-of-office / absence auto-replies, marketing bounces (“Re: Simployer Expert…”), automatic call-logs, or empty/duplicate notifications.</li>' +
+    '<li><b>Don’t</b> use Spam to dismiss a ticket the AI answered badly — that is what the <b>Unusable</b> verdict is for. Spam removes the ticket from the data entirely; a verdict keeps it as a learning signal.</li>' +
+    '<li>It asks for confirmation, then the ticket disappears from every tab and the ingest will skip it next time.</li>' +
     '</ul>' +
     '<h4>Keyboard shortcuts</h4>' +
     '<ul>' +
