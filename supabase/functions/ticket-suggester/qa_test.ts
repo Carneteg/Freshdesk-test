@@ -115,8 +115,10 @@ Deno.test("schema is strict with a 7-item scorecard carrying both id and name", 
   const card = QA_ASSESSMENT_JSON_SCHEMA.schema.properties.scorecard;
   assertEquals(card.minItems, 7);
   assertEquals(card.maxItems, 7);
-  assertEquals(card.items.properties.criterionId.enum, QA_CRITERIA.map((c) => c.id));
-  assertEquals(card.items.properties.criterion.enum, QA_CRITERIA.map((c) => c.name));
+  // The schema enums are readonly tuples (as const); compare as plain string arrays
+  // so assertEquals doesn't infer the fixed-length tuple type for both sides.
+  assertEquals<readonly string[]>(card.items.properties.criterionId.enum, QA_CRITERIA.map((c) => c.id));
+  assertEquals<readonly string[]>(card.items.properties.criterion.enum, QA_CRITERIA.map((c) => c.name));
 });
 
 Deno.test("system prompt encodes the accuracy override and verdict buckets", () => {
