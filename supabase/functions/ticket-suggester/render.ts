@@ -149,12 +149,28 @@ const CALL_LOG_SUBJECT = /^\s*(incoming|outgoing|missed) call with\b/i;
 // `unclear` noise (user report 2026-07-23). Match the standard mailer prefixes in
 // EN / NO / SV. These are the subject prefixes mail clients prepend automatically.
 const AUTO_REPLY_SUBJECT =
-  /^\s*(automatic reply|automatisk svar|automatiskt svar|autosvar|out of office|out-of-office|frånvaro|fr[aå]nvarande|ute av kontoret|auto[- ]?reply)\b/i;
+  /^\s*(automatic reply|automatisk svar|automatiskt svar|autosvar|out of office|out-of-office|frånvaro|fr[aå]nvarande|ute av kontoret|auto[- ]?reply|feriesvar|semestersvar|fraværsmelding|fraværsassistent|semesterhälsning)\b/i;
+
+// Replies to our OWN Simployer Expert MARKETING campaigns (e.g. an out-of-office
+// bounce whose subject is just "Re: <campaign tagline>", so it has no auto-reply
+// prefix — user report on #86174). These campaign taglines are outbound-only, so
+// any inbound ticket carrying one is noise. Matched ANYWHERE in the subject.
+// NOTE: deliberately the full taglines, not "simployer expert" alone — real
+// tickets like "Tilgang til Simployer Expert" must NOT be dropped.
+const MARKETING_SUBJECT = [
+  "det sier mye om deg at du bruker simployer expert",
+  "smarte måter å få mer ut av simployer expert",
+  "dette venter på deg i simployer expert",
+  "oppdag alt simployer expert har å tilby",
+  "slik får du mest ut av simployer expert",
+  "upptäck allt som simployer expert har att erbjuda",
+];
 
 export function isIgnorableTicket(subject: string, extraSubstrings: string[] = []): boolean {
   const s = subject ?? "";
   if (CALL_LOG_SUBJECT.test(s) || AUTO_REPLY_SUBJECT.test(s)) return true;
   const lower = s.toLowerCase();
+  if (MARKETING_SUBJECT.some((m) => lower.includes(m))) return true;
   return extraSubstrings.some((x) => x && lower.includes(x));
 }
 

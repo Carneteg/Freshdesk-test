@@ -15,6 +15,8 @@ import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.t
 import {
   classifyUsage,
   isIgnorableTicket,
+  latestCustomerMessage,
+  looksLikeAutoReply,
   replayTurn,
   similarity,
 } from "../supabase/functions/ticket-suggester/render.ts";
@@ -141,11 +143,16 @@ for (const id of ids) {
   }
 }
 
-// Never handle auto-generated call-log/receipt tickets, even if passed explicitly.
-const kept = tickets.filter((t) => !isIgnorableTicket(t.subject, excludeSubjects));
+// Never handle auto-generated noise: call-log/receipt/marketing-reply tickets (by
+// subject) or out-of-office/absence auto-replies (detected in the customer body,
+// which catches "Re: <campaign>" bounces that carry no auto-reply prefix, e.g. #86174).
+const kept = tickets.filter((t) =>
+  !isIgnorableTicket(t.subject, excludeSubjects) &&
+  !looksLikeAutoReply(latestCustomerMessage(t).text)
+);
 const dropped = tickets.length - kept.length;
 if (dropped) {
-  console.log(`\n(excluded ${dropped} call-log/receipt ticket(s) — not handled by this framework)`);
+  console.log(`\n(excluded ${dropped} call-log/receipt/auto-reply ticket(s) — not handled by this framework)`);
 }
 
 // Known-incidents playbook (knowledge layer) — only when Supabase is configured.
