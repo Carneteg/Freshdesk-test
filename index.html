@@ -151,6 +151,8 @@
 var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
+// Bump on each deploy so we can tell from the page which build is loaded (cache check).
+var APP_VERSION = "v2025-07-24-golden";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -290,7 +292,7 @@ function render() {
   app.innerHTML = "";
 
   var top = el("header", "top");
-  top.innerHTML = '<div><div class="eyebrow">Simployer · Gate 1</div><h1>Coach review</h1></div>' +
+  top.innerHTML = '<div><div class="eyebrow">Simployer · Gate 1 · ' + APP_VERSION + '</div><h1>Coach review</h1></div>' +
     '<div class="who"><span>' + esc(meEmail || "") + '</span><button class="btn small" id="out">Sign out</button></div>';
   app.appendChild(top);
   app.appendChild(helpPanel());
