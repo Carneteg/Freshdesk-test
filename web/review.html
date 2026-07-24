@@ -130,6 +130,12 @@
   .goldactions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
   .spambtn{margin-left:6px;border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--ink-3)}
   .spambtn:hover{border-color:var(--crit);color:var(--crit)}
+  /* golden action — deliberately prominent so it's easy to find */
+  .btn.golden{background:#B8860B;border-color:#B8860B;color:#fff}
+  .btn.golden:hover{filter:brightness(1.08)}
+  .btn.golden.is-set{background:var(--good);border-color:var(--good)}
+  .tag.golden{background:#B8860B;color:#fff}
+  .card.golden{border-color:#B8860B;box-shadow:inset 3px 0 0 #B8860B,var(--shadow)}
   kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--ink)}
 </style>
 </head>
@@ -458,6 +464,8 @@ function cardEl(r) {
   if (r.qa_score != null) tags.appendChild(tag("QA " + r.qa_score, qaCls(r.qa_score, r.qa_needs_review)));
   if (r.agent_qa_score != null) tags.appendChild(tag("agent QA " + r.agent_qa_score, qaCls(r.agent_qa_score, r.agent_qa_needs_review)));
   tags.appendChild(tag(r.prompt_version || ""));
+  var hasGold = !!(r.gold_answer && r.gold_answer.trim());
+  if (hasGold) { card.classList.add("golden"); tags.appendChild(tag("★ Golden", "golden")); }
   card.appendChild(tags);
 
   // #2 — the customer's actual question, at the top, distinct from the AI draft.
@@ -510,24 +518,31 @@ function cardEl(r) {
   var st = el("span", "st");
   st.textContent = r.gold_answer ? ("saved" + (r.gold_answer_by ? " · " + r.gold_answer_by : "")) : "";
   // autosave (#5): debounce ~1s after typing stops; the manual button stays as a fallback.
-  ta.oninput = function () { scheduleGoldSave(r, ta, st); };
+  ta.oninput = function () { scheduleGoldSave(r, ta, st, mark); };
   gold.appendChild(ta);
 
   var gbar = el("div", "goldbar");
   var gactions = el("div", "goldactions");
-  var save = el("button", "btn small"); save.textContent = "Save ideal answer";
-  save.onclick = function () { if (r._goldTimer) { clearTimeout(r._goldTimer); r._goldTimer = null; } saveGold(r, ta.value, st); };
-  gactions.appendChild(save);
-  // "Mark as golden": adopt the best reply we already have as the ideal answer, in one click.
+  // "Mark as golden" is the primary, always-visible action. It saves whatever is in
+  // the box; if the box is empty it adopts the best reply we already have (agent's
+  // sent reply → AI suggestion → draft), so one click is enough on most tickets.
   var best = (r.agent_sent_reply && r.agent_sent_reply.trim()) ? r.agent_sent_reply
     : (r.agent_qa_assessment && r.agent_qa_assessment.recommendedReply) ? r.agent_qa_assessment.recommendedReply
     : (r.draft && r.draft.trim()) ? r.draft : "";
-  if (best) {
-    var mark = el("button", "btn small"); mark.textContent = "★ Mark as golden";
-    mark.title = "Adopt the reply above as the ideal answer and save it";
-    mark.onclick = function () { ta.value = best; saveGold(r, best, st); };
-    gactions.appendChild(mark);
-  }
+  var mark = el("button", "btn small golden" + (hasGold ? " is-set" : ""));
+  mark.textContent = hasGold ? "★ Golden — saved" : "★ Mark as golden";
+  mark.title = "Save this as the ideal training answer for the AI";
+  mark.onclick = function () {
+    if (r._goldTimer) { clearTimeout(r._goldTimer); r._goldTimer = null; }
+    var val = ta.value.trim() ? ta.value : best;
+    if (!val) { ta.focus(); st.textContent = "write the ideal answer first"; return; }
+    ta.value = val; saveGold(r, val, st, mark);
+  };
+  gactions.appendChild(mark);
+  var save = el("button", "btn small"); save.textContent = "Save";
+  save.title = "Save the text in the box";
+  save.onclick = function () { if (r._goldTimer) { clearTimeout(r._goldTimer); r._goldTimer = null; } saveGold(r, ta.value, st, mark); };
+  gactions.appendChild(save);
   if (r.agent_sent_reply) {
     var useSent = el("button", "link"); useSent.textContent = "use agent's reply";
     useSent.onclick = function () { ta.value = r.agent_sent_reply; };
@@ -582,7 +597,7 @@ async function setVerdict(r, v, card) {
   } catch (e) { r.verdict = prev; card.querySelector(".vstate").textContent = "save failed: " + e.message; }
 }
 
-async function saveGold(r, text, st) {
+async function saveGold(r, text, st, mark) {
   st.textContent = "saving…";
   try {
     var res = await api("/rest/v1/suggestions?id=eq." + r.id, {
@@ -590,15 +605,24 @@ async function saveGold(r, text, st) {
       body: JSON.stringify({ gold_answer: text }),
     });
     if (!res.ok) { st.textContent = "save failed: " + (await res.text()); return; }
-    r.gold_answer = text; st.textContent = text.trim() ? "saved ✓" : "cleared";
+    r.gold_answer = text;
+    var has = !!text.trim();
+    st.textContent = has ? "saved ✓" : "cleared";
+    // reflect the golden state on the button + card so it's obvious it took
+    if (mark) {
+      mark.className = "btn small golden" + (has ? " is-set" : "");
+      mark.textContent = has ? "★ Golden — saved" : "★ Mark as golden";
+      var card = mark.closest(".card");
+      if (card) card.classList.toggle("golden", has);
+    }
   } catch (e) { st.textContent = "save failed: " + e.message; }
 }
 
 // Debounced autosave: save ~1s after the reviewer stops typing (per-row timer).
-function scheduleGoldSave(r, ta, st) {
+function scheduleGoldSave(r, ta, st, mark) {
   st.textContent = "saving…";
   if (r._goldTimer) clearTimeout(r._goldTimer);
-  r._goldTimer = setTimeout(function () { r._goldTimer = null; saveGold(r, ta.value, st); }, 1000);
+  r._goldTimer = setTimeout(function () { r._goldTimer = null; saveGold(r, ta.value, st, mark); }, 1000);
 }
 
 // Mark a ticket as spam/noise: persist is_spam=true, then drop it from the list.
