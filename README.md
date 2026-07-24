@@ -74,6 +74,28 @@ REPLAY_TICKET_IDS=1001,1002,1003,1004,1005 deno task replay
 For each ticket it prints the suggestion (with confidence + sources) next to
 what the agent actually sent, so you can compare.
 
+## Running batch jobs in the cloud (GitHub Actions) — no laptop
+
+The `replay`, `score-history` and `sync-tickets` jobs can be run from GitHub
+instead of locally in PowerShell — see `.github/workflows/batch-jobs.yml`.
+None of them post to Freshdesk; they read Freshdesk + OpenAI and write results to
+Supabase, exactly like a local run. Real ticket text is sent to OpenAI (DPA
+cleared, §11).
+
+**One-time setup — add these repo secrets** (Settings → Secrets and variables →
+Actions): `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`, `OPENAI_API_KEY`,
+`MY_AGENT_ID`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (optional:
+`OPENAI_MODEL`, defaults to `gpt-4o`).
+
+**Run it:** Actions tab → **Batch jobs** → *Run workflow* → pick the job
+(`score-history` / `replay` / `sync-tickets`), optionally set ticket ids, agent,
+count, or the replay toggles. Output (including the per-ticket log) shows in the
+run; results land in Supabase and are reviewed in the web app as usual.
+
+This takes the batch/eval work off your machine. The self-running **live poller**
+(deploy + `pg_cron`) is a separate, larger step — see Scheduling + GOLIVE.md, and
+note it needs the security review of the note/tag writes first.
+
 ## Running the poller locally
 
 ```bash
