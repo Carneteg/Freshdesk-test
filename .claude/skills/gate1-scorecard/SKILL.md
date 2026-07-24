@@ -22,6 +22,14 @@ Turns the four evaluation views into an honest read of the experiment.
    Non-zero = confident nonsense (the only genuinely dangerous output). Flag it.
 4. **usage_scorecard** — used/partly/not + coverage, as a secondary signal.
 5. **failures** — any rows are crashed runs; surface the ticket ids.
+6. **gate1_scorecard_by_cohort** — the number that actually gates Gate 1 is the
+   **`holdout`** row (the locked, leak-free eval set). Report holdout `usable_pct`
+   on its own; `learning`/`development` are for iteration, not the verdict.
+7. **coach_mode_scorecard** — verdict distribution per mode. Check that
+   `REPLY_READY` skews *usable* clearly more than `COACH_AGENT`; if not, the mode
+   gate is miscalibrated. Say so.
+8. **knowledge_gaps** — the top undocumented topics (why the coach couldn't ground
+   an answer). Surface the top few as "what to write", not as a grade of the AI.
 
 ## Report honestly
 - Only report numbers the query returns — **never invent or estimate**.

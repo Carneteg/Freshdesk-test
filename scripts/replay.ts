@@ -181,6 +181,7 @@ if (withLearning) {
 }
 console.log("");
 
+let scored = 0, failed = 0;
 for (const t of kept) {
   const bar = "─".repeat(76);
   try {
@@ -267,10 +268,19 @@ for (const t of kept) {
       : ` (graded against the agent's first substantive reply)`;
     console.log("\nACTUALLY SENT BY AGENT" + turnNote + ":\n" + (actual || "(none found)"));
     console.log("");
+    scored++;
   } catch (err) {
     console.log(bar);
     console.log(`#${t.id}  ${t.subject}`);
     console.error("PIPELINE ERROR:", err instanceof Error ? err.message : err);
     console.log("");
+    failed++;
   }
 }
+
+// Final tally — the tail the GitHub Actions Summary shows for a replay run.
+const droppedNoise = tickets.length - kept.length;
+console.log(
+  `\nDone. scored=${scored} skipped=${droppedNoise} failed=${failed}.` +
+    (droppedNoise ? ` (${droppedNoise} call-log/auto-reply/spam ticket(s) excluded before replay.)` : ""),
+);

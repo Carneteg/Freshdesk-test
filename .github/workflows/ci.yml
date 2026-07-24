@@ -1,0 +1,45 @@
+name: CI
+
+# Automated checks on every PR + push to main, so regressions (a broken pipeline,
+# a broken review-app script) are caught BEFORE merge — the repo had none until now.
+# No secrets, no network to Freshdesk/OpenAI/Supabase: pure typecheck + unit tests.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Typecheck (deno check)
+        run: deno task check
+
+      - name: Unit tests (deno test)
+        run: deno task test
+
+      - name: Review-app script syntax (node --check)
+        run: |
+          node -e "
+            const fs = require('fs');
+            const html = fs.readFileSync('web/review.html', 'utf8');
+            const m = html.match(/<script>([\s\S]*?)<\/script>/);
+            if (!m) { console.error('no <script> block found in web/review.html'); process.exit(1); }
+            fs.writeFileSync('/tmp/app.js', m[1]);
+          "
+          node --check /tmp/app.js
