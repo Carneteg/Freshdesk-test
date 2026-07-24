@@ -497,9 +497,11 @@ also a `batch-jobs.yml` job) assigns by a **deterministic hash** of the ticket i
 an already-assigned ticket — the holdout stays put. Enforcement so far: `loadGoldExemplars`
 (the learning loop) **excludes gold answers on holdout tickets**, so the locked test set is
 never fed back as a few-shot exemplar. Read holdout numbers on their own via
-`gate1_scorecard_by_cohort` / `cohort_summary` (service-role; `ticket_cohorts` is RLS
-deny-all to clients, like `known_incidents`). Assign cohorts BEFORE writing gold answers so
-the split is clean from the start. Not yet done: a replay filter to run only one cohort
+`gate1_scorecard_by_cohort` / `cohort_summary`. `ticket_cohorts` was RLS deny-all to
+clients; migration 27 now lets **allowlisted reviewers READ** it (for the holdout
+progress/filter in the review app) — writes stay service-role only, and the leakage risk
+(holdout gold → generation exemplar) is server-side and unaffected. Assign cohorts BEFORE
+writing gold answers so the split is clean from the start. Not yet done: a replay filter to run only one cohort
 (follow-up); the reporting view already separates them.
 
 ---

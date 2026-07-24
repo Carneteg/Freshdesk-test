@@ -101,7 +101,8 @@ jobs:
           IN_COUNT: ${{ inputs.count }}
           OPENAI_MODEL_SECRET: ${{ secrets.OPENAI_MODEL }}
         run: |
-          set -euo pipefail
+          # No -e: we want to write the run summary even when the script exits non-zero.
+          set -uo pipefail
 
           # OpenAI model: fall back to gpt-4o when the secret is unset (empty string
           # would otherwise reach the client as an invalid model name).
@@ -119,15 +120,28 @@ jobs:
 
           # $IN_IDS is intentionally unquoted so space-separated numeric ids become
           # separate args; empty expands to nothing → the script auto-picks by agent.
-          case "$IN_JOB" in
-            replay)
-              deno run --allow-env --allow-net scripts/replay.ts $IN_IDS ;;
-            score-history)
-              deno run --allow-env --allow-net scripts/score_history.ts $IN_IDS ;;
-            sync-tickets)
-              deno run --allow-env --allow-net scripts/sync_tickets.ts ;;
-            assign-cohorts)
-              deno run --allow-env --allow-net scripts/assign_cohorts.ts $IN_IDS ;;
-            *)
-              echo "::error::Unknown job '$IN_JOB'"; exit 1 ;;
-          esac
+          # Tee output to a file so we can surface the tail in the run Summary tab.
+          rc=0
+          {
+            case "$IN_JOB" in
+              replay)         deno run --allow-env --allow-net scripts/replay.ts $IN_IDS ;;
+              score-history)  deno run --allow-env --allow-net scripts/score_history.ts $IN_IDS ;;
+              sync-tickets)   deno run --allow-env --allow-net scripts/sync_tickets.ts ;;
+              assign-cohorts) deno run --allow-env --allow-net scripts/assign_cohorts.ts $IN_IDS ;;
+              *)              echo "::error::Unknown job '$IN_JOB'"; exit 1 ;;
+            esac
+          } 2>&1 | tee /tmp/batch-out.log || rc=$?
+
+          # Human-readable result in the Actions "Summary" tab — no need to open the log.
+          {
+            echo "### Batch job: \`$IN_JOB\` $( [ "$rc" -eq 0 ] && echo '✅' || echo "❌ (exit $rc)")"
+            echo ""
+            echo "model \`$OPENAI_MODEL\` · agent \`${IN_AGENT:-MY_AGENT_ID}\` · count \`${IN_COUNT:-default}\` · ids \`${IN_IDS:-<auto>}\`"
+            echo ""
+            echo '```text'
+            # the "Done. scored=… / Cohort … / distribution" tail is what matters
+            tail -n 30 /tmp/batch-out.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$rc"
