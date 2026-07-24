@@ -48,6 +48,24 @@ function renderPlaybook(incidents: Incident[]): string {
     .join("\n\n");
 }
 
+// A reviewer-authored ideal answer from ANOTHER ticket — the "what good looks
+// like" corpus (gold_answer). Fed into the draft as a STYLE / approach exemplar
+// (the Gate 2 learning loop, §12). Never a source of facts for the current ticket.
+export interface GoldExemplar {
+  subject: string;
+  language?: string | null;
+  gold_answer: string;
+}
+
+function renderExemplars(exemplars: GoldExemplar[]): string {
+  if (!exemplars.length) return "(none yet)";
+  return exemplars
+    .map((e, i) =>
+      `[G${i + 1}] ${e.subject}${e.language ? ` (${e.language})` : ""}\n${e.gold_answer.slice(0, 1500)}`
+    )
+    .join("\n\n");
+}
+
 export const ANSWER_STRATEGIES = [
   "DIRECT_ANSWER",
   "REPEAT_CLARIFYING_QUESTION",
@@ -169,7 +187,9 @@ export function draftPrompt(input: {
   analysisJson: string;
   sources: SourceDoc[];
   incidents: Incident[];
+  exemplars?: GoldExemplar[];
 }) {
+  const exemplars = input.exemplars ?? [];
   const system = [
     "You are a support COACH for a Simployer agent — decision support, NOT an autonomous answer",
     "generator. Your PRIMARY job is to help the AGENT: state what is verified, what to check or do",
@@ -343,6 +363,13 @@ export function draftPrompt(input: {
     "  while your analysis says the incident about X does not fit). If you cannot tell which of two causes",
     "  it is, ask / verify first instead of recommending one.",
     "",
+    "IDEAL-ANSWER EXAMPLES (only when provided below): you may be shown a few AGENT-WRITTEN ideal answers",
+    "from OTHER tickets — the gold standard our best agents produced. LEARN from them: the structure, the",
+    "warmth and tone, how concrete and send-ready they are, and the KIND of operational detail and routing",
+    "they include (the knowledge our KB lacks). Do NOT copy facts, incident names, settings, or steps from",
+    "them into THIS reply unless the current ticket's own context/SOURCES establish that they apply here —",
+    "they are style/approach exemplars, NOT sources of truth for this case. Grounding rules still win.",
+    "",
     "FINAL CHECK before you output: does the reply actually contain the customer-facing action, the",
     "ownership (\"I will…\" / who does what), and the next step your analysis / matched incident",
     "established? If your analysis says the customer must do X, the reply must say X. A reply that only",
@@ -390,6 +417,14 @@ export function draftPrompt(input: {
     "INTERNAL PLAYBOOK (known incidents — outrank generic KB when they match):",
     renderPlaybook(input.incidents),
     "",
+    ...(exemplars.length
+      ? [
+        "IDEAL-ANSWER EXAMPLES (agent-written gold answers from OTHER tickets — learn the style/approach,",
+        "do NOT copy their facts unless this ticket's sources establish them):",
+        renderExemplars(exemplars),
+        "",
+      ]
+      : []),
     "SOURCES (knowledge base + similar past resolved tickets, ref ticket:*):",
     renderSources(input.sources),
     "",

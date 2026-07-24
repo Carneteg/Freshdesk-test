@@ -9,6 +9,7 @@ import {
   ANSWER_STRATEGIES,
   analysePrompt,
   draftPrompt,
+  type GoldExemplar,
   type Incident,
   PROMPT_VERSION,
   type SourceDoc,
@@ -127,6 +128,17 @@ export interface PipelineDeps {
   // Base URL of the `feedback` Edge Function. When set, the note carries one-click
   // verdict links (👍/✏️/👎). Omitted by the replay harness (which posts nothing).
   feedbackUrl?: string;
+  // Learning loop (Gate 2, §12): feed reviewer-written ideal answers from OTHER
+  // tickets into the draft as style/approach exemplars. Off by default; when on,
+  // the stored prompt_version gets a "+gold" suffix so the scorecard A/Bs the lift.
+  withLearning?: boolean;
+  goldExemplars?: LoadedExemplar[];
+}
+
+// A gold answer loaded from the corpus, with its ticket id so the current ticket's
+// own answer is never fed back into generating it (no leakage).
+export interface LoadedExemplar extends GoldExemplar {
+  ticket_id: number;
 }
 
 export interface Suggestion {
@@ -277,6 +289,7 @@ async function draftReply(
     analysisJson: string;
     sources: SourceDoc[];
     incidents: Incident[];
+    exemplars?: GoldExemplar[];
   },
 ): Promise<Draft> {
   const { system, user } = draftPrompt(input);
@@ -384,6 +397,17 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     2,
   );
 
+  // Learning loop (§12): reviewer-written ideal answers from OTHER tickets, fed in
+  // as style/approach exemplars. Exclude this ticket's own gold answer (no leakage).
+  const exemplars: GoldExemplar[] = deps.withLearning
+    ? (deps.goldExemplars ?? [])
+      .filter((e) => e.ticket_id !== ticket.id)
+      .map((e) => ({ subject: e.subject, language: e.language, gold_answer: e.gold_answer }))
+    : [];
+  // A/B tag: a learning run is a distinct prompt_version so the scorecard shows the
+  // lift on the SAME tickets, "…c" vs "…c+gold".
+  const effectiveVersion = PROMPT_VERSION + (exemplars.length ? "+gold" : "");
+
   let draft = await draftReply(deps, {
     subject: ticket.subject,
     language: a.language,
@@ -391,6 +415,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     analysisJson,
     sources,
     incidents: deps.incidents ?? [],
+    exemplars,
   });
 
   // Verify against sources AND ticket context. Can only lower confidence / strip /
@@ -508,7 +533,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     securitySensitive: a.security_sensitive,
     followUpQuestions: draft.follow_up_questions,
     bugGuidance: draft.bug_guidance,
-    promptVersion: PROMPT_VERSION,
+    promptVersion: effectiveVersion,
     searchQueries: a.search_queries,
     sources,
     qaAnswered,
@@ -548,7 +573,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     qa_total: qaTotal,
     used: null, // filled later by usage reconciliation / replay
     similarity: null,
-    prompt_version: PROMPT_VERSION,
+    prompt_version: effectiveVersion,
     model: deps.model,
     latency_ms: Date.now() - start,
     note_html: note,
@@ -638,6 +663,7 @@ export function toRow(
     used?: string | null;
     similarity?: number | null;
     qa?: QaResult | null;
+    agentSentReply?: string | null;
   } = {},
 ) {
   const qa = extra.qa ?? null;
@@ -676,6 +702,8 @@ export function toRow(
     qa_verdict: qa?.assessment.verdict ?? null,
     qa_needs_review: qa?.assessment.needsHumanReview ?? null,
     qa_assessment: qa?.assessment ?? null,
+    // The reply the agent actually sent (replay only) — reference/gold for training.
+    ...(extra.agentSentReply !== undefined ? { agent_sent_reply: extra.agentSentReply } : {}),
     used: extra.used ?? s.used,
     similarity: extra.similarity ?? s.similarity,
     prompt_version: s.prompt_version,
@@ -701,6 +729,33 @@ export async function loadIncidents(
       .eq("active", true)
       .limit(50);
     return (data ?? []) as Incident[];
+  } catch {
+    return [];
+  }
+}
+
+// Load the reviewer-written ideal answers (the "what good looks like" corpus) for
+// the learning loop (§12). A failure or empty corpus just means "no exemplars".
+export async function loadGoldExemplars(
+  // deno-lint-ignore no-explicit-any
+  db: any,
+  limit = 20,
+): Promise<LoadedExemplar[]> {
+  try {
+    const { data } = await db
+      .from("suggestions")
+      .select("ticket_id, subject, language, gold_answer")
+      .not("gold_answer", "is", null)
+      .order("gold_answer_at", { ascending: false })
+      .limit(limit);
+    return (data ?? [])
+      .filter((r: { gold_answer?: string }) => r.gold_answer && r.gold_answer.trim())
+      .map((r: { ticket_id: number; subject?: string; language?: string | null; gold_answer: string }) => ({
+        ticket_id: r.ticket_id,
+        subject: r.subject ?? `Ticket #${r.ticket_id}`,
+        language: r.language ?? null,
+        gold_answer: r.gold_answer,
+      }));
   } catch {
     return [];
   }

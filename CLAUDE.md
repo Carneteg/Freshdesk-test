@@ -420,6 +420,57 @@ claim" stance as the pipeline's grounding rules.
   per scored ticket; abstains (no send-ready reply) are not scored. DPA: same OpenAI
   clearance as the rest of the pipeline (§11) — real ticket text is sent.
 
+**Review UI — a shared reviewer app (2026-07-23, DPA+IT cleared).** §9 parked "UI"
+out of Gate 1; with DPA + IT sign-off obtained, a small **read+judge** web app was
+added so agents can work through drafts and record verdicts without SQL/PowerShell.
+It is the `review-ui` Edge Function (public HTML, like `feedback`); auth + data
+gating are entirely client-side + RLS.
+- **Security is RLS, not the app.** The page embeds only the **anon** key — never a
+  service-role/Freshdesk/OpenAI key. Migration 18 adds an `app_reviewers` email
+  allowlist + `is_reviewer()`; migration 19 hardens grants so an authenticated
+  reviewer can **read** `suggestions` and **update only** `verdict`/`verdict_at`/
+  `gold_answer` — nothing else. Non-allowlisted or logged-out users see nothing.
+  Migration 19 also enabled RLS on `known_incidents` (was off). Login is Supabase
+  Auth (magic link / email code); authorization is the allowlist, not signup.
+- **Training capture (2026-07-23).** Migration 20 adds `agent_sent_reply` (what the
+  agent really sent, replay-populated — the gold standard, esp. Johanna's) and
+  `gold_answer` (+ `_at`/`_by`, stamped from the JWT by a trigger, not the client).
+  The UI shows the agent's real reply as reference and lets a reviewer write the
+  ideal answer. View `training_examples` is the exportable corpus. **Honest scope:**
+  this BUILDS the "what good looks like" corpus; feeding it back into generation is
+  the Gate 2 learning loop (§12) — nothing here fine-tunes a model yet.
+- The review UI carries a **"How to train the AI" guide** (verdict meaning; how to write
+  an ideal answer — real resolution + the operational knowledge the KB lacks + correct
+  routing; where to spend time). The page is `web/review.html`, a self-contained
+  local-file / static-host page (Supabase serves HTML as text/plain, so it is NOT hosted
+  there): raw `fetch` + email/password Supabase Auth, RLS-gated, anon key only. Published
+  to a `gh-pages` branch (app file only, no repo code) for a shareable link.
+
+**Learning loop v1 — gold answers -> prompt (Gate 2 start, 2026-07-23).** Per Tobias the
+near-term Gate 2 focus is **the AI + learning**, NOT the Planhat/Confluence/Slack/Jira
+integrations (those stay deferred). The cheapest loop: feed the reviewer-written
+`gold_answer` corpus from OTHER tickets into the **draft** prompt as **style/approach
+exemplars** (`GoldExemplar` in `prompts.ts`; `loadGoldExemplars` + `withLearning` in
+`pipeline.ts`). Guardrails: the current ticket's own gold answer is excluded (no leakage),
+and the prompt says LEARN the style/operational approach but do NOT copy their facts unless
+this ticket's own sources establish them (grounding still wins). **Opt-in** via
+`LEARNING_LOOP=true` in `replay.ts`; a learning run is stored under a **`+gold`
+prompt_version** so `gate1_scorecard` compares it head-to-head against the base run on the
+SAME tickets. Not fine-tuning — retrieval-style few-shot. Measure the lift before doing more.
+
+**Agent-reply QA scan — triage over history (2026-07-23).** The QA Coach, pointed at
+the AGENTS' actual historical replies, becomes a triage engine: `scripts/score_history.ts`
+(`deno task score-history`) scores each agent's first substantive reply with ONE QA call,
+posts NOTHING to Freshdesk, and stores only in Supabase (`agent_qa_*`, migration 21). The
+weakest surface in the `rewrite_queue` view and a **Rewrite** tab (worst-first) in the
+review app, where a reviewer writes a better `gold_answer` (which then feeds the learning
+loop above). History-scan rows live on `suggestions` with `prompt_version='agent-scan'`
+(minimal row, no AI draft) and are EXCLUDED from `gate1_scorecard`/`calibration`. **Honest
+caveat (§12):** the coach can only judge from the given context, so Accuracy is harsh on
+the operational knowledge agents carry but don't write down — read the score as "where to
+look" (vague / non-answer / undocumented solution), NOT as a grade of the agent, and never
+rank agents by it. One QA call per ticket → scalable to the ~50k backlog; start small.
+
 ---
 
 ## 13. Repeatable workflows — Claude skills & `tools/`

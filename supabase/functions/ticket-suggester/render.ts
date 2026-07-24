@@ -144,9 +144,16 @@ export function lastAgentReply(t: Ticket): string {
 // Matched by subject; EXCLUDE_SUBJECTS (lowercased substrings) adds more.
 const CALL_LOG_SUBJECT = /^\s*(incoming|outgoing|missed) call with\b/i;
 
+// Auto-reply / out-of-office bounces (replies to our own marketing/notification
+// mails) also carry no customer question — they were polluting the eval as
+// `unclear` noise (user report 2026-07-23). Match the standard mailer prefixes in
+// EN / NO / SV. These are the subject prefixes mail clients prepend automatically.
+const AUTO_REPLY_SUBJECT =
+  /^\s*(automatic reply|automatisk svar|automatiskt svar|autosvar|out of office|out-of-office|frånvaro|fr[aå]nvarande|ute av kontoret|auto[- ]?reply)\b/i;
+
 export function isIgnorableTicket(subject: string, extraSubstrings: string[] = []): boolean {
   const s = subject ?? "";
-  if (CALL_LOG_SUBJECT.test(s)) return true;
+  if (CALL_LOG_SUBJECT.test(s) || AUTO_REPLY_SUBJECT.test(s)) return true;
   const lower = s.toLowerCase();
   return extraSubstrings.some((x) => x && lower.includes(x));
 }
