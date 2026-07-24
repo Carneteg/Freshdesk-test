@@ -156,7 +156,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2025-07-24-golden3";
+var APP_VERSION = "v2025-07-24-golden4";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -689,6 +689,12 @@ function helpPanel() {
     '<li>The button saves whatever is in the box; if the box is empty it adopts the best reply already on the ticket (agent’s sent reply → AI suggestion → draft), so you can mark a good one in a single click.</li>' +
     '<li><b>Don’t</b> mark it golden if the answer is vague, unverified or wrong — a bad exemplar teaches the AI the wrong thing. Fix it first, or leave it.</li>' +
     '<li>A card shows a gold <b>★ Golden</b> badge and accent once saved; re-saving updates it.</li>' +
+    '</ul>' +
+    '<p><b>Agent’s reply vs golden.</b> The <i>“What the agent actually sent”</i> box (and the <b>use agent’s reply</b> link) is <b>reference and a starting point</b> — the reply that really went out. <b>Golden</b> is the answer <b>you endorse</b> as training material. Golden is always the end result if you want the AI to learn from it; the agent’s reply is just the fastest starting material when it’s already good.</p>' +
+    '<ul>' +
+    '<li><b>Agent’s reply is already excellent</b> (often Johanna’s) → click <b>★ Mark as golden</b> straight away (an empty box adopts the agent’s reply). One click = “this is how it should look.”</li>' +
+    '<li><b>Good but needs tightening</b> → <b>use agent’s reply</b> → edit → <b>★ Mark as golden</b>.</li>' +
+    '<li><b>Weak / wrong / missing</b> (solved by phone or in a private note) → write the ideal answer from scratch → <b>★ Mark as golden</b>. This is where you add the most: the operational knowledge that isn’t written down anywhere.</li>' +
     '</ul>' +
     '<h4>🚫 Spam — when &amp; why</h4>' +
     '<p>Spam hides a ticket and keeps it out of the evaluation, the rewrite queue <b>and</b> future training runs. It is for <b>noise, not bad answers</b>.</p>' +
