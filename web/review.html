@@ -75,22 +75,35 @@
   .tag.c-low{background:var(--warn-soft);color:var(--warn)}
   .tag.c-none{background:var(--surface-2);color:var(--ink-3)}
   .tag.qa{background:var(--accent-soft);color:var(--accent)}
-  .tag.qa.review{background:var(--crit-soft);color:var(--crit)}
-  .draft{white-space:pre-wrap;font-size:14px;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin:2px 0 12px}
-  .refbox{background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent);border-radius:6px;padding:10px 12px;margin:0 0 12px;white-space:pre-wrap;font-size:13.5px}
-  .refbox .rl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--good);display:block;margin-bottom:5px}
+  .tag.review,.tag.bad{background:var(--crit-soft);color:var(--crit)}
+  /* readable prose: real paragraphs, comfortable size, capped line length (#1) */
+  .prose{font-size:15px;line-height:1.65;max-width:70ch;color:var(--ink)}
+  .prose p{margin:0 0 10px;white-space:pre-wrap}
+  .prose p:last-child{margin:0}
+  /* customer's original question, distinct + at the top of the card (#2) */
+  .custq{background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--info);border-radius:6px;padding:10px 14px;margin:2px 0 12px}
+  .custq .rl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--info);display:block;margin-bottom:6px}
+  .draftlab{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);display:block;margin:2px 0 5px}
+  .draft{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin:0 0 12px}
+  .refbox{background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent);border-radius:6px;padding:12px 14px;margin:0 0 12px}
+  .refbox .rl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--good);display:block;margin-bottom:6px}
   .gold{margin:2px 0 12px}
   .gold .gl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:5px}
-  textarea{width:100%;min-height:88px;font-family:inherit;font-size:14px;line-height:1.5;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--ink);resize:vertical}
+  textarea{width:100%;min-height:88px;font-family:inherit;font-size:14.5px;line-height:1.6;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--ink);resize:vertical}
   textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
   .goldbar{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}
   .goldbar .st{font-size:12px;color:var(--ink-3)}
   .noreply{font-style:italic;color:var(--ink-3);font-size:13.5px;margin:2px 0 12px}
-  details{margin:0 0 10px}
-  details summary{cursor:pointer;font-size:12.5px;color:var(--accent);font-family:var(--mono);letter-spacing:.03em}
-  details .body{font-size:13.5px;color:var(--ink-2);white-space:pre-wrap;padding:8px 0 2px}
-  .sources{display:flex;flex-direction:column;gap:4px;padding:8px 0 2px}
-  .sources a{font-size:13px}
+  /* expandable sections look clickable — accordion style (#8) */
+  details{border:1px solid var(--border);border-radius:6px;margin:0 0 8px;background:var(--bg)}
+  details>summary{cursor:pointer;font-size:12.5px;color:var(--accent);font-family:var(--mono);letter-spacing:.03em;padding:8px 12px;list-style:none;user-select:none}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary::before{content:"▸";display:inline-block;width:1.1em;color:var(--ink-3)}
+  details[open]>summary::before{content:"▾"}
+  details>summary:hover{text-decoration:underline}
+  details .body{font-size:14px;line-height:1.6;color:var(--ink-2);white-space:pre-wrap;padding:2px 12px 10px}
+  .sources{display:flex;flex-direction:column;gap:5px;padding:2px 12px 10px}
+  .sources a{font-size:13.5px}
   .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;margin-top:4px}
   .actions .lab{font-size:12.5px;color:var(--ink-3);margin-right:2px}
   .vbtn{border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--ink)}
@@ -119,7 +132,7 @@ var TOKEN_KEY = "coach_review_token";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
-var rows = [], tab = "todo", token = null, meEmail = null;
+var rows = [], tab = "todo", token = null, refreshToken = null, meEmail = null;
 
 boot();
 function boot() {
@@ -127,17 +140,46 @@ function boot() {
   try { saved = localStorage.getItem(TOKEN_KEY); } catch (e) {}
   if (saved) {
     var o = null; try { o = JSON.parse(saved); } catch (e) {}
-    if (o && o.access_token) { token = o.access_token; meEmail = o.email; return loadData(); }
+    if (o && o.access_token) { token = o.access_token; refreshToken = o.refresh_token || null; meEmail = o.email; return loadData(); }
   }
   renderAuth();
 }
 
-function api(path, opts) {
+async function api(path, opts, _retried) {
   opts = opts || {};
   var headers = { apikey: SB_ANON, "Content-Type": "application/json" };
   if (token) headers["Authorization"] = "Bearer " + token;
   if (opts.headers) for (var k in opts.headers) headers[k] = opts.headers[k];
-  return fetch(SB_URL + path, { method: opts.method || "GET", headers: headers, body: opts.body });
+  var res = await fetch(SB_URL + path, { method: opts.method || "GET", headers: headers, body: opts.body });
+  // Access token expired? Silently renew with the refresh token and retry once, so
+  // the session survives past the ~1h token lifetime — no re-typing credentials.
+  if (res.status === 401 && !_retried && refreshToken) {
+    if (await refresh()) return api(path, opts, true);
+  }
+  return res;
+}
+
+async function refresh() {
+  try {
+    var res = await fetch(SB_URL + "/auth/v1/token?grant_type=refresh_token", {
+      method: "POST",
+      headers: { apikey: SB_ANON, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return false;
+    var data = await res.json();
+    if (!data.access_token) return false;
+    token = data.access_token;
+    refreshToken = data.refresh_token || refreshToken; // Supabase rotates it
+    persist();
+    return true;
+  } catch (e) { return false; }
+}
+
+function persist() {
+  try {
+    localStorage.setItem(TOKEN_KEY, JSON.stringify({ access_token: token, refresh_token: refreshToken, email: meEmail }));
+  } catch (e) {}
 }
 
 // ---- auth ----
@@ -173,13 +215,13 @@ async function doLogin(email, password) {
     });
     var data = await res.json();
     if (!res.ok) return setAuthMsg(data.error_description || data.msg || data.error || "Sign-in failed.", "err");
-    token = data.access_token; meEmail = (data.user && data.user.email) || email;
-    try { localStorage.setItem(TOKEN_KEY, JSON.stringify({ access_token: token, email: meEmail })); } catch (e) {}
+    token = data.access_token; refreshToken = data.refresh_token || null; meEmail = (data.user && data.user.email) || email;
+    persist();
     loadData();
   } catch (e) { setAuthMsg("Network error: " + e.message, "err"); }
 }
 function signOut() {
-  token = null; meEmail = null;
+  token = null; refreshToken = null; meEmail = null;
   try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
   renderAuth();
 }
@@ -187,7 +229,7 @@ function signOut() {
 // ---- data ----
 async function loadData() {
   app.innerHTML = '<div class="empty">Loading tickets…</div>';
-  var cols = "id,ticket_id,ticket_url,subject,ticket_type,language,confidence,draft,agent_analysis,rationale,sources,qa_score,qa_verdict,qa_needs_review,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,agent_sent_reply,gold_answer,gold_answer_by,prompt_version,created_at";
+  var cols = "id,ticket_id,ticket_url,subject,customer_message,ticket_type,language,confidence,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,agent_sent_reply,gold_answer,gold_answer_by,prompt_version,created_at";
   try {
     var res = await api("/rest/v1/suggestions?select=" + cols + "&order=created_at.desc&limit=300");
     if (res.status === 401) { signOut(); return; }
@@ -264,13 +306,30 @@ function cardEl(r) {
   tags.appendChild(tag(r.ticket_type || "—"));
   tags.appendChild(tag((r.language || "—").toUpperCase()));
   tags.appendChild(tag("conf: " + (r.confidence || "—"), "c-" + (r.confidence || "none")));
-  if (r.qa_score != null) tags.appendChild(tag("QA " + r.qa_score + " · " + (r.qa_verdict || ""), "qa" + (r.qa_needs_review ? " review" : "")));
-  if (r.agent_qa_score != null) tags.appendChild(tag("agent QA " + r.agent_qa_score, "qa" + (r.agent_qa_needs_review ? " review" : "")));
+  if (r.qa_score != null) tags.appendChild(tag("QA " + r.qa_score, qaCls(r.qa_score, r.qa_needs_review)));
+  if (r.agent_qa_score != null) tags.appendChild(tag("agent QA " + r.agent_qa_score, qaCls(r.agent_qa_score, r.agent_qa_needs_review)));
   tags.appendChild(tag(r.prompt_version || ""));
   card.appendChild(tags);
 
-  if (r.draft && r.draft.trim()) card.appendChild(set(el("div", "draft"), r.draft));
-  else card.appendChild(set(el("div", "noreply"), "No send-ready customer reply (the coach abstained — agent guidance only)."));
+  // #2 — the customer's actual question, at the top, distinct from the AI draft.
+  var custText = (r.customer_message && r.customer_message.trim())
+    ? r.customer_message
+    : (Array.isArray(r.questions) && r.questions.length ? r.questions.join("\n") : (r.detected_intent || ""));
+  if (custText && custText.trim()) {
+    var cq = el("div", "custq");
+    cq.appendChild(set(el("span", "rl"), "Customer's question"));
+    cq.appendChild(proseEl(custText));
+    card.appendChild(cq);
+  }
+
+  if (r.draft && r.draft.trim()) {
+    var dr = el("div", "draft");
+    dr.appendChild(set(el("span", "draftlab"), "AI draft reply"));
+    dr.appendChild(proseEl(r.draft));
+    card.appendChild(dr);
+  } else {
+    card.appendChild(set(el("div", "noreply"), "No send-ready customer reply (the coach abstained — agent guidance only)."));
+  }
 
   if (r.agent_analysis) card.appendChild(detail("Agent analysis", r.agent_analysis));
   if (r.rationale) card.appendChild(detail("Why (rationale)", r.rationale));
@@ -290,7 +349,7 @@ function cardEl(r) {
   if (r.agent_sent_reply && r.agent_sent_reply.trim()) {
     var ref = el("div", "refbox");
     ref.appendChild(set(el("span", "rl"), "What the agent actually sent · reference"));
-    ref.appendChild(document.createTextNode(r.agent_sent_reply));
+    ref.appendChild(proseEl(r.agent_sent_reply));
     card.appendChild(ref);
   }
 
@@ -404,7 +463,26 @@ function helpPanel() {
   return d;
 }
 function isSpam(subject) {
-  return /^\s*(automatic reply|automatisk svar|automatiskt svar|autosvar|out of office|out-of-office|frånvaro|frånvarande|ute av kontoret|auto[- ]?reply)\b/i.test(subject || "");
+  var s = (subject || "").toLowerCase();
+  if (/^\s*(automatic reply|automatisk svar|automatiskt svar|autosvar|automaattinen vastaus|out of office|out-of-office|frånvaro|frånvarande|ute av kontoret|auto[- ]?reply|feriesvar|semestersvar|fraværsmelding|fraværsassistent)\b/.test(s)) return true;
+  var mk = ["det sier mye om deg at du bruker simployer expert", "smarte måter å få mer ut av simployer expert", "dette venter på deg i simployer expert", "oppdag alt simployer expert har å tilby", "slik får du mest ut av simployer expert", "upptäck allt som simployer expert har att erbjuda"];
+  return mk.some(function (m) { return s.indexOf(m) >= 0; });
+}
+// Split text into readable paragraphs (blank line = new paragraph); keeps single
+// newlines inside a paragraph via white-space:pre-wrap. Avoids the "wall of text".
+function proseEl(text) {
+  var box = el("div", "prose");
+  var paras = String(text == null ? "" : text).split(/\n\s*\n/);
+  for (var i = 0; i < paras.length; i++) {
+    var t = paras[i].replace(/^\s+|\s+$/g, "");
+    if (t) box.appendChild(set(document.createElement("p"), t));
+  }
+  if (!box.childNodes.length) box.appendChild(document.createElement("p"));
+  return box;
+}
+// QA score → colour band: red < 60, amber 60-74, green 75+ (or red if flagged).
+function qaCls(score, needsReview) {
+  return (needsReview || score < 60) ? "bad" : score < 75 ? "c-low" : "c-high";
 }
 function tag(text, cls) { return set(el("span", "tag" + (cls ? " " + cls : "")), esc(text)); }
 function set(node, text) { node.textContent = text; return node; }

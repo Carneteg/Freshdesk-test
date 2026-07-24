@@ -19,6 +19,7 @@ import {
   buildContext,
   isIgnorableTicket,
   latestCustomerMessage,
+  looksLikeAutoReply,
   replayTurn,
 } from "../supabase/functions/ticket-suggester/render.ts";
 import { runQaCoach } from "../supabase/functions/ticket-suggester/pipeline.ts";
@@ -86,8 +87,11 @@ let scored = 0, skipped = 0, failed = 0;
 for (const id of ids) {
   try {
     const t = await fd.ticketWithConversations(id);
-    if (isIgnorableTicket(t.subject)) {
-      console.log(`  #${id}  skipped (auto/call-log)`);
+    // Skip noise: call-log/marketing-reply by subject, or out-of-office/absence
+    // auto-replies detected in the customer body (catches "Re: <campaign>" bounces
+    // with no auto-reply prefix, e.g. #86174).
+    if (isIgnorableTicket(t.subject) || looksLikeAutoReply(latestCustomerMessage(t).text)) {
+      console.log(`  #${id}  skipped (auto/call-log/absence)`);
       skipped++;
       continue;
     }
@@ -113,6 +117,7 @@ for (const id of ids) {
     }
     const a = qa.assessment;
     const patch = {
+      customer_message: customerMessage,
       agent_sent_reply: turn.target,
       agent_qa_version: qa.version,
       agent_qa_score: a.totalScore,

@@ -145,6 +145,7 @@ export interface Suggestion {
   ticket_id: number;
   ticket_url: string;
   trigger_message_id: string;
+  customer_message: string;
   subject: string;
   language: string;
   ticket_type: string;
@@ -354,7 +355,7 @@ async function verifyDraft(
 // Analyse -> retrieve -> draft -> verify. Returns a Suggestion; posts nothing.
 export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<Suggestion> {
   const start = Date.now();
-  const { triggerId } = latestCustomerMessage(ticket);
+  const { triggerId, text: customerMessage } = latestCustomerMessage(ticket);
   const context = buildContext(ticket); // FULL chronological, source-labelled context
   // Unguessable per-note token for the one-click verdict links (§8).
   const feedbackToken = crypto.randomUUID();
@@ -547,6 +548,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     ticket_id: ticket.id,
     ticket_url: deps.fd.ticketUrl(ticket.id),
     trigger_message_id: triggerId,
+    customer_message: customerMessage,
     subject: ticket.subject,
     language: a.language,
     ticket_type: a.ticket_type,
@@ -671,6 +673,7 @@ export function toRow(
     ticket_id: s.ticket_id,
     ticket_url: s.ticket_url,
     trigger_message_id: s.trigger_message_id,
+    customer_message: s.customer_message,
     subject: s.subject,
     language: s.language,
     ticket_type: s.ticket_type,
