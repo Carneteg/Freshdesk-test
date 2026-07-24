@@ -80,6 +80,19 @@
   .tag.m-ready{background:var(--good-soft);color:var(--good);font-weight:700}
   .tag.m-coach{background:var(--warn-soft);color:var(--warn);font-weight:700}
   .tag.m-action{background:var(--crit-soft);color:var(--crit);font-weight:700}
+  /* reason-code summary on judged cards */
+  .reasonline{font-size:12.5px;color:var(--warn);margin:-4px 0 12px}
+  /* QA-coach per-criterion breakdown */
+  .qabody{padding:4px 12px 10px}
+  .qarow{display:flex;align-items:baseline;gap:8px;padding:3px 0;font-size:13px;flex-wrap:wrap}
+  .qarow .qn{font-weight:600;color:var(--ink)}
+  .qarow .qr{color:var(--ink-2);font-size:12.5px}
+  .qs{font-family:var(--mono);font-size:11.5px;font-weight:700;min-width:34px;text-align:center;padding:1px 6px;border-radius:6px;background:var(--surface-2);color:var(--ink-2)}
+  .qs.s1,.qs.s2{background:var(--crit-soft);color:var(--crit)}
+  .qs.s3{background:var(--warn-soft);color:var(--warn)}
+  .qs.s4,.qs.s5{background:var(--good-soft);color:var(--good)}
+  .qaimp ul{margin:4px 0;padding-left:18px}
+  .qaimp li{font-size:12.5px;color:var(--ink-2)}
   /* readable prose: real paragraphs, comfortable size, capped line length (#1) */
   .prose{font-size:15px;line-height:1.65;max-width:70ch;color:var(--ink)}
   .prose p{margin:0 0 10px;white-space:pre-wrap}
@@ -172,14 +185,14 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2025-07-24-coachmode";
+var APP_VERSION = "v2025-07-24-polish";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
 var rows = [], tab = "todo", token = null, refreshToken = null, meEmail = null;
 
 // Columns fetched for each suggestion (used by loadData AND single-row reloads).
-var COLS = "id,ticket_id,ticket_url,subject,customer_message,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,prompt_version,created_at";
+var COLS = "id,ticket_id,ticket_url,subject,customer_message,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,prompt_version,created_at";
 
 // Why an edited/unusable reply fell short — slug + Swedish label (CLAUDE.md / plan 1.3).
 var REASONS = [
@@ -207,7 +220,31 @@ window.addEventListener("beforeunload", function (e) {
 });
 // view state for search / filter / sort / keyboard (Fas 2)
 var search = "", fLang = "", fType = "", fConf = "", sortBy = "newest";
+var fMode = "", fCrit = "", fCohort = "";
+var holdoutIds = {}; // ticket_id -> 1 for the locked holdout cohort (reviewer-readable)
 var shown = [], cardEls = [], activeIdx = -1;
+
+// Reason-code slug -> Swedish label (mirror of the write-side list) + critical labels,
+// so judged cards can show back what was picked without re-opening the panel.
+var REASON_LABELS = {
+  wrong_fact: "Felaktig fakta", unfounded_assumption: "Obelagt antagande",
+  wrong_cause: "Felaktig problemorsak", wrong_solution: "Fel lösning",
+  wrong_incident: "Fel incident", stale_incident: "Föråldrad incidentstatus",
+  wrong_routing: "Fel routning", missed_question: "Missad kundfråga",
+  missed_check: "Missad kontrollpunkt", wrong_language: "Fel språk",
+  weak_tone: "Svag ton", too_long: "För långt/otydligt",
+  security_privacy: "Säkerhets-/integritetsrisk", should_have_abstained: "AI borde ha avstått",
+  attachment_unreadable: "Bilaga kunde inte granskas", insufficient_source: "Otillräcklig kunskapskälla",
+};
+var CRITICAL_LABELS = {
+  legal_advice: "Felaktig juridisk rådgivning", wrongful_deletion: "Felaktig radering",
+  unauthorized_access: "Obehörig åtkomst", pii_risk: "Personuppgiftsrisk",
+  false_promise: "Felaktigt kundlöfte", invented_feature: "Påhittad produktfunktion",
+};
+function reasonText(slug) {
+  if (typeof slug === "string" && slug.indexOf("other:") === 0) return slug.slice(6);
+  return REASON_LABELS[slug] || slug;
+}
 
 boot();
 function boot() {
@@ -316,11 +353,25 @@ async function loadData() {
     var all = Array.isArray(data) ? data : [];
     // hide reviewer-flagged spam (is_spam) and any auto-reply noise the ingest missed
     rows = all.filter(function (r) { return !r.is_spam && !isSpam(r.subject); });
+    await loadHoldout(); // best-effort; enables the holdout progress + filter
     render();
   } catch (e) {
     app.innerHTML = '<div class="empty">Network error: ' + esc(e.message) + "</div>";
   }
 }
+
+// Fetch the locked holdout ticket ids (reviewer-readable per migration 27). If the
+// grant/policy isn't there, this fails quietly and the holdout features stay hidden.
+async function loadHoldout() {
+  holdoutIds = {};
+  try {
+    var res = await api("/rest/v1/ticket_cohorts?select=ticket_id&cohort=eq.holdout");
+    if (!res.ok) return;
+    var data = await res.json();
+    for (var i = 0; i < (data || []).length; i++) holdoutIds[data[i].ticket_id] = 1;
+  } catch (e) { /* holdout features simply won't show */ }
+}
+function hasHoldout() { for (var k in holdoutIds) return true; return false; }
 
 // Which rows belong to the current tab (before search/filter/sort).
 function tabRows() {
@@ -386,6 +437,9 @@ function controlsEl() {
   box.appendChild(selectEl("Language", distinct("language").map(function (v) { return [v, v.toUpperCase()]; }), fLang, function (v) { fLang = v; renderList(); }));
   box.appendChild(selectEl("Type", distinct("ticket_type").map(function (v) { return [v, v]; }), fType, function (v) { fType = v; renderList(); }));
   box.appendChild(selectEl("Confidence", [["high", "high"], ["medium", "medium"], ["low", "low"], ["none", "none"]], fConf, function (v) { fConf = v; renderList(); }));
+  box.appendChild(selectEl("Mode", [["REPLY_READY", "🟢 Reply ready"], ["COACH_AGENT", "🟡 Coach"], ["AGENT_ACTION_REQUIRED", "🔴 Action req."]], fMode, function (v) { fMode = v; renderList(); }));
+  box.appendChild(selectEl("Any risk", [["yes", "⚠ Critical flagged"]], fCrit, function (v) { fCrit = v; renderList(); }));
+  if (hasHoldout()) box.appendChild(selectEl("All tickets", [["holdout", "🔒 Holdout only"]], fCohort, function (v) { fCohort = v; renderList(); }));
   box.appendChild(selectEl("Sort: newest", [["qa", "Sort: QA score ↑"], ["agentqa", "Sort: agent QA ↑"], ["conf", "Sort: confidence ↓"]], sortBy === "newest" ? "" : sortBy, function (v) { sortBy = v || "newest"; renderList(); }));
   return box;
 }
@@ -408,9 +462,16 @@ function progressEl() {
   var judged = reviewable.filter(function (r) { return r.verdict; }).length;
   var total = reviewable.length;
   var pct = total ? Math.round(100 * judged / total) : 0;
+  // Holdout progress (the locked eval set) — the number that actually gates Gate 1.
+  var hoLab = "";
+  if (hasHoldout()) {
+    var ho = reviewable.filter(function (r) { return holdoutIds[r.ticket_id]; });
+    var hoJudged = ho.filter(function (r) { return r.verdict; }).length;
+    hoLab = ' · 🔒 holdout: ' + hoJudged + " av " + ho.length + " granskade";
+  }
   var box = el("div", "progress");
   box.innerHTML =
-    '<span class="lab">' + judged + " av " + total + " granskade · " + pct + "%</span>" +
+    '<span class="lab">' + judged + " av " + total + " granskade · " + pct + "%" + hoLab + "</span>" +
     '<div class="track"><div class="fill" style="width:' + pct + '%"></div></div>';
   return box;
 }
@@ -424,6 +485,9 @@ function renderList() {
     if (fLang && r.language !== fLang) return false;
     if (fType && r.ticket_type !== fType) return false;
     if (fConf && (r.confidence || "none") !== fConf) return false;
+    if (fMode && r.coach_mode !== fMode) return false;
+    if (fCrit === "yes" && !(r.critical_flag && r.critical_flag.trim())) return false;
+    if (fCohort === "holdout" && !holdoutIds[r.ticket_id]) return false;
     if (q) {
       var hay = (String(r.ticket_id) + " " + (r.subject || "") + " " + (r.draft || "") + " " + (r.customer_message || "")).toLowerCase();
       if (hay.indexOf(q) < 0) return false;
@@ -509,6 +573,8 @@ function cardEl(r) {
 
   var tags = el("div", "tags");
   if (r.coach_mode) tags.appendChild(tag(modeLabel(r.coach_mode), modeCls(r.coach_mode)));
+  if (r.critical_flag) tags.appendChild(tag("⚠ " + (CRITICAL_LABELS[r.critical_flag] || r.critical_flag), "bad"));
+  if (holdoutIds[r.ticket_id]) tags.appendChild(tag("🔒 holdout"));
   tags.appendChild(tag(r.ticket_type || "—"));
   tags.appendChild(tag((r.language || "—").toUpperCase()));
   tags.appendChild(tag("conf: " + (r.confidence || "—"), "c-" + (r.confidence || "none")));
@@ -518,6 +584,15 @@ function cardEl(r) {
   var hasGold = !!(r.gold_answer && r.gold_answer.trim());
   if (hasGold) { card.classList.add("golden"); tags.appendChild(tag("★ Golden", "golden")); }
   card.appendChild(tags);
+
+  // Reason-code summary on judged cards — scannable in the Judged tab without
+  // re-opening the reasons panel.
+  if (r.verdict && ((Array.isArray(r.verdict_reasons) && r.verdict_reasons.length) || r.critical_flag)) {
+    var parts = (r.verdict_reasons || []).map(reasonText);
+    var rl = el("div", "reasonline");
+    rl.textContent = "Skäl: " + (r.critical_flag ? "⚠ " + (CRITICAL_LABELS[r.critical_flag] || r.critical_flag) + (parts.length ? " · " : "") : "") + parts.join(" · ");
+    card.appendChild(rl);
+  }
 
   // #2 — the customer's actual question, at the top, distinct from the AI draft.
   var custText = (r.customer_message && r.customer_message.trim())
@@ -552,6 +627,13 @@ function cardEl(r) {
       box.appendChild(a);
     }
     d.appendChild(box); card.appendChild(d);
+  }
+
+  // QA-coach breakdown (option 3): per-criterion 1–5 scores so a low QA number is
+  // understandable/actionable. Prefer the AI draft's QA; fall back to the agent-reply QA.
+  var qaA = r.qa_assessment || r.agent_qa_assessment;
+  if (qaA && Array.isArray(qaA.scorecard) && qaA.scorecard.length) {
+    card.appendChild(qaDetailsEl(qaA, r.qa_assessment ? "QA breakdown (AI draft)" : "QA breakdown (agent reply)"));
   }
 
   if (r.agent_sent_reply && r.agent_sent_reply.trim()) {
@@ -899,6 +981,31 @@ function modeLabel(m) {
 }
 function modeCls(m) {
   return m === "REPLY_READY" ? "m-ready" : m === "AGENT_ACTION_REQUIRED" ? "m-action" : "m-coach";
+}
+// QA-coach breakdown: an expandable per-criterion 1–5 table + top improvements.
+function qaDetailsEl(a, label) {
+  var d = document.createElement("details");
+  var sum = document.createElement("summary");
+  sum.textContent = label + (a.totalScore != null ? " · " + a.totalScore + "/100" : "") + (a.verdict ? " " + a.verdict : "");
+  d.appendChild(sum);
+  var body = el("div", "qabody");
+  for (var i = 0; i < a.scorecard.length; i++) {
+    var c = a.scorecard[i];
+    var row = el("div", "qarow");
+    var sc = el("span", "qs s" + (c.score || 0)); sc.textContent = (c.score != null ? c.score : "–") + "/5";
+    row.appendChild(sc);
+    row.appendChild(set(el("span", "qn"), c.criterion || c.criterionId || "—"));
+    if (c.rationale) row.appendChild(set(el("span", "qr"), c.rationale));
+    body.appendChild(row);
+  }
+  if (Array.isArray(a.topThreeImprovements) && a.topThreeImprovements.length) {
+    var imp = el("div", "qaimp");
+    imp.appendChild(set(el("span", "qn"), "Top improvements:"));
+    var ul = document.createElement("ul");
+    a.topThreeImprovements.forEach(function (t) { var li = document.createElement("li"); li.textContent = t; ul.appendChild(li); });
+    imp.appendChild(ul); body.appendChild(imp);
+  }
+  d.appendChild(body); return d;
 }
 function tag(text, cls) { return set(el("span", "tag" + (cls ? " " + cls : "")), esc(text)); }
 function set(node, text) { node.textContent = text; return node; }
