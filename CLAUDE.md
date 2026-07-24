@@ -504,6 +504,20 @@ progress/filter in the review app) — writes stay service-role only, and the le
 writing gold answers so the split is clean from the start. Not yet done: a replay filter to run only one cohort
 (follow-up); the reporting view already separates them.
 
+**Knowledge-gap detection (Fas 4.4, 2026-07-24).** First §4 (knowledge/incident layer)
+item: surface WHERE knowledge is missing — the Gate 1 root cause was undocumented
+operational/product knowledge. `knowledge_gap_tickets` (migration 28) flags every
+suggestion the pipeline could NOT ground (confidence none/low or ABSTAIN), with a
+`gap_type` (`no_kb_source` = KB had nothing · `weak_grounding` = sources found but didn't
+fit); it excludes spam/agent-scan **and** auto-reply/absence subjects (those are low-conf
+because they aren't real questions, not KB gaps). `knowledge_gaps` ranks the topics by
+frequency with recent example ids/subjects — the weekly "what to write" list. Read it via
+`deno task knowledge-gaps` (also a `batch-jobs.yml` job, Supabase-only) or SQL. Derived
+entirely from existing pipeline output — **no prompt change**, so the golden set / holdout
+baseline are untouched. Deferred in §4: richer incident model (4.2) and active incident
+detection (4.3, partly blocked by Freshdesk's no-free-text-search); source hierarchy (4.1)
+already largely lives in `prompts.ts`.
+
 ---
 
 ## 13. Repeatable workflows — Claude skills & `tools/`

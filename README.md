@@ -98,6 +98,10 @@ Fas 2.1) so the holdout stays a clean, leak-free test set — run it *before* wr
 gold answers. Read the split with the `cohort_summary` / `gate1_scorecard_by_cohort`
 views.
 
+`knowledge-gaps` prints the topics where the AI couldn't ground an answer — the
+weekly "what KB to write" list (scaling plan Fas 4.4). Backed by the
+`knowledge_gaps` / `knowledge_gap_tickets` views.
+
 This takes the batch/eval work off your machine. The self-running **live poller**
 (deploy + `pg_cron`) is a separate, larger step — see Scheduling + GOLIVE.md, and
 note it needs the security review of the note/tag writes first.
