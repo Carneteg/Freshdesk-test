@@ -119,7 +119,7 @@ var TOKEN_KEY = "coach_review_token";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
-var rows = [], tab = "todo", token = null, meEmail = null;
+var rows = [], tab = "todo", token = null, refreshToken = null, meEmail = null;
 
 boot();
 function boot() {
@@ -127,17 +127,46 @@ function boot() {
   try { saved = localStorage.getItem(TOKEN_KEY); } catch (e) {}
   if (saved) {
     var o = null; try { o = JSON.parse(saved); } catch (e) {}
-    if (o && o.access_token) { token = o.access_token; meEmail = o.email; return loadData(); }
+    if (o && o.access_token) { token = o.access_token; refreshToken = o.refresh_token || null; meEmail = o.email; return loadData(); }
   }
   renderAuth();
 }
 
-function api(path, opts) {
+async function api(path, opts, _retried) {
   opts = opts || {};
   var headers = { apikey: SB_ANON, "Content-Type": "application/json" };
   if (token) headers["Authorization"] = "Bearer " + token;
   if (opts.headers) for (var k in opts.headers) headers[k] = opts.headers[k];
-  return fetch(SB_URL + path, { method: opts.method || "GET", headers: headers, body: opts.body });
+  var res = await fetch(SB_URL + path, { method: opts.method || "GET", headers: headers, body: opts.body });
+  // Access token expired? Silently renew with the refresh token and retry once, so
+  // the session survives past the ~1h token lifetime — no re-typing credentials.
+  if (res.status === 401 && !_retried && refreshToken) {
+    if (await refresh()) return api(path, opts, true);
+  }
+  return res;
+}
+
+async function refresh() {
+  try {
+    var res = await fetch(SB_URL + "/auth/v1/token?grant_type=refresh_token", {
+      method: "POST",
+      headers: { apikey: SB_ANON, "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    });
+    if (!res.ok) return false;
+    var data = await res.json();
+    if (!data.access_token) return false;
+    token = data.access_token;
+    refreshToken = data.refresh_token || refreshToken; // Supabase rotates it
+    persist();
+    return true;
+  } catch (e) { return false; }
+}
+
+function persist() {
+  try {
+    localStorage.setItem(TOKEN_KEY, JSON.stringify({ access_token: token, refresh_token: refreshToken, email: meEmail }));
+  } catch (e) {}
 }
 
 // ---- auth ----
@@ -173,13 +202,13 @@ async function doLogin(email, password) {
     });
     var data = await res.json();
     if (!res.ok) return setAuthMsg(data.error_description || data.msg || data.error || "Sign-in failed.", "err");
-    token = data.access_token; meEmail = (data.user && data.user.email) || email;
-    try { localStorage.setItem(TOKEN_KEY, JSON.stringify({ access_token: token, email: meEmail })); } catch (e) {}
+    token = data.access_token; refreshToken = data.refresh_token || null; meEmail = (data.user && data.user.email) || email;
+    persist();
     loadData();
   } catch (e) { setAuthMsg("Network error: " + e.message, "err"); }
 }
 function signOut() {
-  token = null; meEmail = null;
+  token = null; refreshToken = null; meEmail = null;
   try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
   renderAuth();
 }
