@@ -83,9 +83,17 @@ console.log(`Scoring the agents' replies on ${ids.length} ticket(s). Nothing is 
 // runQaCoach only needs the LLM; the rest of the deps are unused here.
 const deps = { fd, llm, model, withRetrieval: false, excludeCategories: [], db };
 
+// Respect reviewer-flagged spam: never re-score a ticket someone marked as spam.
+const spamIds = new Set<number>();
+{
+  const { data } = await db.from("suggestions").select("ticket_id").eq("is_spam", true);
+  for (const r of data ?? []) spamIds.add(r.ticket_id);
+}
+
 let scored = 0, skipped = 0, failed = 0;
 for (const id of ids) {
   try {
+    if (spamIds.has(id)) { console.log(`  #${id}  skipped (flagged spam)`); skipped++; continue; }
     const t = await fd.ticketWithConversations(id);
     // Skip noise: call-log/marketing-reply by subject, or out-of-office/absence
     // auto-replies detected in the customer body (catches "Re: <campaign>" bounces

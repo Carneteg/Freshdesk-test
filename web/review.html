@@ -115,6 +115,22 @@
   .ticketlink{margin-left:auto;font-size:12.5px}
   a{color:var(--accent)}
   :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  /* controls: search + filters + sort + progress (#3, #5) */
+  .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 14px}
+  .controls input.search{flex:1 1 220px;min-width:160px;font-size:14px;padding:8px 12px}
+  .controls select{font-family:inherit;font-size:13px;padding:7px 10px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink)}
+  .controls select:focus{outline:2px solid var(--accent);outline-offset:1px}
+  .progress{margin:0 0 16px}
+  .progress .lab{font-size:12.5px;color:var(--ink-2);font-family:var(--mono);margin-bottom:5px;display:block}
+  .progress .track{height:7px;border-radius:20px;background:var(--surface-2);overflow:hidden}
+  .progress .fill{height:100%;background:var(--good);border-radius:20px;transition:width .25s}
+  /* active card for keyboard navigation (#4) */
+  .card.active{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 4px var(--accent-soft),var(--shadow)}
+  .goldactions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .spambtn{margin-left:6px;border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--ink-3)}
+  .spambtn:hover{border-color:var(--crit);color:var(--crit)}
+  kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--ink)}
 </style>
 </head>
 <body>
@@ -133,6 +149,9 @@ var TOKEN_KEY = "coach_review_token";
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
 var rows = [], tab = "todo", token = null, refreshToken = null, meEmail = null;
+// view state for search / filter / sort / keyboard (Fas 2)
+var search = "", fLang = "", fType = "", fConf = "", sortBy = "newest";
+var shown = [], cardEls = [], activeIdx = -1;
 
 boot();
 function boot() {
@@ -229,7 +248,7 @@ function signOut() {
 // ---- data ----
 async function loadData() {
   app.innerHTML = '<div class="empty">Loading tickets…</div>';
-  var cols = "id,ticket_id,ticket_url,subject,customer_message,ticket_type,language,confidence,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,agent_sent_reply,gold_answer,gold_answer_by,prompt_version,created_at";
+  var cols = "id,ticket_id,ticket_url,subject,customer_message,ticket_type,language,confidence,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,agent_sent_reply,gold_answer,gold_answer_by,is_spam,prompt_version,created_at";
   try {
     var res = await api("/rest/v1/suggestions?select=" + cols + "&order=created_at.desc&limit=300");
     if (res.status === 401) { signOut(); return; }
@@ -240,24 +259,28 @@ async function loadData() {
       return;
     }
     var all = Array.isArray(data) ? data : [];
-    rows = all.filter(function (r) { return !isSpam(r.subject); }); // hide any auto-reply noise
+    // hide reviewer-flagged spam (is_spam) and any auto-reply noise the ingest missed
+    rows = all.filter(function (r) { return !r.is_spam && !isSpam(r.subject); });
     render();
   } catch (e) {
     app.innerHTML = '<div class="empty">Network error: ' + esc(e.message) + "</div>";
   }
 }
 
+// Which rows belong to the current tab (before search/filter/sort).
+function tabRows() {
+  if (tab === "done") return rows.filter(function (r) { return r.verdict; });
+  if (tab === "rewrite") {
+    return rows.filter(function (r) { return r.agent_qa_score != null && !(r.gold_answer && r.gold_answer.trim()); });
+  }
+  if (tab === "all") return rows.slice();
+  return rows.filter(function (r) { return !r.verdict && r.prompt_version !== "agent-scan"; }); // todo
+}
+
+// render() lays out the stable chrome ONCE (header, help, tabs, controls, progress)
+// and leaves the card list to renderList(), so typing in search never rebuilds — and
+// so loses focus on — the controls.
 function render() {
-  var todo = rows.filter(function (r) { return !r.verdict && r.prompt_version !== "agent-scan"; });
-  var done = rows.filter(function (r) { return r.verdict; });
-  // Rewrite queue: agent replies scored by the QA coach, worst-first, no ideal answer yet.
-  var rewrite = rows.filter(function (r) {
-    return r.agent_qa_score != null && !(r.gold_answer && r.gold_answer.trim());
-  }).sort(function (a, b) {
-    var ar = a.agent_qa_needs_review ? 1 : 0, br = b.agent_qa_needs_review ? 1 : 0;
-    return br - ar || (a.agent_qa_score || 0) - (b.agent_qa_score || 0);
-  });
-  var list = tab === "todo" ? todo : tab === "done" ? done : tab === "rewrite" ? rewrite : rows;
   app.innerHTML = "";
 
   var top = el("header", "top");
@@ -267,20 +290,113 @@ function render() {
   app.appendChild(helpPanel());
 
   var bar = el("div", "bar");
-  bar.appendChild(tabEl("todo", "To review", todo.length));
-  bar.appendChild(tabEl("done", "Judged", done.length));
-  bar.appendChild(tabEl("rewrite", "Rewrite", rewrite.length));
+  bar.appendChild(tabEl("todo", "To review", tabCount("todo")));
+  bar.appendChild(tabEl("done", "Judged", tabCount("done")));
+  bar.appendChild(tabEl("rewrite", "Rewrite", tabCount("rewrite")));
   bar.appendChild(tabEl("all", "All", rows.length));
-  var c = el("div", "count"); c.textContent = rows.length + " loaded";
+  var c = el("div", "count"); c.id = "loadcount"; c.textContent = rows.length + " loaded";
   bar.appendChild(c);
   app.appendChild(bar);
   document.getElementById("out").onclick = signOut;
 
-  if (!list.length) {
-    var e = el("div", "empty"); e.textContent = tab === "todo" ? "Nothing left to review 🎉" : "Nothing here.";
-    app.appendChild(e); return;
+  app.appendChild(controlsEl());
+  app.appendChild(progressEl());
+  var lw = el("div"); lw.id = "listwrap"; app.appendChild(lw);
+  renderList();
+}
+
+function tabCount(id) {
+  if (id === "done") return rows.filter(function (r) { return r.verdict; }).length;
+  if (id === "rewrite") return rows.filter(function (r) { return r.agent_qa_score != null && !(r.gold_answer && r.gold_answer.trim()); }).length;
+  return rows.filter(function (r) { return !r.verdict && r.prompt_version !== "agent-scan"; }).length;
+}
+
+// distinct non-empty values of a field across all rows, for filter dropdowns
+function distinct(field) {
+  var seen = {}, out = [];
+  for (var i = 0; i < rows.length; i++) {
+    var v = rows[i][field];
+    if (v && !seen[v]) { seen[v] = 1; out.push(v); }
   }
-  for (var i = 0; i < list.length; i++) app.appendChild(cardEl(list[i]));
+  return out.sort();
+}
+
+function controlsEl() {
+  var box = el("div", "controls");
+  var s = document.createElement("input");
+  s.className = "search"; s.type = "search"; s.placeholder = "Search id, subject, draft…"; s.value = search;
+  s.oninput = function () { search = s.value; renderList(); };
+  box.appendChild(s);
+
+  box.appendChild(selectEl("Language", distinct("language").map(function (v) { return [v, v.toUpperCase()]; }), fLang, function (v) { fLang = v; renderList(); }));
+  box.appendChild(selectEl("Type", distinct("ticket_type").map(function (v) { return [v, v]; }), fType, function (v) { fType = v; renderList(); }));
+  box.appendChild(selectEl("Confidence", [["high", "high"], ["medium", "medium"], ["low", "low"], ["none", "none"]], fConf, function (v) { fConf = v; renderList(); }));
+  box.appendChild(selectEl("Sort: newest", [["qa", "Sort: QA score ↑"], ["agentqa", "Sort: agent QA ↑"], ["conf", "Sort: confidence ↓"]], sortBy === "newest" ? "" : sortBy, function (v) { sortBy = v || "newest"; renderList(); }));
+  return box;
+}
+
+// A <select> whose first option is the "all/default" label, then [value,label] pairs.
+function selectEl(allLabel, opts, cur, onchange) {
+  var sel = document.createElement("select");
+  var o0 = document.createElement("option"); o0.value = ""; o0.textContent = allLabel; sel.appendChild(o0);
+  for (var i = 0; i < opts.length; i++) {
+    var o = document.createElement("option"); o.value = opts[i][0]; o.textContent = opts[i][1];
+    if (opts[i][0] === cur) o.selected = true;
+    sel.appendChild(o);
+  }
+  sel.onchange = function () { onchange(sel.value); };
+  return sel;
+}
+
+function progressEl() {
+  var reviewable = rows.filter(function (r) { return r.prompt_version !== "agent-scan"; });
+  var judged = reviewable.filter(function (r) { return r.verdict; }).length;
+  var total = reviewable.length;
+  var pct = total ? Math.round(100 * judged / total) : 0;
+  var box = el("div", "progress");
+  box.innerHTML =
+    '<span class="lab">' + judged + " av " + total + " granskade · " + pct + "%</span>" +
+    '<div class="track"><div class="fill" style="width:' + pct + '%"></div></div>';
+  return box;
+}
+
+// renderList() rebuilds ONLY the card list, applying search + filters + sort on top
+// of the active tab. Called on every keystroke/filter change; leaves controls intact.
+function renderList() {
+  var base = tabRows();
+  var q = search.trim().toLowerCase();
+  shown = base.filter(function (r) {
+    if (fLang && r.language !== fLang) return false;
+    if (fType && r.ticket_type !== fType) return false;
+    if (fConf && (r.confidence || "none") !== fConf) return false;
+    if (q) {
+      var hay = (String(r.ticket_id) + " " + (r.subject || "") + " " + (r.draft || "") + " " + (r.customer_message || "")).toLowerCase();
+      if (hay.indexOf(q) < 0) return false;
+    }
+    return true;
+  });
+  shown.sort(sortFn);
+
+  var lw = document.getElementById("listwrap");
+  lw.innerHTML = "";
+  cardEls = []; activeIdx = -1;
+  if (!shown.length) {
+    var e = el("div", "empty");
+    e.textContent = tab === "todo" ? "Nothing left to review 🎉" : "Nothing matches.";
+    lw.appendChild(e);
+    return;
+  }
+  for (var i = 0; i < shown.length; i++) {
+    var card = cardEl(shown[i]);
+    cardEls.push(card); lw.appendChild(card);
+  }
+}
+
+function sortFn(a, b) {
+  if (sortBy === "qa") return (a.qa_score == null ? 999 : a.qa_score) - (b.qa_score == null ? 999 : b.qa_score);
+  if (sortBy === "agentqa") return (a.agent_qa_score == null ? 999 : a.agent_qa_score) - (b.agent_qa_score == null ? 999 : b.agent_qa_score);
+  if (sortBy === "conf") { var rank = { high: 3, medium: 2, low: 1, none: 0 }; return (rank[b.confidence] || 0) - (rank[a.confidence] || 0); }
+  return String(b.created_at || "").localeCompare(String(a.created_at || "")); // newest
 }
 
 function tabEl(id, label, n) {
@@ -289,6 +405,39 @@ function tabEl(id, label, n) {
   b.onclick = function () { tab = id; render(); };
   return b;
 }
+
+// ---- keyboard navigation (#4): j/k move, u/e/n verdict, g focus ideal answer ----
+function setActive(idx) {
+  if (activeIdx >= 0 && cardEls[activeIdx]) cardEls[activeIdx].classList.remove("active");
+  activeIdx = idx;
+  var c = cardEls[activeIdx];
+  if (c) { c.classList.add("active"); c.scrollIntoView({ block: "center", behavior: "smooth" }); }
+}
+function moveActive(delta) {
+  if (!cardEls.length) return;
+  var next = activeIdx < 0 ? 0 : activeIdx + delta;
+  if (next < 0) next = 0;
+  if (next > cardEls.length - 1) next = cardEls.length - 1;
+  setActive(next);
+}
+document.addEventListener("keydown", function (e) {
+  if (!token || !shown.length) return;
+  var t = e.target;
+  if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  var k = e.key.toLowerCase();
+  if (k === "j" || e.key === "ArrowDown") { e.preventDefault(); moveActive(1); }
+  else if (k === "k" || e.key === "ArrowUp") { e.preventDefault(); moveActive(-1); }
+  else if (k === "u" || k === "e" || k === "n") {
+    if (activeIdx < 0) return;
+    var v = k === "u" ? "usable" : k === "e" ? "edited" : "unusable";
+    e.preventDefault(); setVerdict(shown[activeIdx], v, cardEls[activeIdx]);
+  } else if (k === "g") {
+    if (activeIdx < 0) return;
+    var ta = cardEls[activeIdx].querySelector("textarea");
+    if (ta) { e.preventDefault(); ta.focus(); }
+  }
+});
 
 function cardEl(r) {
   var card = el("div", "card");
@@ -358,24 +507,39 @@ function cardEl(r) {
   var ta = document.createElement("textarea");
   ta.value = r.gold_answer || "";
   ta.placeholder = r.agent_sent_reply ? "Write the ideal answer, or start from the agent's reply above…" : "Write the ideal answer the AI should learn from…";
-  gold.appendChild(ta);
-  var gbar = el("div", "goldbar");
-  var save = el("button", "btn small"); save.textContent = "Save ideal answer";
   var st = el("span", "st");
   st.textContent = r.gold_answer ? ("saved" + (r.gold_answer_by ? " · " + r.gold_answer_by : "")) : "";
-  save.onclick = function () { saveGold(r, ta.value, st); };
-  gbar.appendChild(save);
+  // autosave (#5): debounce ~1s after typing stops; the manual button stays as a fallback.
+  ta.oninput = function () { scheduleGoldSave(r, ta, st); };
+  gold.appendChild(ta);
+
+  var gbar = el("div", "goldbar");
+  var gactions = el("div", "goldactions");
+  var save = el("button", "btn small"); save.textContent = "Save ideal answer";
+  save.onclick = function () { if (r._goldTimer) { clearTimeout(r._goldTimer); r._goldTimer = null; } saveGold(r, ta.value, st); };
+  gactions.appendChild(save);
+  // "Mark as golden": adopt the best reply we already have as the ideal answer, in one click.
+  var best = (r.agent_sent_reply && r.agent_sent_reply.trim()) ? r.agent_sent_reply
+    : (r.agent_qa_assessment && r.agent_qa_assessment.recommendedReply) ? r.agent_qa_assessment.recommendedReply
+    : (r.draft && r.draft.trim()) ? r.draft : "";
+  if (best) {
+    var mark = el("button", "btn small"); mark.textContent = "★ Mark as golden";
+    mark.title = "Adopt the reply above as the ideal answer and save it";
+    mark.onclick = function () { ta.value = best; saveGold(r, best, st); };
+    gactions.appendChild(mark);
+  }
   if (r.agent_sent_reply) {
     var useSent = el("button", "link"); useSent.textContent = "use agent's reply";
     useSent.onclick = function () { ta.value = r.agent_sent_reply; };
-    gbar.appendChild(useSent);
+    gactions.appendChild(useSent);
   }
   var rec = r.agent_qa_assessment && r.agent_qa_assessment.recommendedReply;
   if (rec) {
     var useRec = el("button", "link"); useRec.textContent = "start from AI suggestion";
     useRec.onclick = function () { ta.value = rec; };
-    gbar.appendChild(useRec);
+    gactions.appendChild(useRec);
   }
+  gbar.appendChild(gactions);
   gbar.appendChild(st); gold.appendChild(gbar); card.appendChild(gold);
 
   var actions = el("div", "actions");
@@ -388,6 +552,10 @@ function cardEl(r) {
   });
   var state = el("span", "vstate"); state.textContent = r.verdict ? "recorded: " + r.verdict : "";
   actions.appendChild(state);
+  // "Spam" hides the ticket everywhere and keeps it out of the eval + rewrite queue.
+  var spam = el("button", "spambtn"); spam.textContent = "Spam"; spam.title = "Mark as spam / noise and hide it";
+  spam.onclick = function () { markSpam(r); };
+  actions.appendChild(spam);
   if (r.ticket_url) {
     var link = document.createElement("a");
     link.className = "ticketlink"; link.href = esc(r.ticket_url); link.target = "_blank"; link.rel = "noopener";
@@ -426,6 +594,28 @@ async function saveGold(r, text, st) {
   } catch (e) { st.textContent = "save failed: " + e.message; }
 }
 
+// Debounced autosave: save ~1s after the reviewer stops typing (per-row timer).
+function scheduleGoldSave(r, ta, st) {
+  st.textContent = "saving…";
+  if (r._goldTimer) clearTimeout(r._goldTimer);
+  r._goldTimer = setTimeout(function () { r._goldTimer = null; saveGold(r, ta.value, st); }, 1000);
+}
+
+// Mark a ticket as spam/noise: persist is_spam=true, then drop it from the list.
+async function markSpam(r) {
+  if (!window.confirm("Mark #" + r.ticket_id + " as spam and hide it? It stays out of the eval and rewrite queue.")) return;
+  try {
+    var res = await api("/rest/v1/suggestions?id=eq." + r.id, {
+      method: "PATCH", headers: { Prefer: "return=minimal" },
+      body: JSON.stringify({ is_spam: true }),
+    });
+    if (!res.ok) { window.alert("Couldn't mark as spam: " + (await res.text())); return; }
+    r.is_spam = true;
+    rows = rows.filter(function (x) { return x.id !== r.id; });
+    render();
+  } catch (e) { window.alert("Network error: " + e.message); }
+}
+
 function detail(label, text) {
   var d = document.createElement("details");
   var sum = document.createElement("summary"); sum.textContent = esc(label); d.appendChild(sum);
@@ -457,7 +647,17 @@ function helpPanel() {
     '<ul>' +
     '<li>Prioritise tickets the AI got <b>wrong</b> (Unusable / Edited) where you have a clear correct answer — those teach the most.</li>' +
     '<li>A short, correct answer beats a long, hedged one.</li>' +
-    '<li>Tip: click <b>"use agent\'s reply"</b> to start the box from what was actually sent, then tighten it.</li>' +
+    '<li>Tip: click <b>"use agent\'s reply"</b> to start the box from what was actually sent, then tighten it — or <b>★ Mark as golden</b> to adopt it as-is in one click.</li>' +
+    '<li>The ideal answer <b>autosaves</b> ~1&nbsp;second after you stop typing (the Save button still works).</li>' +
+    '<li>Use <b>Search</b> and the <b>Language / Type / Confidence / Sort</b> filters to find the tickets worth your time; the bar shows how many you have <b>granskade</b> (reviewed).</li>' +
+    '<li>Junk that slipped through (absence replies, marketing bounces)? Hit <b>Spam</b> to hide it and keep it out of the stats.</li>' +
+    '</ul>' +
+    '<h4>Keyboard shortcuts</h4>' +
+    '<ul>' +
+    '<li><kbd>J</kbd> / <kbd>K</kbd> (or <kbd>↓</kbd> / <kbd>↑</kbd>) — move between cards</li>' +
+    '<li><kbd>U</kbd> Usable · <kbd>E</kbd> Edited · <kbd>N</kbd> Unusable — record the verdict on the active card</li>' +
+    '<li><kbd>G</kbd> — jump to the ideal-answer box of the active card</li>' +
+    '<li>(shortcuts pause while you\'re typing in a field)</li>' +
     '</ul>' +
     '</div>';
   return d;

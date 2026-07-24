@@ -130,6 +130,13 @@ console.log(
     : "(not persisting — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to save results)\n",
 );
 
+// Respect reviewer-flagged spam: never re-process a ticket someone marked as spam.
+const spamIds = new Set<number>();
+if (db) {
+  const { data } = await db.from("suggestions").select("ticket_id").eq("is_spam", true);
+  for (const r of data ?? []) spamIds.add(r.ticket_id);
+}
+
 // Show which tickets before sending anything to OpenAI.
 console.log("Tickets to replay (nothing will be posted):\n");
 const tickets = [];
@@ -148,7 +155,8 @@ for (const id of ids) {
 // which catches "Re: <campaign>" bounces that carry no auto-reply prefix, e.g. #86174).
 const kept = tickets.filter((t) =>
   !isIgnorableTicket(t.subject, excludeSubjects) &&
-  !looksLikeAutoReply(latestCustomerMessage(t).text)
+  !looksLikeAutoReply(latestCustomerMessage(t).text) &&
+  !spamIds.has(t.id)
 );
 const dropped = tickets.length - kept.length;
 if (dropped) {
