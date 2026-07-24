@@ -461,6 +461,7 @@ const STRATEGY_LABEL: Record<string, string> = {
 
 export interface NoteData {
   confidence: Confidence;
+  coachMode?: CoachMode;
   confidenceReason?: string;
   draft: string;
   rationale?: string;
@@ -489,6 +490,52 @@ const BADGE: Record<Confidence, string> = {
   high: "🟢 HIGH",
   low: "🟡 LOW",
   none: "⚪ NONE",
+};
+
+// ── Coach mode (scaling plan Fas 3.1) ────────────────────────────────────────
+// Every suggestion is one of three modes. Derived DETERMINISTICALLY from the
+// already-resolved pipeline signals ("code decides", like the QA validator) rather
+// than trusted from the model — so the mode can never disagree with the verify
+// gates, and no prompt change is needed (the golden set stays comparable). The
+// §3.3 guardrails (attachment / roles / deletion / legal / broken-promise) already
+// live in prompts.ts; this makes the resulting decision an explicit, measurable label.
+export type CoachMode = "REPLY_READY" | "COACH_AGENT" | "AGENT_ACTION_REQUIRED";
+
+export function deriveCoachMode(s: {
+  answerStrategy: string;
+  confidence: Confidence;
+  hasReply: boolean;
+  requiresManualCheck: boolean;
+  sensitiveActionRequest: boolean;
+  resolutionStepCount: number;
+}): CoachMode {
+  // 🔴 the agent must DO something before anything can reach the customer: check the
+  // system / roles, verify identity for a sensitive action, open an attachment
+  // (→ requiresManualCheck, or an empty reply with agent steps), or escalate.
+  if (
+    s.requiresManualCheck ||
+    s.sensitiveActionRequest ||
+    s.answerStrategy === "RECOMMEND_AGENT_VERIFICATION" ||
+    s.answerStrategy === "ESCALATE" ||
+    (!s.hasReply && s.resolutionStepCount > 0)
+  ) return "AGENT_ACTION_REQUIRED";
+
+  // 🟢 a grounded, send-ready customer message with no open agent action.
+  const sendReadyStrategy = s.answerStrategy === "DIRECT_ANSWER" ||
+    s.answerStrategy === "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS" ||
+    s.answerStrategy === "REPEAT_CLARIFYING_QUESTION" ||
+    s.answerStrategy === "REQUEST_MISSING_INFORMATION";
+  if (s.hasReply && s.confidence === "high" && sendReadyStrategy) return "REPLY_READY";
+
+  // 🟡 otherwise: useful coaching / a hedged direction, but not send-ready as-is
+  // (e.g. a routing message the agent must forward, or a low-confidence draft).
+  return "COACH_AGENT";
+}
+
+export const MODE_BADGE: Record<CoachMode, string> = {
+  REPLY_READY: "🟢 REPLY READY",
+  COACH_AGENT: "🟡 COACH THE AGENT",
+  AGENT_ACTION_REQUIRED: "🔴 AGENT ACTION REQUIRED",
 };
 
 // One line item per source, hyperlinked: KB solutions link to the article, past
@@ -520,12 +567,23 @@ export function renderNote(r: NoteData): string {
   const scorePart = isAnswer
     ? `Q/A: answers ${r.qaAnswered} of ${r.qaTotal} question(s)`
     : `Coach action (verify / route / clarify — not a direct answer)`;
+  // Mode line (Fas 3.1): the single most important thing for the agent to see —
+  // can I send this, should I use it as coaching, or must I act first?
+  const modePart = r.coachMode ? `Mode: ${esc(MODE_BADGE[r.coachMode])} · ` : "";
   out.push(
     `<p><strong>🤝 AI assist for the agent</strong> — decision support, not an automatic answer<br>` +
-      `${typePart}Confidence: ${esc(BADGE[r.confidence])} · ` +
+      `${modePart}${typePart}Confidence: ${esc(BADGE[r.confidence])} · ` +
       `${scorePart} · ` +
       `<em>${esc(r.promptVersion)}</em></p>`,
   );
+  // A red banner when the agent must do something before anything reaches the
+  // customer — so a not-send-ready note is never mistaken for a ready reply.
+  if (r.coachMode === "AGENT_ACTION_REQUIRED") {
+    out.push(
+      `<p><strong>🔴 Agent action required before replying</strong> — verify / check / route as below; ` +
+        `do not send a customer reply until it is done.</p>`,
+    );
+  }
 
   // What the AI decided to do, and (briefly) why — so the agent can sanity-check
   // the strategy before reading the draft.

@@ -471,6 +471,23 @@ the operational knowledge agents carry but don't write down — read the score a
 look" (vague / non-answer / undocumented solution), NOT as a grade of the agent, and never
 rank agents by it. One QA call per ticket → scalable to the ~50k backlog; start small.
 
+**Coach mode — REPLY_READY / COACH_AGENT / AGENT_ACTION_REQUIRED (Fas 3.1, 2026-07-24).**
+Every suggestion now carries an explicit three-way `coach_mode` (migration 26). It is
+**derived in code** (`deriveCoachMode` in `render.ts`) from the already-resolved pipeline
+signals — confidence + `answer_strategy` + `requires_manual_system_check` +
+`sensitive_action_request` + reply-presence — NOT trusted from the model, so it can never
+disagree with the verify gates and needs **no prompt change** (PROMPT_VERSION unchanged →
+golden set stays comparable; same "code decides" stance as the QA validator). 🔴
+AGENT_ACTION_REQUIRED = the agent must check the system / verify identity / open an
+attachment / escalate before anything is sent (renderNote shows a red banner + no
+send-ready framing); 🟢 REPLY_READY = a grounded, high-confidence, send-ready reply; 🟡
+COACH_AGENT = useful guidance but not send-ready (e.g. a routing message or a low-confidence
+draft). The §3.3 guardrails (attachment / roles / deletion / legal / broken-promise) were
+**already** in `prompts.ts` before Fas 3 — this makes the resulting decision an explicit,
+measurable label. Measure it with `coach_mode_scorecard` (verdict distribution per mode): if
+REPLY_READY isn't clearly more "usable" than COACH_AGENT, the gate is miscalibrated. Shown as
+a coloured tag in the review app.
+
 **Locked cohorts — learning / development / holdout (2026-07-24).** First scaling-plan
 item built (Fas 2.1, `docs/coach-scaling-plan.md`): `ticket_cohorts` (migration 25) is a
 **per-ticket, versioned, locked** split into `learning` / `development` / `holdout`, so the
