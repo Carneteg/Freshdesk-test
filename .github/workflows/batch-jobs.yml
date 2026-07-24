@@ -1,0 +1,130 @@
+name: Batch jobs (replay / score-history / sync-tickets)
+
+# Run the Gate 1 batch jobs from GitHub instead of locally in PowerShell.
+# Trigger manually: Actions → "Batch jobs" → Run workflow → pick a job.
+#
+# None of these post to Freshdesk — they only read Freshdesk + OpenAI and write
+# results to Supabase (the same as running them on a laptop). Real ticket text is
+# sent to OpenAI for scoring; the DPA position is cleared for that (CLAUDE.md §11).
+#
+# Required repo secrets (Settings → Secrets and variables → Actions):
+#   FRESHDESK_DOMAIN, FRESHDESK_API_KEY, OPENAI_API_KEY,
+#   MY_AGENT_ID, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# Optional: OPENAI_MODEL (defaults to gpt-4o if unset)
+
+on:
+  workflow_dispatch:
+    inputs:
+      job:
+        description: Which batch job to run
+        type: choice
+        required: true
+        default: score-history
+        options:
+          - score-history   # QA-score agents' historical replies (triage). Posts nothing.
+          - replay          # Replay closed tickets through the pipeline (evaluation).
+          - sync-tickets    # Refresh the semantic past-ticket precedent index.
+      ticket_ids:
+        description: "Explicit ticket ids (space-separated). Leave empty to auto-pick by agent/count."
+        type: string
+        required: false
+        default: ""
+      agent:
+        description: "Agent to pick tickets for (name / email / numeric id). Empty = MY_AGENT_ID secret."
+        type: string
+        required: false
+        default: ""
+      count:
+        description: "How many closed tickets to auto-pick (replay/score-history). Empty = script default."
+        type: string
+        required: false
+        default: ""
+      learning_loop:
+        description: "replay only — feed reviewer gold answers in as exemplars (+gold run)"
+        type: boolean
+        required: false
+        default: false
+      qa_coach:
+        description: "replay only — also run the QA coach on each draft"
+        type: boolean
+        required: false
+        default: true
+
+# Don't let two batch runs overlap — they write the same Supabase rows.
+concurrency:
+  group: batch-jobs
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      FRESHDESK_DOMAIN: ${{ secrets.FRESHDESK_DOMAIN }}
+      FRESHDESK_API_KEY: ${{ secrets.FRESHDESK_API_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      MY_AGENT_ID: ${{ secrets.MY_AGENT_ID }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      # replay reads these as strings; empty is fine (LEARNING_LOOP!=="true", QA_COACH!=="false")
+      LEARNING_LOOP: ${{ inputs.learning_loop }}
+      QA_COACH: ${{ inputs.qa_coach }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        run: |
+          missing=""
+          for v in FRESHDESK_DOMAIN FRESHDESK_API_KEY OPENAI_API_KEY MY_AGENT_ID SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required repo secret(s):$missing — add them in Settings → Secrets and variables → Actions."
+            exit 1
+          fi
+          echo "All required secrets are present."
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Run batch job
+        # Inputs come in via env (never interpolated into the script) to avoid shell injection.
+        env:
+          IN_JOB: ${{ inputs.job }}
+          IN_IDS: ${{ inputs.ticket_ids }}
+          IN_AGENT: ${{ inputs.agent }}
+          IN_COUNT: ${{ inputs.count }}
+          OPENAI_MODEL_SECRET: ${{ secrets.OPENAI_MODEL }}
+        run: |
+          set -euo pipefail
+
+          # OpenAI model: fall back to gpt-4o when the secret is unset (empty string
+          # would otherwise reach the client as an invalid model name).
+          model="$OPENAI_MODEL_SECRET"
+          [ -z "$model" ] && model="gpt-4o"
+          export OPENAI_MODEL="$model"
+
+          # Optional selectors — only export when provided, so the scripts' own
+          # defaults (e.g. REPLAY_COUNT=10, SCORE_COUNT=50) are not overridden by
+          # an empty string (Number("") === 0 would pick zero tickets).
+          if [ -n "$IN_AGENT" ]; then export REPLAY_AGENT="$IN_AGENT" SCORE_AGENT="$IN_AGENT"; fi
+          if [ -n "$IN_COUNT" ]; then export REPLAY_COUNT="$IN_COUNT" SCORE_COUNT="$IN_COUNT"; fi
+
+          echo "Running '$IN_JOB' (model=$OPENAI_MODEL, ids='${IN_IDS:-<auto>}', agent='${IN_AGENT:-MY_AGENT_ID}', count='${IN_COUNT:-default}')"
+
+          # $IN_IDS is intentionally unquoted so space-separated numeric ids become
+          # separate args; empty expands to nothing → the script auto-picks by agent.
+          case "$IN_JOB" in
+            replay)
+              deno run --allow-env --allow-net scripts/replay.ts $IN_IDS ;;
+            score-history)
+              deno run --allow-env --allow-net scripts/score_history.ts $IN_IDS ;;
+            sync-tickets)
+              deno run --allow-env --allow-net scripts/sync_tickets.ts ;;
+            *)
+              echo "::error::Unknown job '$IN_JOB'"; exit 1 ;;
+          esac
