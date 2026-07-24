@@ -629,7 +629,11 @@ export async function runQaCoach(
     // Deterministic recompute of the math + verdict from the model's raw scores.
     const assessment = validateAndNormalizeAssessment(raw);
     return { version: QA_COACH_VERSION, assessment };
-  } catch {
+  } catch (err) {
+    // Never fail silently (CLAUDE.md §10): surface WHY the scorer produced nothing
+    // (e.g. an OpenAI auth/model error) so it is visible in the run log, not hidden
+    // behind a bare "scorer returned nothing".
+    console.error(`QA coach scoring failed: ${err instanceof Error ? err.message : String(err)}`);
     return null;
   }
 }
