@@ -743,20 +743,30 @@ export async function loadIncidents(
 
 // Load the reviewer-written ideal answers (the "what good looks like" corpus) for
 // the learning loop (§12). A failure or empty corpus just means "no exemplars".
+// Gold answers on HOLDOUT tickets are excluded (scaling plan Fas 2.1 / migration 25):
+// the locked test set must never leak into generation as a few-shot exemplar.
 export async function loadGoldExemplars(
   // deno-lint-ignore no-explicit-any
   db: any,
   limit = 20,
 ): Promise<LoadedExemplar[]> {
   try {
+    // The locked holdout — never learn from these tickets. A missing table (older
+    // schema) just yields an empty set, so nothing is excluded.
+    const holdout = new Set<number>();
+    const { data: hc } = await db.from("ticket_cohorts").select("ticket_id").eq("cohort", "holdout");
+    for (const r of hc ?? []) holdout.add(r.ticket_id);
+
     const { data } = await db
       .from("suggestions")
       .select("ticket_id, subject, language, gold_answer")
       .not("gold_answer", "is", null)
       .order("gold_answer_at", { ascending: false })
-      .limit(limit);
+      .limit(limit + holdout.size); // fetch extra so holdout removals don't shrink below `limit`
     return (data ?? [])
-      .filter((r: { gold_answer?: string }) => r.gold_answer && r.gold_answer.trim())
+      .filter((r: { ticket_id: number; gold_answer?: string }) =>
+        r.gold_answer && r.gold_answer.trim() && !holdout.has(r.ticket_id))
+      .slice(0, limit)
       .map((r: { ticket_id: number; subject?: string; language?: string | null; gold_answer: string }) => ({
         ticket_id: r.ticket_id,
         subject: r.subject ?? `Ticket #${r.ticket_id}`,

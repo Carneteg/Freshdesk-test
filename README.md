@@ -88,9 +88,15 @@ Actions): `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`, `OPENAI_API_KEY`,
 `OPENAI_MODEL`, defaults to `gpt-4o`).
 
 **Run it:** Actions tab → **Batch jobs** → *Run workflow* → pick the job
-(`score-history` / `replay` / `sync-tickets`), optionally set ticket ids, agent,
-count, or the replay toggles. Output (including the per-ticket log) shows in the
-run; results land in Supabase and are reviewed in the web app as usual.
+(`score-history` / `replay` / `sync-tickets` / `assign-cohorts`), optionally set
+ticket ids, agent, count, or the replay toggles. Output (including the per-ticket
+log) shows in the run; results land in Supabase and are reviewed in the web app as
+usual.
+
+`assign-cohorts` locks tickets into learning/development/holdout sets (scaling plan
+Fas 2.1) so the holdout stays a clean, leak-free test set — run it *before* writing
+gold answers. Read the split with the `cohort_summary` / `gate1_scorecard_by_cohort`
+views.
 
 This takes the batch/eval work off your machine. The self-running **live poller**
 (deploy + `pg_cron`) is a separate, larger step — see Scheduling + GOLIVE.md, and
