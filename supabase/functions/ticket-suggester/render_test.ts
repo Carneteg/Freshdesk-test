@@ -5,6 +5,7 @@ import {
   buildContext,
   classifyUsage,
   containsFalseSystemAccess,
+  deriveCoachMode,
   deriveTags,
   esc,
   extractJSON,
@@ -26,6 +27,34 @@ import {
 } from "./render.ts";
 import { draftPrompt } from "./prompts.ts";
 import type { Ticket } from "./clients.ts";
+
+Deno.test("deriveCoachMode: three-way classification (Fas 3.1)", () => {
+  const base = {
+    answerStrategy: "DIRECT_ANSWER",
+    confidence: "high" as const,
+    hasReply: true,
+    requiresManualCheck: false,
+    sensitiveActionRequest: false,
+    resolutionStepCount: 0,
+  };
+  // 🟢 grounded, high-confidence, send-ready strategies
+  assertEquals(deriveCoachMode(base), "REPLY_READY");
+  assertEquals(deriveCoachMode({ ...base, answerStrategy: "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS" }), "REPLY_READY");
+  assertEquals(deriveCoachMode({ ...base, answerStrategy: "REQUEST_MISSING_INFORMATION" }), "REPLY_READY");
+  // 🔴 agent must act first — beats REPLY_READY even with a reply present
+  assertEquals(deriveCoachMode({ ...base, requiresManualCheck: true }), "AGENT_ACTION_REQUIRED");
+  assertEquals(deriveCoachMode({ ...base, sensitiveActionRequest: true }), "AGENT_ACTION_REQUIRED");
+  assertEquals(deriveCoachMode({ ...base, answerStrategy: "RECOMMEND_AGENT_VERIFICATION" }), "AGENT_ACTION_REQUIRED");
+  assertEquals(deriveCoachMode({ ...base, answerStrategy: "ESCALATE" }), "AGENT_ACTION_REQUIRED");
+  assertEquals(deriveCoachMode({ ...base, hasReply: false, resolutionStepCount: 2 }), "AGENT_ACTION_REQUIRED");
+  // 🟡 in between: low confidence, routing (agent forwards), or empty abstain
+  assertEquals(deriveCoachMode({ ...base, confidence: "low" }), "COACH_AGENT");
+  assertEquals(deriveCoachMode({ ...base, answerStrategy: "ROUTE" }), "COACH_AGENT");
+  assertEquals(
+    deriveCoachMode({ ...base, hasReply: false, confidence: "none", answerStrategy: "ABSTAIN" }),
+    "COACH_AGENT",
+  );
+});
 
 Deno.test("draftPrompt: injects the known-incidents playbook, outranking generic KB", () => {
   const { system, user } = draftPrompt({

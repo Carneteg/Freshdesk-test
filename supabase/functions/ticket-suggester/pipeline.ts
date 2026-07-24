@@ -27,8 +27,10 @@ import {
   type BugGuidance,
   buildContext,
   classifyUsage,
+  type CoachMode,
   type Confidence,
   containsFalseSystemAccess,
+  deriveCoachMode,
   extractJSON,
   lastAgentReply,
   latestCustomerMessage,
@@ -153,6 +155,7 @@ export interface Suggestion {
   keywords: string[];
   answer_strategy: string;
   confidence: Confidence;
+  coach_mode: CoachMode;
   confidence_reason: string | null;
   draft: string | null;
   resolution_steps: string[];
@@ -520,8 +523,20 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     system_messages: a.system_messages,
   };
 
+  // Fas 3.1: classify into REPLY_READY / COACH_AGENT / AGENT_ACTION_REQUIRED,
+  // deterministically from the now-resolved signals (after every verify gate).
+  const coachMode: CoachMode = deriveCoachMode({
+    answerStrategy: draft.answer_strategy,
+    confidence: draft.confidence,
+    hasReply: !!(draft.reply && draft.reply.trim()),
+    requiresManualCheck: draft.requires_manual_system_check,
+    sensitiveActionRequest: a.sensitive_action_request,
+    resolutionStepCount: draft.resolution_steps.length,
+  });
+
   const note = renderNote({
     confidence: draft.confidence,
+    coachMode,
     confidenceReason: draft.confidence_reason,
     draft: draft.reply,
     rationale: draft.rationale,
@@ -556,6 +571,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     keywords: a.keywords,
     answer_strategy: draft.answer_strategy,
     confidence: draft.confidence,
+    coach_mode: coachMode,
     confidence_reason: draft.confidence_reason || null,
     draft: draft.reply || null,
     resolution_steps: draft.resolution_steps,
@@ -685,6 +701,7 @@ export function toRow(
     keywords: s.keywords,
     answer_strategy: s.answer_strategy,
     confidence: s.confidence,
+    coach_mode: s.coach_mode,
     confidence_reason: s.confidence_reason,
     draft: s.draft,
     resolution_steps: s.resolution_steps,
