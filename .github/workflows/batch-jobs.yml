@@ -24,6 +24,7 @@ on:
           - score-history   # QA-score agents' historical replies (triage). Posts nothing.
           - replay          # Replay closed tickets through the pipeline (evaluation).
           - sync-tickets    # Refresh the semantic past-ticket precedent index.
+          - assign-cohorts  # Lock tickets into learning/development/holdout sets (Supabase only).
       ticket_ids:
         description: "Explicit ticket ids (space-separated). Leave empty to auto-pick by agent/count."
         type: string
@@ -125,6 +126,8 @@ jobs:
               deno run --allow-env --allow-net scripts/score_history.ts $IN_IDS ;;
             sync-tickets)
               deno run --allow-env --allow-net scripts/sync_tickets.ts ;;
+            assign-cohorts)
+              deno run --allow-env --allow-net scripts/assign_cohorts.ts $IN_IDS ;;
             *)
               echo "::error::Unknown job '$IN_JOB'"; exit 1 ;;
           esac

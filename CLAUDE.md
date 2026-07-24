@@ -471,6 +471,20 @@ the operational knowledge agents carry but don't write down — read the score a
 look" (vague / non-answer / undocumented solution), NOT as a grade of the agent, and never
 rank agents by it. One QA call per ticket → scalable to the ~50k backlog; start small.
 
+**Locked cohorts — learning / development / holdout (2026-07-24).** First scaling-plan
+item built (Fas 2.1, `docs/coach-scaling-plan.md`): `ticket_cohorts` (migration 25) is a
+**per-ticket, versioned, locked** split into `learning` / `development` / `holdout`, so the
+eval set can't leak into training. `scripts/assign_cohorts.ts` (`deno task assign-cohorts`,
+also a `batch-jobs.yml` job) assigns by a **deterministic hash** of the ticket id
+(default 40/20/40, decorrelated from the sequential id) and is **idempotent + never moves**
+an already-assigned ticket — the holdout stays put. Enforcement so far: `loadGoldExemplars`
+(the learning loop) **excludes gold answers on holdout tickets**, so the locked test set is
+never fed back as a few-shot exemplar. Read holdout numbers on their own via
+`gate1_scorecard_by_cohort` / `cohort_summary` (service-role; `ticket_cohorts` is RLS
+deny-all to clients, like `known_incidents`). Assign cohorts BEFORE writing gold answers so
+the split is clean from the start. Not yet done: a replay filter to run only one cohort
+(follow-up); the reporting view already separates them.
+
 ---
 
 ## 13. Repeatable workflows — Claude skills & `tools/`
