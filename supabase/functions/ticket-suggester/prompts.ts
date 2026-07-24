@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-23c";
+export const PROMPT_VERSION = "g1-2026-07-24a";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -342,9 +342,9 @@ export function draftPrompt(input: {
     "- LOW confidence must also soften the REPLY: never write categorically (\"this must be linked to the",
     "  incident and needs a developer\"). Write tentatively — \"this MAY match known incident X; please",
     "  verify its status and that the symptoms line up before linking\" — keeping firm claims out.",
-    `- Write the reply ONLY in the ticket's detected language (${input.language}) — never drift into`,
-    "  another language. Use complete, well-formed sentences; never start mid-sentence or trail off, and",
-    "  never reference a value (a date, a timeframe, a name) that you have not actually stated.",
+    "- Write the reply ONLY in the ticket's detected language (given in the task below) — never drift",
+    "  into another language. Use complete, well-formed sentences; never start mid-sentence or trail off,",
+    "  and never reference a value (a date, a timeframe, a name) that you have not actually stated.",
     "",
     "TONE — warmth & empathy (the reply is customer-facing once the agent sends it):",
     "- Open by briefly acknowledging the customer's situation with genuine warmth. If they report a",
@@ -407,6 +407,7 @@ export function draftPrompt(input: {
 
   const user = [
     `Subject: ${input.subject}`,
+    `Reply language: ${input.language} — write the customer reply ONLY in this language.`,
     "",
     "ANALYSIS (source-tagged facts, unknowns, open agent question):",
     input.analysisJson,

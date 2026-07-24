@@ -34,8 +34,12 @@ function env(name: string): string {
 }
 
 const fd = new Freshdesk(env("FRESHDESK_DOMAIN"), env("FRESHDESK_API_KEY"));
-const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
+// This is a TRIAGE scan ("where to look"), so it defaults to the cheap model —
+// gpt-4o-mini is ~15x cheaper than gpt-4o and plenty for the QA rubric here. Override
+// with SCORE_MODEL (or OPENAI_MODEL) if you want the big model.
+const model = Deno.env.get("SCORE_MODEL") ?? Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
 const llm = new LLM(env("OPENAI_API_KEY"), model);
+console.log(`Scoring model: ${model}.`);
 const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
 
 // ── choose tickets: explicit ids, or auto-pick an agent's recent CLOSED tickets ──
@@ -90,10 +94,21 @@ const spamIds = new Set<number>();
   for (const r of data ?? []) spamIds.add(r.ticket_id);
 }
 
+// Cost: skip tickets that already have an agent-QA score — re-scoring the same
+// agent reply gives the same number, so it's pure waste on a large backlog. Default
+// on; set SKIP_SCORED=false to force a re-score.
+const skipScored = (Deno.env.get("SKIP_SCORED") ?? "true") !== "false";
+const alreadyScored = new Set<number>();
+if (skipScored) {
+  const { data } = await db.from("suggestions").select("ticket_id").not("agent_qa_score", "is", null);
+  for (const r of data ?? []) alreadyScored.add(r.ticket_id);
+}
+
 let scored = 0, skipped = 0, failed = 0;
 for (const id of ids) {
   try {
     if (spamIds.has(id)) { console.log(`  #${id}  skipped (flagged spam)`); skipped++; continue; }
+    if (alreadyScored.has(id)) { console.log(`  #${id}  skipped (already scored — SKIP_SCORED)`); skipped++; continue; }
     const t = await fd.ticketWithConversations(id);
     // Skip noise: call-log/marketing-reply by subject, or out-of-office/absence
     // auto-replies detected in the customer body (catches "Re: <campaign>" bounces

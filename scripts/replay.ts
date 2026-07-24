@@ -108,11 +108,20 @@ if (ids.length > 5) {
 }
 const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
 const llm = new LLM(env("OPENAI_API_KEY"), model);
+// Cost tiering (opt-in, default OFF so the eval/PROMPT_VERSION stay consistent):
+// TIER_MODEL runs the mechanical analyse+verify calls on a cheaper model, keeping the
+// DRAFT on the main model; QA_MODEL runs the offline QA scorer cheaper. Measure on
+// the holdout before making either standard.
+const tierModel = Deno.env.get("TIER_MODEL") || undefined;
+const qaModel = Deno.env.get("QA_MODEL") || undefined;
+if (tierModel) console.log(`Cost tiering ON: analyse+verify on ${tierModel}, draft on ${model}.`);
 const withRetrieval = (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false";
 // QA Coach (CLAUDE.md §12, "mode A"): score the AI's own draft against the rubric,
 // using the same context it had. One extra LLM call per scored ticket — default on
-// in replay, set QA_COACH=false to skip (e.g. a quick smoke run).
+// in replay, set QA_COACH=false to skip (e.g. a quick smoke run). QA_SAMPLE=N scores
+// only every Nth kept ticket (cost: a spot-check instead of every one).
 const withQaCoach = (Deno.env.get("QA_COACH") ?? "true") !== "false";
+const qaSample = Math.max(1, Number(Deno.env.get("QA_SAMPLE") ?? "1"));
 const excludeCategories = (Deno.env.get("EXCLUDE_SOLUTION_CATEGORIES") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 const excludeSubjects = (Deno.env.get("EXCLUDE_SUBJECTS") ?? "")
@@ -137,6 +146,16 @@ if (db) {
   for (const r of data ?? []) spamIds.add(r.ticket_id);
 }
 
+// Cost (opt-in, default OFF — re-running the golden set is a normal eval need):
+// SKIP_SCORED=true skips tickets already replayed on the CURRENT pipeline (they have
+// a coach_mode), so a big backlog pass doesn't re-spend on tickets it already did.
+const skipScored = (Deno.env.get("SKIP_SCORED") ?? "false") === "true";
+const replayedIds = new Set<number>();
+if (skipScored && db) {
+  const { data } = await db.from("suggestions").select("ticket_id").not("coach_mode", "is", null);
+  for (const r of data ?? []) replayedIds.add(r.ticket_id);
+}
+
 // Show which tickets before sending anything to OpenAI.
 console.log("Tickets to replay (nothing will be posted):\n");
 const tickets = [];
@@ -156,7 +175,8 @@ for (const id of ids) {
 const kept = tickets.filter((t) =>
   !isIgnorableTicket(t.subject, excludeSubjects) &&
   !looksLikeAutoReply(latestCustomerMessage(t).text) &&
-  !spamIds.has(t.id)
+  !spamIds.has(t.id) &&
+  !(skipScored && replayedIds.has(t.id))
 );
 const dropped = tickets.length - kept.length;
 if (dropped) {
@@ -196,7 +216,7 @@ for (const t of kept) {
         db: db ?? undefined,
         // No leakage: exclude past tickets resolved at/after the graded turn's time.
         retrievalBefore: turn.targetAt ?? undefined,
-        withLearning, goldExemplars,
+        withLearning, goldExemplars, tierModel, qaModel,
       },
       turn.view,
     );
@@ -205,8 +225,10 @@ for (const t of kept) {
     const used = classifyUsage(sim);
 
     // Score the AI draft against the QA rubric (only when there's a send-ready reply).
-    const deps = { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined };
-    const qa = withQaCoach ? await qaScoreDraft(deps, turn.view, s) : null;
+    // QA_SAMPLE=N scores only every Nth kept ticket — (scored+failed) is the 0-based index.
+    const deps = { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined, qaModel };
+    const doQa = withQaCoach && ((scored + failed) % qaSample === 0);
+    const qa = doQa ? await qaScoreDraft(deps, turn.view, s) : null;
 
     if (db) {
       const { error } = await db.from("suggestions").upsert(
