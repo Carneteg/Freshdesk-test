@@ -44,6 +44,62 @@ const raw = Deno.args.length
   : (Deno.env.get("REPLAY_TICKET_IDS") ?? "").split(",");
 let ids = raw.map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
 
+// Persist each result to `suggestions` (upsert) so verdicts + gate1_scorecard work.
+// Created here (early) because COHORT selection below reads the cohort table.
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const db = supabaseUrl && serviceKey ? createClient(supabaseUrl, serviceKey) : null;
+console.log(
+  db
+    ? "(persisting each result to Supabase `suggestions` — set verdicts there)\n"
+    : "(not persisting — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to save results)\n",
+);
+
+// COHORT=learning|development|holdout — replay one locked cohort (coach-scaling-plan
+// Fas 2.1) with a single command, instead of passing ids by hand. Picks the cohort's
+// tickets that are REAL pipeline tickets (have a coach_mode, not an agent-scan row),
+// newest first, so there is always a same-version base row to A/B against — e.g. a
+// `+gold` learning-loop run vs the base holdout run. REPLAY_COUNT caps it (0 = all).
+const cohort = (Deno.env.get("COHORT") ?? "").trim().toLowerCase();
+if (!ids.length && cohort) {
+  if (!db) {
+    console.error("COHORT needs Supabase — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.");
+    Deno.exit(1);
+  }
+  if (!["learning", "development", "holdout"].includes(cohort)) {
+    console.error(`Unknown COHORT "${cohort}" — use learning | development | holdout.`);
+    Deno.exit(1);
+  }
+  // Two simple queries + JS intersection (no PostgREST FK-embedding assumptions).
+  const { data: cohortRows, error: e1 } = await db
+    .from("ticket_cohorts").select("ticket_id").eq("cohort", cohort);
+  if (e1) {
+    console.error(`Cohort lookup failed: ${e1.message}`);
+    Deno.exit(1);
+  }
+  const cohortIds = new Set((cohortRows ?? []).map((r) => r.ticket_id));
+  const { data: realRows, error: e2 } = await db
+    .from("suggestions").select("ticket_id")
+    .not("coach_mode", "is", null).neq("prompt_version", "agent-scan");
+  if (e2) {
+    console.error(`Suggestions lookup failed: ${e2.message}`);
+    Deno.exit(1);
+  }
+  const picked = [...new Set((realRows ?? []).map((r) => r.ticket_id))]
+    .filter((id) => cohortIds.has(id))
+    .sort((a, b) => b - a);
+  const cap = Number(Deno.env.get("REPLAY_COUNT") ?? "0"); // 0 = all in the cohort
+  ids = cap > 0 ? picked.slice(0, cap) : picked;
+  console.log(
+    `Selected ${ids.length} '${cohort}' cohort ticket(s) with a pipeline row` +
+      `${cap > 0 ? ` (capped at ${cap})` : ""}.\n`,
+  );
+  if (!ids.length) {
+    console.error(`No '${cohort}' tickets with a pipeline row found — run a base replay first.`);
+    Deno.exit(1);
+  }
+}
+
 // No ids given → auto-pick a chosen agent's recent CLOSED tickets so the
 // evaluation is easy to scale (CLAUDE.md §6 Step 4). REPLAY_AGENT selects WHO
 // (name, email, or numeric id); defaults to MY_AGENT_ID. Uses Freshdesk's
@@ -127,17 +183,9 @@ const excludeCategories = (Deno.env.get("EXCLUDE_SOLUTION_CATEGORIES") ?? "")
 const excludeSubjects = (Deno.env.get("EXCLUDE_SUBJECTS") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
-// Optional: persist results to `suggestions` so you can set verdicts + read
-// gate1_scorecard. Upsert on (ticket_id, trigger_message_id) so re-runs update
-// the row and never clobber a verdict you've set (verdict isn't in the payload).
-const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const db = supabaseUrl && serviceKey ? createClient(supabaseUrl, serviceKey) : null;
-console.log(
-  db
-    ? "(persisting each result to Supabase `suggestions` — set verdicts there)\n"
-    : "(not persisting — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to save results)\n",
-);
+// (db, the Supabase client, is created near the top so COHORT selection can use it.
+// Upsert on (ticket_id, trigger_message_id) — re-runs update the row and never
+// clobber a verdict you've set, since verdict isn't in the payload.)
 
 // Respect reviewer-flagged spam: never re-process a ticket someone marked as spam.
 const spamIds = new Set<number>();
