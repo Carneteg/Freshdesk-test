@@ -41,6 +41,16 @@ on:
         type: string
         required: false
         default: ""
+      cohort:
+        description: "replay only — run one locked cohort. 'none' = pick by ids/agent."
+        type: choice
+        required: false
+        default: none
+        options:
+          - none
+          - learning
+          - development
+          - holdout
       learning_loop:
         description: "replay only — feed reviewer gold answers in as exemplars (+gold run)"
         type: boolean
@@ -100,6 +110,7 @@ jobs:
           IN_IDS: ${{ inputs.ticket_ids }}
           IN_AGENT: ${{ inputs.agent }}
           IN_COUNT: ${{ inputs.count }}
+          IN_COHORT: ${{ inputs.cohort }}
           OPENAI_MODEL_SECRET: ${{ secrets.OPENAI_MODEL }}
         run: |
           # No -e: we want to write the run summary even when the script exits non-zero.
@@ -116,8 +127,10 @@ jobs:
           # an empty string (Number("") === 0 would pick zero tickets).
           if [ -n "$IN_AGENT" ]; then export REPLAY_AGENT="$IN_AGENT" SCORE_AGENT="$IN_AGENT"; fi
           if [ -n "$IN_COUNT" ]; then export REPLAY_COUNT="$IN_COUNT" SCORE_COUNT="$IN_COUNT"; fi
+          # COHORT selects a locked cohort for replay; 'none' (the default) leaves it unset.
+          if [ -n "$IN_COHORT" ] && [ "$IN_COHORT" != "none" ]; then export COHORT="$IN_COHORT"; fi
 
-          echo "Running '$IN_JOB' (model=$OPENAI_MODEL, ids='${IN_IDS:-<auto>}', agent='${IN_AGENT:-MY_AGENT_ID}', count='${IN_COUNT:-default}')"
+          echo "Running '$IN_JOB' (model=$OPENAI_MODEL, ids='${IN_IDS:-<auto>}', agent='${IN_AGENT:-MY_AGENT_ID}', count='${IN_COUNT:-default}', cohort='${COHORT:-none}')"
 
           # $IN_IDS is intentionally unquoted so space-separated numeric ids become
           # separate args; empty expands to nothing → the script auto-picks by agent.
@@ -138,7 +151,7 @@ jobs:
           {
             echo "### Batch job: \`$IN_JOB\` $( [ "$rc" -eq 0 ] && echo '✅' || echo "❌ (exit $rc)")"
             echo ""
-            echo "model \`$OPENAI_MODEL\` · agent \`${IN_AGENT:-MY_AGENT_ID}\` · count \`${IN_COUNT:-default}\` · ids \`${IN_IDS:-<auto>}\`"
+            echo "model \`$OPENAI_MODEL\` · agent \`${IN_AGENT:-MY_AGENT_ID}\` · count \`${IN_COUNT:-default}\` · cohort \`${COHORT:-none}\` · ids \`${IN_IDS:-<auto>}\`"
             echo ""
             echo '```text'
             # the "Done. scored=… / Cohort … / distribution" tail is what matters

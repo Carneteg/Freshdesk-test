@@ -185,7 +185,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2025-07-24-polish";
+var APP_VERSION = "v2025-07-24-a11y";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -304,7 +304,7 @@ function renderAuth(msg, cls) {
     '  <div class="field"><label for="em">Email</label><input id="em" type="email" autocomplete="username" placeholder="you@simployer.com"></div>' +
     '  <div class="field"><label for="pw">Password</label><input id="pw" type="password" autocomplete="current-password" placeholder="••••••••"></div>' +
     '  <button class="btn primary" id="signin">Sign in</button>' +
-    '  <div id="authmsg"></div>' +
+    '  <div id="authmsg" aria-live="assertive"></div>' +
     '</div>';
   if (msg) setAuthMsg(msg, cls);
   var emEl = document.getElementById("em"), pwEl = document.getElementById("pw");
@@ -431,6 +431,7 @@ function controlsEl() {
   var box = el("div", "controls");
   var s = document.createElement("input");
   s.className = "search"; s.type = "search"; s.placeholder = "Search id, subject, draft…"; s.value = search;
+  s.setAttribute("aria-label", "Search tickets by id, subject or draft");
   s.oninput = function () { search = s.value; renderList(); };
   box.appendChild(s);
 
@@ -447,6 +448,7 @@ function controlsEl() {
 // A <select> whose first option is the "all/default" label, then [value,label] pairs.
 function selectEl(allLabel, opts, cur, onchange) {
   var sel = document.createElement("select");
+  sel.setAttribute("aria-label", allLabel); // no visible <label>; announce the filter's purpose
   var o0 = document.createElement("option"); o0.value = ""; o0.textContent = allLabel; sel.appendChild(o0);
   for (var i = 0; i < opts.length; i++) {
     var o = document.createElement("option"); o.value = opts[i][0]; o.textContent = opts[i][1];
@@ -472,7 +474,7 @@ function progressEl() {
   var box = el("div", "progress");
   box.innerHTML =
     '<span class="lab">' + judged + " av " + total + " granskade · " + pct + "%" + hoLab + "</span>" +
-    '<div class="track"><div class="fill" style="width:' + pct + '%"></div></div>';
+    '<div class="track" role="progressbar" aria-label="Judging progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + pct + '"><div class="fill" style="width:' + pct + '%"></div></div>';
   return box;
 }
 
@@ -648,7 +650,8 @@ function cardEl(r) {
   var ta = document.createElement("textarea");
   ta.value = r.gold_answer || "";
   ta.placeholder = r.agent_sent_reply ? "Write the ideal answer, or start from the agent's reply above…" : "Write the ideal answer the AI should learn from…";
-  var st = el("span", "st");
+  ta.setAttribute("aria-label", "Ideal answer (training material) for ticket " + r.ticket_id);
+  var st = el("span", "st"); st.setAttribute("aria-live", "polite");
   st.textContent = r.gold_answer ? ("saved" + (r.gold_answer_by ? " · " + r.gold_answer_by : "")) : "";
   // autosave (#5): debounce ~1s after typing stops; the manual button stays as a fallback.
   ta.oninput = function () { scheduleGoldSave(r, ta, st, mark); };
@@ -728,7 +731,7 @@ function cardEl(r) {
     b.onclick = function () { commit(v); };
     actions.appendChild(b);
   });
-  var state = el("span", "vstate");
+  var state = el("span", "vstate"); state.setAttribute("aria-live", "polite");
   state.textContent = r.verdict ? ("recorded: " + r.verdict + (r.verdict_by ? " · " + r.verdict_by : "")) : "";
   actions.appendChild(state);
   var spam = el("button", "spambtn"); spam.textContent = "Spam"; spam.title = "Mark as spam / noise and hide it";

@@ -44,6 +44,62 @@ const raw = Deno.args.length
   : (Deno.env.get("REPLAY_TICKET_IDS") ?? "").split(",");
 let ids = raw.map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
 
+// Persist each result to `suggestions` (upsert) so verdicts + gate1_scorecard work.
+// Created here (early) because COHORT selection below reads the cohort table.
+const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
+const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const db = supabaseUrl && serviceKey ? createClient(supabaseUrl, serviceKey) : null;
+console.log(
+  db
+    ? "(persisting each result to Supabase `suggestions` — set verdicts there)\n"
+    : "(not persisting — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to save results)\n",
+);
+
+// COHORT=learning|development|holdout — replay one locked cohort (coach-scaling-plan
+// Fas 2.1) with a single command, instead of passing ids by hand. Picks the cohort's
+// tickets that are REAL pipeline tickets (have a coach_mode, not an agent-scan row),
+// newest first, so there is always a same-version base row to A/B against — e.g. a
+// `+gold` learning-loop run vs the base holdout run. REPLAY_COUNT caps it (0 = all).
+const cohort = (Deno.env.get("COHORT") ?? "").trim().toLowerCase();
+if (!ids.length && cohort) {
+  if (!db) {
+    console.error("COHORT needs Supabase — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.");
+    Deno.exit(1);
+  }
+  if (!["learning", "development", "holdout"].includes(cohort)) {
+    console.error(`Unknown COHORT "${cohort}" — use learning | development | holdout.`);
+    Deno.exit(1);
+  }
+  // Two simple queries + JS intersection (no PostgREST FK-embedding assumptions).
+  const { data: cohortRows, error: e1 } = await db
+    .from("ticket_cohorts").select("ticket_id").eq("cohort", cohort);
+  if (e1) {
+    console.error(`Cohort lookup failed: ${e1.message}`);
+    Deno.exit(1);
+  }
+  const cohortIds = new Set((cohortRows ?? []).map((r) => r.ticket_id));
+  const { data: realRows, error: e2 } = await db
+    .from("suggestions").select("ticket_id")
+    .not("coach_mode", "is", null).neq("prompt_version", "agent-scan");
+  if (e2) {
+    console.error(`Suggestions lookup failed: ${e2.message}`);
+    Deno.exit(1);
+  }
+  const picked = [...new Set((realRows ?? []).map((r) => r.ticket_id))]
+    .filter((id) => cohortIds.has(id))
+    .sort((a, b) => b - a);
+  const cap = Number(Deno.env.get("REPLAY_COUNT") ?? "0"); // 0 = all in the cohort
+  ids = cap > 0 ? picked.slice(0, cap) : picked;
+  console.log(
+    `Selected ${ids.length} '${cohort}' cohort ticket(s) with a pipeline row` +
+      `${cap > 0 ? ` (capped at ${cap})` : ""}.\n`,
+  );
+  if (!ids.length) {
+    console.error(`No '${cohort}' tickets with a pipeline row found — run a base replay first.`);
+    Deno.exit(1);
+  }
+}
+
 // No ids given → auto-pick a chosen agent's recent CLOSED tickets so the
 // evaluation is easy to scale (CLAUDE.md §6 Step 4). REPLAY_AGENT selects WHO
 // (name, email, or numeric id); defaults to MY_AGENT_ID. Uses Freshdesk's
@@ -108,33 +164,44 @@ if (ids.length > 5) {
 }
 const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
 const llm = new LLM(env("OPENAI_API_KEY"), model);
+// Cost tiering (opt-in, default OFF so the eval/PROMPT_VERSION stay consistent):
+// TIER_MODEL runs the mechanical analyse+verify calls on a cheaper model, keeping the
+// DRAFT on the main model; QA_MODEL runs the offline QA scorer cheaper. Measure on
+// the holdout before making either standard.
+const tierModel = Deno.env.get("TIER_MODEL") || undefined;
+const qaModel = Deno.env.get("QA_MODEL") || undefined;
+if (tierModel) console.log(`Cost tiering ON: analyse+verify on ${tierModel}, draft on ${model}.`);
 const withRetrieval = (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false";
 // QA Coach (CLAUDE.md §12, "mode A"): score the AI's own draft against the rubric,
 // using the same context it had. One extra LLM call per scored ticket — default on
-// in replay, set QA_COACH=false to skip (e.g. a quick smoke run).
+// in replay, set QA_COACH=false to skip (e.g. a quick smoke run). QA_SAMPLE=N scores
+// only every Nth kept ticket (cost: a spot-check instead of every one).
 const withQaCoach = (Deno.env.get("QA_COACH") ?? "true") !== "false";
+const qaSample = Math.max(1, Number(Deno.env.get("QA_SAMPLE") ?? "1"));
 const excludeCategories = (Deno.env.get("EXCLUDE_SOLUTION_CATEGORIES") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 const excludeSubjects = (Deno.env.get("EXCLUDE_SUBJECTS") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
-// Optional: persist results to `suggestions` so you can set verdicts + read
-// gate1_scorecard. Upsert on (ticket_id, trigger_message_id) so re-runs update
-// the row and never clobber a verdict you've set (verdict isn't in the payload).
-const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-const db = supabaseUrl && serviceKey ? createClient(supabaseUrl, serviceKey) : null;
-console.log(
-  db
-    ? "(persisting each result to Supabase `suggestions` — set verdicts there)\n"
-    : "(not persisting — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY to save results)\n",
-);
+// (db, the Supabase client, is created near the top so COHORT selection can use it.
+// Upsert on (ticket_id, trigger_message_id) — re-runs update the row and never
+// clobber a verdict you've set, since verdict isn't in the payload.)
 
 // Respect reviewer-flagged spam: never re-process a ticket someone marked as spam.
 const spamIds = new Set<number>();
 if (db) {
   const { data } = await db.from("suggestions").select("ticket_id").eq("is_spam", true);
   for (const r of data ?? []) spamIds.add(r.ticket_id);
+}
+
+// Cost (opt-in, default OFF — re-running the golden set is a normal eval need):
+// SKIP_SCORED=true skips tickets already replayed on the CURRENT pipeline (they have
+// a coach_mode), so a big backlog pass doesn't re-spend on tickets it already did.
+const skipScored = (Deno.env.get("SKIP_SCORED") ?? "false") === "true";
+const replayedIds = new Set<number>();
+if (skipScored && db) {
+  const { data } = await db.from("suggestions").select("ticket_id").not("coach_mode", "is", null);
+  for (const r of data ?? []) replayedIds.add(r.ticket_id);
 }
 
 // Show which tickets before sending anything to OpenAI.
@@ -156,7 +223,8 @@ for (const id of ids) {
 const kept = tickets.filter((t) =>
   !isIgnorableTicket(t.subject, excludeSubjects) &&
   !looksLikeAutoReply(latestCustomerMessage(t).text) &&
-  !spamIds.has(t.id)
+  !spamIds.has(t.id) &&
+  !(skipScored && replayedIds.has(t.id))
 );
 const dropped = tickets.length - kept.length;
 if (dropped) {
@@ -181,6 +249,7 @@ if (withLearning) {
 }
 console.log("");
 
+let scored = 0, failed = 0;
 for (const t of kept) {
   const bar = "─".repeat(76);
   try {
@@ -195,7 +264,7 @@ for (const t of kept) {
         db: db ?? undefined,
         // No leakage: exclude past tickets resolved at/after the graded turn's time.
         retrievalBefore: turn.targetAt ?? undefined,
-        withLearning, goldExemplars,
+        withLearning, goldExemplars, tierModel, qaModel,
       },
       turn.view,
     );
@@ -204,8 +273,10 @@ for (const t of kept) {
     const used = classifyUsage(sim);
 
     // Score the AI draft against the QA rubric (only when there's a send-ready reply).
-    const deps = { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined };
-    const qa = withQaCoach ? await qaScoreDraft(deps, turn.view, s) : null;
+    // QA_SAMPLE=N scores only every Nth kept ticket — (scored+failed) is the 0-based index.
+    const deps = { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined, qaModel };
+    const doQa = withQaCoach && ((scored + failed) % qaSample === 0);
+    const qa = doQa ? await qaScoreDraft(deps, turn.view, s) : null;
 
     if (db) {
       const { error } = await db.from("suggestions").upsert(
@@ -267,10 +338,19 @@ for (const t of kept) {
       : ` (graded against the agent's first substantive reply)`;
     console.log("\nACTUALLY SENT BY AGENT" + turnNote + ":\n" + (actual || "(none found)"));
     console.log("");
+    scored++;
   } catch (err) {
     console.log(bar);
     console.log(`#${t.id}  ${t.subject}`);
     console.error("PIPELINE ERROR:", err instanceof Error ? err.message : err);
     console.log("");
+    failed++;
   }
 }
+
+// Final tally — the tail the GitHub Actions Summary shows for a replay run.
+const droppedNoise = tickets.length - kept.length;
+console.log(
+  `\nDone. scored=${scored} skipped=${droppedNoise} failed=${failed}.` +
+    (droppedNoise ? ` (${droppedNoise} call-log/auto-reply/spam ticket(s) excluded before replay.)` : ""),
+);

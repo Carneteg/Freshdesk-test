@@ -231,7 +231,7 @@ export class LLM {
   async complete(
     system: string,
     messages: ChatMessage[],
-    opts: { maxTokens?: number; timeoutMs?: number } = {},
+    opts: { maxTokens?: number; timeoutMs?: number; model?: string } = {},
   ): Promise<string> {
     const url = "https://api.openai.com/v1/chat/completions";
     const res = await fetchWithRetry(url, {
@@ -241,7 +241,8 @@ export class LLM {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: this.model,
+        // Per-call model override (cost tiering) — falls back to the instance model.
+        model: opts.model ?? this.model,
         // temperature 0 for reproducibility — the golden set (§8) re-runs the
         // same tickets, and drift between runs muddies the comparison.
         temperature: 0,
@@ -265,7 +266,7 @@ export class LLM {
     user: string,
     // deno-lint-ignore no-explicit-any
     jsonSchema: any,
-    opts: { temperature?: number; maxTokens?: number; timeoutMs?: number } = {},
+    opts: { temperature?: number; maxTokens?: number; timeoutMs?: number; model?: string } = {},
   ): Promise<T> {
     const url = "https://api.openai.com/v1/chat/completions";
     const res = await fetchWithRetry(url, {
@@ -275,7 +276,7 @@ export class LLM {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: this.model,
+        model: opts.model ?? this.model,
         temperature: opts.temperature ?? 0,
         max_tokens: opts.maxTokens ?? 2000,
         messages: [{ role: "system", content: system }, { role: "user", content: user }],

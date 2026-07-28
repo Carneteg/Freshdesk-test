@@ -135,6 +135,13 @@ export interface PipelineDeps {
   // the stored prompt_version gets a "+gold" suffix so the scorecard A/Bs the lift.
   withLearning?: boolean;
   goldExemplars?: LoadedExemplar[];
+  // Cost tiering (§ cost optimisation): run the mechanical calls (analyse, verify)
+  // on a cheaper model, keeping the DRAFT on the main model. Off by default (undefined
+  // → everything uses the main model, so output/PROMPT_VERSION are unchanged).
+  tierModel?: string;
+  // QA coach model override — the offline scorer is a secondary signal, so it can run
+  // cheaper. Undefined → uses the main model.
+  qaModel?: string;
 }
 
 // A gold answer loaded from the corpus, with its ticket id so the current ticket's
@@ -185,7 +192,8 @@ export interface Suggestion {
 
 async function analyse(deps: PipelineDeps, subject: string, context: string): Promise<Analysis> {
   const { system, user } = analysePrompt(subject, context);
-  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1100 });
+  // Mechanical classification — safe to run on the cheaper tier model when set.
+  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1100, model: deps.tierModel });
   const j = extractJSON<Partial<Analysis>>(out);
   return {
     language: j.language ?? "other",
@@ -345,7 +353,8 @@ async function verifyDraft(
     agentAnalysis,
     sensitiveAction,
   });
-  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1200 });
+  // Claim-checking is mechanical — safe on the cheaper tier model when set.
+  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1200, model: deps.tierModel });
   const j = extractJSON<Partial<VerifyResult>>(out);
   return {
     claims: Array.isArray(j.claims) ? j.claims : [],
@@ -640,7 +649,7 @@ export async function runQaCoach(
       QA_COACH_SYSTEM_PROMPT,
       buildQaCoachUserPrompt(input),
       QA_ASSESSMENT_JSON_SCHEMA,
-      { maxTokens: 2000 },
+      { maxTokens: 2000, model: deps.qaModel },
     );
     // Deterministic recompute of the math + verdict from the model's raw scores.
     const assessment = validateAndNormalizeAssessment(raw);
