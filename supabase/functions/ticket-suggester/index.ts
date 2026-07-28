@@ -5,12 +5,12 @@
 // else should import this module — the replay harness imports pipeline.ts.
 //
 // Flow per run:
-//   1. GET tickets updated recently; keep only responder_id == MY_AGENT_ID
-//   2. skip any (ticket_id, trigger_message_id) already in `suggestions`
-//   3. per ticket: analyse -> retrieve -> draft -> verify -> post note -> log
+//   1. page from a durable (updated_at, ticket_id) cursor into a DB queue
+//   2. atomically reserve one immutable generation per queued customer turn
+//   3. per ticket: analyse -> retrieve -> draft -> verify -> outbox -> note
 //   4. reconcile usage of earlier suggestions the agent has since replied to
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 import { Freshdesk, LLM } from "./clients.ts";
 import { PROMPT_VERSION } from "./prompts.ts";
 import { deriveTags, isIgnorableTicket, latestCustomerMessage } from "./render.ts";
@@ -32,7 +32,9 @@ interface Config {
   supabaseUrl: string;
   serviceKey: string;
   maxPerRun: number;
-  lookbackMin: number;
+  bootstrapLookbackMin: number;
+  pollStream: string;
+  pollLeaseSeconds: number;
   withRetrieval: boolean;
   excludeCategories: string[];
   excludeSubjects: string[];
@@ -41,22 +43,15 @@ interface Config {
   // or tag is written to Freshdesk. Defaults to TRUE — posting must be turned on
   // deliberately with DRY_RUN=false, so a first deploy/cron can never surprise-post.
   dryRun: boolean;
-  // Base URL of the `feedback` Edge Function — the note's 👍/✏️/👎 links point here.
-  feedbackUrl: string;
-}
-
-// Derive the sibling `feedback` function URL from SUPABASE_URL, e.g.
-// https://<ref>.supabase.co -> https://<ref>.functions.supabase.co/feedback.
-// FEEDBACK_URL overrides it (e.g. a custom domain).
-function deriveFeedbackUrl(supabaseUrl: string): string {
-  const override = Deno.env.get("FEEDBACK_URL");
-  if (override) return override;
-  return supabaseUrl.replace(".supabase.co", ".functions.supabase.co") + "/feedback";
+  // Authenticated review app. New notes link here; they never carry write tokens.
+  reviewUrl: string;
 }
 
 // Comma-separated env list -> lowercased, trimmed, non-empty.
 function envList(name: string): string[] {
-  return (Deno.env.get(name) ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  return (Deno.env.get(name) ?? "").split(",").map((s) => s.trim().toLowerCase()).filter(
+    Boolean,
+  );
 }
 
 // Comma-separated env list of positive integers (e.g. MY_AGENT_ID="123,456").
@@ -84,13 +79,15 @@ function loadConfig(): Config {
     supabaseUrl: env("SUPABASE_URL"),
     serviceKey: env("SUPABASE_SERVICE_ROLE_KEY"),
     maxPerRun: Number(Deno.env.get("MAX_PER_RUN") ?? "5"),
-    lookbackMin: Number(Deno.env.get("LOOKBACK_MINUTES") ?? "5"),
+    bootstrapLookbackMin: Number(Deno.env.get("BOOTSTRAP_LOOKBACK_MINUTES") ?? "60"),
+    pollStream: Deno.env.get("POLL_STREAM") ?? "ticket-suggester-v1",
+    pollLeaseSeconds: Number(Deno.env.get("POLL_LEASE_SECONDS") ?? "180"),
     withRetrieval: (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false",
     excludeCategories: envList("EXCLUDE_SOLUTION_CATEGORIES"),
     excludeSubjects: envList("EXCLUDE_SUBJECTS"),
     // Safe by default: post only when DRY_RUN is explicitly "false".
     dryRun: (Deno.env.get("DRY_RUN") ?? "true") !== "false",
-    feedbackUrl: deriveFeedbackUrl(env("SUPABASE_URL")),
+    reviewUrl: Deno.env.get("REVIEW_APP_URL") ?? "",
   };
 }
 
@@ -101,13 +98,161 @@ function nameMatches(name: string | undefined, expected: string): boolean {
 
 interface Summary {
   dry_run: boolean;
+  lease_acquired: boolean;
   scanned: number;
   mine: number;
+  queued: number;
   processed: number;
   posted: number;
   skipped: number;
   errors: number;
   usage_scored: number;
+}
+
+// deno-lint-ignore no-explicit-any
+type Db = any;
+
+function safeError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  // Bound database/log payloads and collapse whitespace. API response bodies are
+  // already excluded by HttpError, but this also protects unexpected providers.
+  return raw.replace(/\s+/g, " ").slice(0, 500);
+}
+
+// Supabase JS returns { data, error }; it does not throw database errors.
+// deno-lint-ignore no-explicit-any
+function checked<T>(result: { data: unknown; error: any }, operation: string): T {
+  if (result.error) {
+    throw new Error(`${operation}: ${result.error.message ?? "database error"}`);
+  }
+  return result.data as T;
+}
+
+interface QueueRow {
+  id: number;
+  ticket_id: number;
+  ticket_updated_at: string;
+  subject: string | null;
+  responder_id: number | null;
+  attempts: number;
+}
+
+interface GenerationRow {
+  id: number;
+  ticket_id: number;
+  note_id: number | null;
+  note_html: string | null;
+  delivery_marker: string | null;
+  delivery_status: string;
+  post_attempts: number;
+  keywords: string[] | null;
+}
+
+async function markQueueDone(db: Db, id: number): Promise<void> {
+  checked(
+    await db.from("ticket_poll_queue").update({
+      state: "done",
+      processed_at: new Date().toISOString(),
+      last_error: null,
+    }).eq("id", id),
+    "mark queue item done",
+  );
+}
+
+async function markQueueFailed(db: Db, row: QueueRow, err: unknown): Promise<void> {
+  const attempts = (row.attempts ?? 0) + 1;
+  checked(
+    await db.from("ticket_poll_queue").update({
+      state: attempts >= 5 ? "failed" : "queued",
+      attempts,
+      last_error: safeError(err),
+    }).eq("id", row.id),
+    "record queue failure",
+  );
+}
+
+async function loadGeneration(db: Db, id: number): Promise<GenerationRow> {
+  const row = checked<GenerationRow | null>(
+    await db.from("suggestions")
+      .select(
+        "id,ticket_id,note_id,note_html,delivery_marker,delivery_status,post_attempts,keywords",
+      )
+      .eq("id", id)
+      .maybeSingle(),
+    "load generation",
+  );
+  if (!row) throw new Error(`generation ${id} not found`);
+  return row;
+}
+
+async function ensureNotePosted(
+  fd: Freshdesk,
+  db: Db,
+  generation: GenerationRow,
+  reservationToken: string,
+): Promise<number> {
+  if (generation.note_id) return generation.note_id;
+  if (!generation.note_html || !generation.delivery_marker) {
+    throw new Error(`generation ${generation.id} has no stored note outbox payload`);
+  }
+
+  const claimed = checked<{ id: number } | null>(
+    await db.from("suggestions").update({
+      delivery_status: "posting",
+      posting_started_at: new Date().toISOString(),
+      post_attempts: (generation.post_attempts ?? 0) + 1,
+      reservation_expires_at: new Date(Date.now() + 180_000).toISOString(),
+    }).eq("id", generation.id).eq("reservation_token", reservationToken)
+      .select("id").maybeSingle(),
+    "mark generation posting",
+  );
+  if (!claimed) {
+    throw new Error(`lost delivery reservation for generation ${generation.id}`);
+  }
+
+  // Check first: this covers a previous POST that Freshdesk accepted while our
+  // response/database update was lost.
+  let noteId = await fd.findPrivateNoteByMarker(
+    generation.ticket_id,
+    generation.delivery_marker,
+  );
+  if (!noteId) {
+    try {
+      noteId = await fd.postPrivateNote(generation.ticket_id, generation.note_html);
+    } catch (err) {
+      // An uncertain POST is recovered by marker, never by repeating POST blindly.
+      noteId = await fd.findPrivateNoteByMarker(
+        generation.ticket_id,
+        generation.delivery_marker,
+      );
+      if (!noteId) {
+        checked(
+          await db.from("suggestions").update({
+            delivery_status: "failed",
+            error: safeError(err),
+          }).eq("id", generation.id).eq("reservation_token", reservationToken),
+          "record uncertain note failure",
+        );
+        throw err;
+      }
+    }
+  }
+
+  const posted = checked<{ id: number } | null>(
+    await db.from("suggestions").update({
+      delivery_status: "posted",
+      note_id: noteId,
+      posted_at: new Date().toISOString(),
+      reservation_expires_at: null,
+      error: null,
+    }).eq("id", generation.id).eq("reservation_token", reservationToken)
+      .select("id").maybeSingle(),
+    "mark generation posted",
+  );
+  if (!posted) {
+    throw new Error(`could not persist posted state for generation ${generation.id}`);
+  }
+  return noteId;
 }
 
 // ── Poll loop ─────────────────────────────────────────────────────────────────
@@ -116,6 +261,18 @@ async function pollOnce(cfg: Config): Promise<Summary> {
   const fd = new Freshdesk(cfg.domain, cfg.apiKey);
   const llm = new LLM(cfg.openaiKey, cfg.model);
   const db = createClient(cfg.supabaseUrl, cfg.serviceKey);
+  const summary: Summary = {
+    dry_run: cfg.dryRun,
+    lease_acquired: false,
+    scanned: 0,
+    mine: 0,
+    queued: 0,
+    processed: 0,
+    posted: 0,
+    skipped: 0,
+    errors: 0,
+    usage_scored: 0,
+  };
 
   // Roles are decoupled (CLAUDE.md §12): the API key is a SERVICE account that
   // POSTS the notes; MY_AGENT_ID lists the monitored agents whose tickets we watch.
@@ -125,11 +282,15 @@ async function pollOnce(cfg: Config): Promise<Summary> {
   const service = await fd.me(); // throws on a bad key -> fail fast
   console.log(`posting as service account ${service.id} (${service.contact?.name})`);
   if (cfg.dryRun) {
-    console.log("DRY_RUN is on — running the full pipeline and logging suggestions, but posting NO notes/tags to Freshdesk. Set DRY_RUN=false to enable posting.");
+    console.log(
+      "DRY_RUN is on — running the full pipeline and logging suggestions, but posting NO notes/tags to Freshdesk. Set DRY_RUN=false to enable posting.",
+    );
   }
 
   if (!cfg.myAgentIds.length) {
-    throw new Error("refusing to run: MY_AGENT_ID must be one or more numeric agent ids (comma-separated)");
+    throw new Error(
+      "refusing to run: MY_AGENT_ID must be one or more numeric agent ids (comma-separated)",
+    );
   }
   // Best-effort: log each monitored agent's name (so the logs show exactly who is
   // watched), and warn if none matches EXPECTED_AGENT_NAME. Needs admin-scoped API;
@@ -142,123 +303,262 @@ async function pollOnce(cfg: Config): Promise<Summary> {
       console.log(`monitoring agent ${id} (${name})`);
       if (cfg.expectedName && nameMatches(name, cfg.expectedName)) anyExpected = true;
     } catch (e) {
-      console.warn(`could not verify monitored agent ${id} (needs admin API): ${e instanceof Error ? e.message : e}`);
+      console.warn(
+        `could not verify monitored agent ${id} (needs admin API): ${
+          e instanceof Error ? e.message : e
+        }`,
+      );
     }
   }
   if (cfg.expectedName && !anyExpected) {
-    console.warn(`monitored-agent name check: none matched EXPECTED_AGENT_NAME ~"${cfg.expectedName}"`);
+    console.warn(
+      `monitored-agent name check: none matched EXPECTED_AGENT_NAME ~"${cfg.expectedName}"`,
+    );
   }
   const monitoredIds = new Set(cfg.myAgentIds);
 
-  // Team-curated known-incidents playbook, loaded once per run (knowledge layer).
-  const incidents = await loadIncidents(db);
+  // A database lease prevents overlapping cron invocations. The immutable unique
+  // key + note marker remain the final duplicate guard if a lease expires mid-run.
+  const leaseToken = crypto.randomUUID();
+  const acquired = checked<boolean>(
+    await db.rpc("acquire_poll_lease", {
+      p_lease_name: cfg.pollStream,
+      p_lease_token: leaseToken,
+      p_ttl_seconds: cfg.pollLeaseSeconds,
+    }),
+    "acquire poll lease",
+  );
+  summary.lease_acquired = acquired;
+  if (!acquired) {
+    summary.skipped++;
+    return summary;
+  }
 
-  const since = new Date(Date.now() - cfg.lookbackMin * 60_000).toISOString();
-  const updated = await fd.listUpdatedTickets(since);
-  // Only the monitored agent's tickets, and never auto-generated call-log/receipt
-  // tickets (they carry no question — user decision 2026-07-22).
-  const mine = updated
-    .filter((t) => monitoredIds.has(t.responder_id ?? -1))
-    .filter((t) => !isIgnorableTicket(t.subject, cfg.excludeSubjects));
-  const summary: Summary = {
-    dry_run: cfg.dryRun,
-    scanned: updated.length,
-    mine: mine.length,
-    processed: 0,
-    posted: 0,
-    skipped: 0,
-    errors: 0,
-    usage_scored: 0,
-  };
+  try {
+    // Team-curated known-incidents playbook, loaded once per run.
+    const incidents = await loadIncidents(db);
 
-  for (const t of mine.slice(0, cfg.maxPerRun)) {
-    const tStart = Date.now();
-    try {
-      const ticket = await fd.ticketWithConversations(t.id);
+    // Page from the durable cursor. The initial lookback is only a bootstrap;
+    // subsequent runs always continue from the stored tuple.
+    const cursor = checked<{ last_updated_at: string; last_ticket_id: number } | null>(
+      await db.from("poll_cursors")
+        .select("last_updated_at,last_ticket_id")
+        .eq("stream_name", cfg.pollStream)
+        .maybeSingle(),
+      "load poll cursor",
+    );
+    const since = cursor?.last_updated_at ??
+      new Date(Date.now() - cfg.bootstrapLookbackMin * 60_000).toISOString();
+    const updated = await fd.listAllUpdatedTickets(since);
+    summary.scanned = updated.length;
 
-      // Second independent filter (CLAUDE.md §2): re-check the RELOADED ticket's
-      // responder before doing anything. Never act on a ticket that isn't a
-      // monitored agent's, even if the poll list was momentarily stale/reassigned.
-      if (!monitoredIds.has(ticket.responder_id ?? -1)) {
-        summary.skipped++;
-        continue;
-      }
+    const ordered = updated.slice().sort((a, b) =>
+      a.updated_at.localeCompare(b.updated_at) || a.id - b.id
+    );
+    const fresh = ordered.filter((t) =>
+      !cursor ||
+      t.updated_at > cursor.last_updated_at ||
+      (t.updated_at === cursor.last_updated_at && t.id > cursor.last_ticket_id)
+    );
 
-      const { triggerId } = latestCustomerMessage(ticket);
+    if (fresh.length) {
+      const queueEvents = fresh
+        .filter((t) => monitoredIds.has(t.responder_id ?? -1))
+        .filter((t) => !isIgnorableTicket(t.subject, cfg.excludeSubjects))
+        .map((t) => ({
+          ticket_id: t.id,
+          ticket_updated_at: t.updated_at,
+          subject: t.subject,
+          responder_id: t.responder_id,
+        }));
+      const last = fresh[fresh.length - 1];
+      summary.mine = queueEvents.length;
+      summary.queued = checked<number>(
+        await db.rpc("enqueue_ticket_updates", {
+          p_stream_name: cfg.pollStream,
+          p_events: queueEvents,
+          p_cursor_updated_at: last.updated_at,
+          p_cursor_ticket_id: last.id,
+        }),
+        "enqueue ticket updates and advance cursor",
+      );
+    }
 
-      // Dedup on (ticket_id, trigger_message_id): a new customer reply re-triggers.
-      const { data: existing } = await db
-        .from("suggestions")
-        .select("id")
-        .eq("ticket_id", t.id)
-        .eq("trigger_message_id", triggerId)
-        .maybeSingle();
-      if (existing) {
-        summary.skipped++;
-        continue;
-      }
+    const queue = checked<QueueRow[]>(
+      await db.from("ticket_poll_queue")
+        .select("id,ticket_id,ticket_updated_at,subject,responder_id,attempts")
+        .eq("stream_name", cfg.pollStream)
+        .eq("state", "queued")
+        .order("ticket_updated_at", { ascending: true })
+        .order("ticket_id", { ascending: true })
+        .limit(cfg.maxPerRun),
+      "load ticket queue",
+    ) ?? [];
 
-      const s = await runPipeline({
-        fd,
-        llm,
-        model: cfg.model,
-        withRetrieval: cfg.withRetrieval,
-        excludeCategories: cfg.excludeCategories,
-        incidents,
-        db,
-        feedbackUrl: cfg.feedbackUrl,
-      }, ticket);
+    for (const item of queue) {
+      let generationId: number | null = null;
+      const reservationToken = crypto.randomUUID();
+      try {
+        const ticket = await fd.ticketWithConversations(item.ticket_id);
 
-      // DRY_RUN: log the suggestion for inspection but write NOTHING to Freshdesk.
-      // The two external writes (note, tags) are the only side effects, so gating
-      // them here makes a live run fully observable without touching a ticket.
-      const noteId = cfg.dryRun ? null : await fd.postPrivateNote(t.id, s.note_html);
-      await db.from("suggestions").insert(toRow(s, { noteId }));
-      summary.processed++;
+        // Second independent agent filter: re-check the freshly-loaded ticket.
+        if (
+          !monitoredIds.has(ticket.responder_id ?? -1) ||
+          isIgnorableTicket(ticket.subject, cfg.excludeSubjects)
+        ) {
+          summary.skipped++;
+          await markQueueDone(db, item.id);
+          continue;
+        }
 
-      if (cfg.dryRun) continue; // logged; skip the ticket writes
-      summary.posted++;
+        const { triggerId } = latestCustomerMessage(ticket);
+        const runVariant = cfg.dryRun ? "dry-run" : "live";
 
-      // Visibility (CLAUDE.md §12): write up to 3 single-word keyword tags onto
-      // the ticket, merged with its existing tags. A tag failure must not fail
-      // the ticket — the note (the real deliverable) is already posted.
-      const tags = deriveTags(s.keywords);
-      if (tags.length) {
+        // A live customer turn is posted once even after prompt/model upgrades.
+        // Replay/dry-run generations remain fully versioned for evaluation.
+        if (!cfg.dryRun) {
+          const alreadyPosted = checked<{ id: number } | null>(
+            await db.from("suggestions")
+              .select("id")
+              .eq("ticket_id", ticket.id)
+              .eq("trigger_message_id", triggerId)
+              .eq("run_variant", "live")
+              .eq("delivery_status", "posted")
+              .limit(1)
+              .maybeSingle(),
+            "check existing live delivery",
+          );
+          if (alreadyPosted) {
+            summary.skipped++;
+            await markQueueDone(db, item.id);
+            continue;
+          }
+        }
+
+        const reservation = checked<Array<{ generation_id: number; action: string }>>(
+          await db.rpc("reserve_generation", {
+            p_ticket_id: ticket.id,
+            p_trigger_message_id: triggerId,
+            p_subject: ticket.subject,
+            p_prompt_version: PROMPT_VERSION,
+            p_model: cfg.model,
+            p_run_variant: runVariant,
+            p_reservation_token: reservationToken,
+            p_lease_seconds: cfg.pollLeaseSeconds,
+          }),
+          "reserve generation",
+        )?.[0];
+        if (!reservation) throw new Error("generation reservation returned no result");
+        generationId = reservation.generation_id;
+
+        if (reservation.action === "skip") {
+          summary.skipped++;
+          await markQueueDone(db, item.id);
+          continue;
+        }
+
+        if (reservation.action === "generate") {
+          const s = await runPipeline({
+            fd,
+            llm,
+            model: cfg.model,
+            withRetrieval: cfg.withRetrieval,
+            excludeCategories: cfg.excludeCategories,
+            incidents,
+            db,
+            reviewUrl: cfg.reviewUrl || undefined,
+            generationId,
+            runVariant,
+          }, ticket);
+          const marker = `simployer-ai-generation:${generationId}`;
+          const noteHtml = `${s.note_html}\n` +
+            `<p style="color:#aaa;font-size:9px">AI generation ${marker}</p>`;
+
+          const saved = checked<{ id: number } | null>(
+            await db.from("suggestions").update({
+              ...toRow(s),
+              note_html: noteHtml,
+              delivery_marker: marker,
+              delivery_status: "generated",
+              error: null,
+            })
+              .eq("id", generationId)
+              .eq("reservation_token", reservationToken)
+              .eq("delivery_status", "reserved")
+              .select("id")
+              .maybeSingle(),
+            "persist generated outbox payload",
+          );
+          if (!saved) throw new Error(`lost reservation for generation ${generationId}`);
+        }
+
+        let generation = await loadGeneration(db, generationId);
+        summary.processed++;
+
+        // DRY_RUN ends at the stored generated state: no Freshdesk note or tag.
+        if (cfg.dryRun) {
+          await markQueueDone(db, item.id);
+          continue;
+        }
+
+        await ensureNotePosted(fd, db, generation, reservationToken);
+        summary.posted++;
+
+        // Tags are secondary. The note is already exactly-once-like and persisted.
+        generation = await loadGeneration(db, generationId);
+        const tags = deriveTags(generation.keywords ?? []);
+        if (tags.length) {
+          try {
+            await fd.setTags(
+              ticket.id,
+              Array.from(new Set([...(ticket.tags ?? []), ...tags])),
+            );
+          } catch (err) {
+            console.warn(`tag write failed for ${ticket.id}: ${safeError(err)}`);
+          }
+        }
+        await markQueueDone(db, item.id);
+      } catch (err) {
+        summary.errors++;
+        const msg = safeError(err);
+        console.error(`ticket ${item.ticket_id} failed: ${msg}`);
+        if (generationId) {
+          const result = await db.from("suggestions").update({
+            delivery_status: "failed",
+            error: msg,
+          }).eq("id", generationId).neq("delivery_status", "posted");
+          if (result.error) {
+            console.error(
+              `failed to record generation error: ${safeError(result.error)}`,
+            );
+          }
+        }
         try {
-          await fd.setTags(t.id, Array.from(new Set([...(ticket.tags ?? []), ...tags])));
-        } catch (e) {
-          console.warn(`tag write failed for ${t.id}:`, e instanceof Error ? e.message : e);
+          await markQueueFailed(db, item, err);
+        } catch (queueErr) {
+          console.error(`failed to record queue error: ${safeError(queueErr)}`);
         }
       }
+    }
+
+    // Usage reconciliation is bounded and cannot block delivery. Its own database
+    // operations now throw on errors rather than silently pretending success.
+    try {
+      summary.usage_scored = await reconcileUsage(fd, db);
     } catch (err) {
-      // No silent failures (CLAUDE.md §10). Record the error against the ticket.
-      summary.errors++;
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`ticket ${t.id} failed:`, msg);
-      try {
-        await db.from("suggestions").insert({
-          ticket_id: t.id,
-          trigger_message_id: `error:${tStart}`,
-          subject: t.subject ?? null,
-          confidence: "none",
-          prompt_version: PROMPT_VERSION,
-          model: cfg.model,
-          latency_ms: Date.now() - tStart,
-          error: msg,
-        });
-      } catch { /* already counted; do not mask the original error */ }
+      console.error(`usage reconciliation failed: ${safeError(err)}`);
+    }
+
+    return summary;
+  } finally {
+    const released = await db.rpc("release_poll_lease", {
+      p_lease_name: cfg.pollStream,
+      p_lease_token: leaseToken,
+    });
+    if (released.error) {
+      console.error(`release poll lease failed: ${safeError(released.error)}`);
     }
   }
-
-  // Second responsibility: score usage of earlier suggestions the agent has now
-  // replied to. Bounded, and failures here never affect the suggestion loop.
-  try {
-    summary.usage_scored = await reconcileUsage(fd, db);
-  } catch (err) {
-    console.error("usage reconciliation failed:", err instanceof Error ? err.message : err);
-  }
-
-  return summary;
 }
 
 // ── HTTP entrypoint ───────────────────────────────────────────────────────────

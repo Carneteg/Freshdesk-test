@@ -6,8 +6,8 @@
 
 import { Freshdesk, LLM, type Ticket } from "./clients.ts";
 import {
-  ANSWER_STRATEGIES,
   analysePrompt,
+  ANSWER_STRATEGIES,
   draftPrompt,
   type GoldExemplar,
   type Incident,
@@ -128,8 +128,13 @@ export interface PipelineDeps {
   // Replay only: only use past tickets resolved BEFORE this ISO time (no leakage).
   retrievalBefore?: string;
   // Base URL of the `feedback` Edge Function. When set, the note carries one-click
-  // verdict links (👍/✏️/👎). Omitted by the replay harness (which posts nothing).
+  // verdict links (legacy fallback only). New live notes use reviewUrl.
   feedbackUrl?: string;
+  // Authenticated review-app URL. generationId is added as a safe deep-link hash.
+  reviewUrl?: string;
+  generationId?: number;
+  // Execution variant is part of the immutable generation identity.
+  runVariant?: string;
   // Learning loop (Gate 2, §12): feed reviewer-written ideal answers from OTHER
   // tickets into the draft as style/approach exemplars. Off by default; when on,
   // the stored prompt_version gets a "+gold" suffix so the scorecard A/Bs the lift.
@@ -184,16 +189,24 @@ export interface Suggestion {
   similarity: number | null;
   prompt_version: string;
   model: string;
+  run_variant: string;
   latency_ms: number;
   note_html: string;
-  feedback_token: string;
+  feedback_token: string | null;
   error: string | null;
 }
 
-async function analyse(deps: PipelineDeps, subject: string, context: string): Promise<Analysis> {
+async function analyse(
+  deps: PipelineDeps,
+  subject: string,
+  context: string,
+): Promise<Analysis> {
   const { system, user } = analysePrompt(subject, context);
   // Mechanical classification — safe to run on the cheaper tier model when set.
-  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1100, model: deps.tierModel });
+  const out = await deps.llm.complete(system, [{ role: "user", content: user }], {
+    maxTokens: 1100,
+    model: deps.tierModel,
+  });
   const j = extractJSON<Partial<Analysis>>(out);
   return {
     language: j.language ?? "other",
@@ -220,14 +233,9 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
   const docs: SourceDoc[] = [];
 
   for (const q of queries.slice(0, 3)) {
-    let solutions;
-    try {
-      solutions = await deps.fd.searchSolutions(q);
-    } catch (_e) {
-      // Endpoint is unverified (CLAUDE.md §7). A retrieval failure means "no
-      // sources", never a crashed pipeline.
-      continue;
-    }
+    // A provider failure is not the same thing as "no matching article". Let the
+    // outbox record/retry the generation instead of fabricating a KB gap.
+    const solutions = await deps.fd.searchSolutions(q);
     for (const s of solutions.slice(0, 3)) {
       const ref = `kb:${s.id}`;
       if (seen.has(ref)) continue;
@@ -265,31 +273,28 @@ async function retrievePastTickets(
   excludeId?: number,
 ): Promise<SourceDoc[]> {
   if (!deps.db || !queryText.trim()) return [];
-  try {
-    const embedding = await deps.llm.embed(queryText);
-    if (!embedding.length) return [];
-    const { data } = await deps.db.rpc("match_past_tickets", {
-      query_embedding: embedding,
-      match_count: 3,
-      min_similarity: 0.35,
-      // No leakage: never cite the ticket being answered, and (in replay) never a
-      // ticket resolved after this one's reply time.
-      exclude_ticket_id: excludeId ?? null,
-      before_ts: deps.retrievalBefore ?? null,
-    });
-    return (data ?? [])
-      .filter((r: { resolution?: string | null }) => r && r.resolution)
-      .map((r: { ticket_id: number; subject?: string; resolution: string }) => ({
-        ref: `ticket:${r.ticket_id}`,
-        kind: "ticket" as const,
-        id: r.ticket_id,
-        title: r.subject ?? `Ticket #${r.ticket_id}`,
-        text: strip(String(r.resolution)).slice(0, 1200),
-        url: deps.fd.ticketUrl(r.ticket_id),
-      }));
-  } catch {
-    return [];
-  }
+  const embedding = await deps.llm.embed(queryText);
+  if (!embedding.length) throw new Error("past-ticket embedding returned no vector");
+  const { data, error } = await deps.db.rpc("match_past_tickets", {
+    query_embedding: embedding,
+    match_count: 3,
+    min_similarity: 0.35,
+    // No leakage: never cite the ticket being answered, and (in replay) never a
+    // ticket resolved after this one's reply time.
+    exclude_ticket_id: excludeId ?? null,
+    before_ts: deps.retrievalBefore ?? null,
+  });
+  if (error) throw new Error(`past-ticket retrieval failed: ${error.message}`);
+  return (data ?? [])
+    .filter((r: { resolution?: string | null }) => r && r.resolution)
+    .map((r: { ticket_id: number; subject?: string; resolution: string }) => ({
+      ref: `ticket:${r.ticket_id}`,
+      kind: "ticket" as const,
+      id: r.ticket_id,
+      title: r.subject ?? `Ticket #${r.ticket_id}`,
+      text: strip(String(r.resolution)).slice(0, 1200),
+      url: deps.fd.ticketUrl(r.ticket_id),
+    }));
 }
 
 async function draftReply(
@@ -305,12 +310,17 @@ async function draftReply(
   },
 ): Promise<Draft> {
   const { system, user } = draftPrompt(input);
-  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 2200 });
+  const out = await deps.llm.complete(system, [{ role: "user", content: user }], {
+    maxTokens: 2200,
+  });
   const j = extractJSON<Partial<Draft>>(out);
-  const confidence: Confidence = j.confidence === "high" || j.confidence === "low" ? j.confidence : "none";
-  const strategy = (ANSWER_STRATEGIES as readonly string[]).includes(j.answer_strategy ?? "")
-    ? j.answer_strategy!
-    : "ABSTAIN";
+  const confidence: Confidence = j.confidence === "high" || j.confidence === "low"
+    ? j.confidence
+    : "none";
+  const strategy =
+    (ANSWER_STRATEGIES as readonly string[]).includes(j.answer_strategy ?? "")
+      ? j.answer_strategy!
+      : "ABSTAIN";
   return {
     answer_strategy: strategy,
     confidence,
@@ -354,7 +364,10 @@ async function verifyDraft(
     sensitiveAction,
   });
   // Claim-checking is mechanical — safe on the cheaper tier model when set.
-  const out = await deps.llm.complete(system, [{ role: "user", content: user }], { maxTokens: 1200, model: deps.tierModel });
+  const out = await deps.llm.complete(system, [{ role: "user", content: user }], {
+    maxTokens: 1200,
+    model: deps.tierModel,
+  });
   const j = extractJSON<Partial<VerifyResult>>(out);
   return {
     claims: Array.isArray(j.claims) ? j.claims : [],
@@ -365,12 +378,16 @@ async function verifyDraft(
 }
 
 // Analyse -> retrieve -> draft -> verify. Returns a Suggestion; posts nothing.
-export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<Suggestion> {
+export async function runPipeline(
+  deps: PipelineDeps,
+  ticket: Ticket,
+): Promise<Suggestion> {
   const start = Date.now();
   const { triggerId, text: customerMessage } = latestCustomerMessage(ticket);
   const context = buildContext(ticket); // FULL chronological, source-labelled context
-  // Unguessable per-note token for the one-click verdict links (§8).
-  const feedbackToken = crypto.randomUUID();
+  // Legacy one-click feedback only. New notes use the authenticated review app and
+  // therefore need no bearer-like write token in the URL.
+  const feedbackToken = deps.feedbackUrl && !deps.reviewUrl ? crypto.randomUUID() : null;
 
   const a = await analyse(deps, ticket.subject, context);
 
@@ -379,15 +396,22 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   const incoming = (ticket.conversations ?? [])
     .filter((c) => c.incoming && !c.private)
     .sort((x, y) => x.created_at.localeCompare(y.created_at));
-  const latestCustomer = incoming.length ? (incoming[incoming.length - 1].body_text ?? "") : (ticket.description_text ?? "");
-  a.latest_customer_is_auto_reply = a.latest_customer_is_auto_reply || looksLikeAutoReply(latestCustomer);
+  const latestCustomer = incoming.length
+    ? (incoming[incoming.length - 1].body_text ?? "")
+    : (ticket.description_text ?? "");
+  a.latest_customer_is_auto_reply = a.latest_customer_is_auto_reply ||
+    looksLikeAutoReply(latestCustomer);
 
   const kbSources = deps.withRetrieval ? await retrieve(deps, a.search_queries) : [];
   // Similar RESOLVED past tickets (stage 2) — listed first as they show real
   // resolutions. Default on whenever a db is available.
   const wantPast = deps.withPastTickets ?? Boolean(deps.db);
   const pastSources = wantPast
-    ? await retrievePastTickets(deps, `${ticket.subject}\n${a.questions_asked.join("\n")}`, ticket.id)
+    ? await retrievePastTickets(
+      deps,
+      `${ticket.subject}\n${a.questions_asked.join("\n")}`,
+      ticket.id,
+    )
     : [];
   const sources = [...pastSources, ...kbSources];
 
@@ -415,7 +439,13 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
   const exemplars: GoldExemplar[] = deps.withLearning
     ? (deps.goldExemplars ?? [])
       .filter((e) => e.ticket_id !== ticket.id)
-      .map((e) => ({ subject: e.subject, language: e.language, gold_answer: e.gold_answer }))
+      .filter((e) => !e.language || e.language === a.language)
+      .slice(0, 4)
+      .map((e) => ({
+        subject: e.subject,
+        language: e.language,
+        gold_answer: e.gold_answer,
+      }))
     : [];
   // A/B tag: a learning run is a distinct prompt_version so the scorecard shows the
   // lift on the SAME tickets, "…c" vs "…c+gold".
@@ -444,18 +474,22 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
       context,
       draft.required_customer_steps,
       draft.agent_analysis,
-      a.sensitive_action_request ? a.sensitive_action_desc || "an irreversible/sensitive action" : "",
+      a.sensitive_action_request
+        ? a.sensitive_action_desc || "an irreversible/sensitive action"
+        : "",
     );
     const contradicted = verify.claims.filter((c) => c.status === "contradicted");
     const unsupported = verify.claims.filter((c) => c.status === "unsupported");
 
     if (contradicted.length) {
-      unsupportedNote = `Draft discarded: ${contradicted.length} statement(s) contradicted the sources/ticket.`;
+      unsupportedNote =
+        `Draft discarded: ${contradicted.length} statement(s) contradicted the sources/ticket.`;
       draft = { ...draft, confidence: "none", reply: "" };
     } else if (unsupported.length) {
       const cleaned = stripQuotes(draft.reply, unsupported.map((c) => c.quote));
       draft = { ...draft, confidence: lower(draft.confidence), reply: cleaned };
-      unsupportedNote = `Confidence lowered: ${unsupported.length} statement(s) not grounded in the sources/ticket were removed.`;
+      unsupportedNote =
+        `Confidence lowered: ${unsupported.length} statement(s) not grounded in the sources/ticket were removed.`;
     }
 
     // Send-ready gate (user rule): every required customer step must be in the reply.
@@ -464,10 +498,15 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     const missing = verify.missing_steps ?? [];
     if (draft.reply.trim() && missing.length) {
       notSendReady = true;
-      draft = { ...draft, confidence: draft.confidence === "high" ? "low" : draft.confidence };
+      draft = {
+        ...draft,
+        confidence: draft.confidence === "high" ? "low" : draft.confidence,
+      };
       unsupportedNote = [
         unsupportedNote,
-        `⚠️ NOT send-ready: the reply is missing required customer step(s): ${missing.join("; ")}. ` +
+        `⚠️ NOT send-ready: the reply is missing required customer step(s): ${
+          missing.join("; ")
+        }. ` +
         `Add them before sending.`,
       ].filter(Boolean).join(" ");
     }
@@ -477,7 +516,10 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     const contradiction = (verify.contradicts_analysis ?? "").trim();
     if (draft.reply.trim() && contradiction) {
       notSendReady = true;
-      draft = { ...draft, confidence: draft.confidence === "high" ? "low" : draft.confidence };
+      draft = {
+        ...draft,
+        confidence: draft.confidence === "high" ? "low" : draft.confidence,
+      };
       unsupportedNote = [
         unsupportedNote,
         `⚠️ Reply contradicts the analysis: ${contradiction}. Fix before sending.`,
@@ -508,7 +550,8 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
 
   // Belt-and-suspenders: never let a reply claim direct system access (the AI has none).
   if (draft.reply && containsFalseSystemAccess(draft.reply)) {
-    unsupportedNote = "Draft discarded: it claimed direct system access, which the AI does not have.";
+    unsupportedNote =
+      "Draft discarded: it claimed direct system access, which the AI does not have.";
     draft = { ...draft, confidence: "none", reply: "" };
   }
 
@@ -564,8 +607,13 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     qaAnswered,
     qaTotal,
     unsupportedNote,
+    reviewUrl: deps.reviewUrl
+      ? `${deps.reviewUrl.replace(/#.*$/, "")}#generation=${
+        deps.generationId ?? ticket.id
+      }`
+      : undefined,
     feedbackUrl: deps.feedbackUrl,
-    feedbackToken,
+    feedbackToken: feedbackToken ?? undefined,
   });
 
   return {
@@ -602,6 +650,7 @@ export async function runPipeline(deps: PipelineDeps, ticket: Ticket): Promise<S
     similarity: null,
     prompt_version: effectiveVersion,
     model: deps.model,
+    run_variant: deps.runVariant ?? "unspecified",
     latency_ms: Date.now() - start,
     note_html: note,
     feedback_token: feedbackToken,
@@ -620,7 +669,9 @@ export interface QaResult {
 // draft was grounded in — no more, no less. Kept local to avoid exporting the
 // pipeline's private source formatting.
 function qaSourcesBlock(sources: SourceDoc[]): string {
-  if (!sources.length) return "(no knowledge-base sources were retrieved for this ticket)";
+  if (!sources.length) {
+    return "(no knowledge-base sources were retrieved for this ticket)";
+  }
   return sources
     .map((s, i) => `[${i + 1}] ${s.title} (${s.ref})\n${s.text}`)
     .join("\n\n");
@@ -658,7 +709,9 @@ export async function runQaCoach(
     // Never fail silently (CLAUDE.md §10): surface WHY the scorer produced nothing
     // (e.g. an OpenAI auth/model error) so it is visible in the run log, not hidden
     // behind a bare "scorer returned nothing".
-    console.error(`QA coach scoring failed: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(
+      `QA coach scoring failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
   }
 }
@@ -736,12 +789,16 @@ export function toRow(
     qa_needs_review: qa?.assessment.needsHumanReview ?? null,
     qa_assessment: qa?.assessment ?? null,
     // The reply the agent actually sent (replay only) — reference/gold for training.
-    ...(extra.agentSentReply !== undefined ? { agent_sent_reply: extra.agentSentReply } : {}),
+    ...(extra.agentSentReply !== undefined
+      ? { agent_sent_reply: extra.agentSentReply }
+      : {}),
     used: extra.used ?? s.used,
     similarity: extra.similarity ?? s.similarity,
     prompt_version: s.prompt_version,
     model: s.model,
+    run_variant: s.run_variant,
     latency_ms: s.latency_ms,
+    note_html: s.note_html,
     feedback_token: s.feedback_token,
     error: s.error,
   };
@@ -753,18 +810,15 @@ export async function loadIncidents(
   // deno-lint-ignore no-explicit-any
   db: any,
 ): Promise<Incident[]> {
-  try {
-    const { data } = await db
-      .from("known_incidents")
-      .select(
-        "title, symptoms, resolution, routing, status, affected, workaround, customer_action, fix_released_at, post_fix_instructions",
-      )
-      .eq("active", true)
-      .limit(50);
-    return (data ?? []) as Incident[];
-  } catch {
-    return [];
-  }
+  const { data, error } = await db
+    .from("known_incidents")
+    .select(
+      "title, symptoms, resolution, routing, status, affected, workaround, customer_action, fix_released_at, post_fix_instructions",
+    )
+    .eq("active", true)
+    .limit(50);
+  if (error) throw new Error(`known-incident retrieval failed: ${error.message}`);
+  return (data ?? []) as Incident[];
 }
 
 // Load the reviewer-written ideal answers (the "what good looks like" corpus) for
@@ -776,32 +830,42 @@ export async function loadGoldExemplars(
   db: any,
   limit = 20,
 ): Promise<LoadedExemplar[]> {
-  try {
-    // The locked holdout — never learn from these tickets. A missing table (older
-    // schema) just yields an empty set, so nothing is excluded.
-    const holdout = new Set<number>();
-    const { data: hc } = await db.from("ticket_cohorts").select("ticket_id").eq("cohort", "holdout");
-    for (const r of hc ?? []) holdout.add(r.ticket_id);
-
-    const { data } = await db
-      .from("suggestions")
-      .select("ticket_id, subject, language, gold_answer")
-      .not("gold_answer", "is", null)
-      .order("gold_answer_at", { ascending: false })
-      .limit(limit + holdout.size); // fetch extra so holdout removals don't shrink below `limit`
-    return (data ?? [])
-      .filter((r: { ticket_id: number; gold_answer?: string }) =>
-        r.gold_answer && r.gold_answer.trim() && !holdout.has(r.ticket_id))
-      .slice(0, limit)
-      .map((r: { ticket_id: number; subject?: string; language?: string | null; gold_answer: string }) => ({
-        ticket_id: r.ticket_id,
-        subject: r.subject ?? `Ticket #${r.ticket_id}`,
-        language: r.language ?? null,
-        gold_answer: r.gold_answer,
-      }));
-  } catch {
-    return [];
+  // Learn ONLY from the locked learning cohort. Development is for tuning and
+  // holdout is for final measurement; neither may become a prompt exemplar.
+  const learning = new Set<number>();
+  const { data: cohorts, error: cohortError } = await db.from("ticket_cohorts")
+    .select("ticket_id").eq("cohort", "learning");
+  if (cohortError) {
+    throw new Error(`learning-cohort lookup failed: ${cohortError.message}`);
   }
+  for (const r of cohorts ?? []) learning.add(r.ticket_id);
+  if (!learning.size) return [];
+
+  const { data, error } = await db
+    .from("suggestions")
+    .select("ticket_id, subject, language, gold_answer")
+    .not("gold_answer", "is", null)
+    .order("gold_answer_at", { ascending: false })
+    .limit(Math.max(limit * 5, limit));
+  if (error) throw new Error(`gold-exemplar retrieval failed: ${error.message}`);
+  return (data ?? [])
+    .filter((r: { ticket_id: number; gold_answer?: string }) =>
+      r.gold_answer && r.gold_answer.trim() && learning.has(r.ticket_id)
+    )
+    .slice(0, limit)
+    .map((
+      r: {
+        ticket_id: number;
+        subject?: string;
+        language?: string | null;
+        gold_answer: string;
+      },
+    ) => ({
+      ticket_id: r.ticket_id,
+      subject: r.subject ?? `Ticket #${r.ticket_id}`,
+      language: r.language ?? null,
+      gold_answer: r.gold_answer,
+    }));
 }
 
 // Usage capture (CLAUDE.md §12): for suggestions we posted but haven't yet
@@ -812,7 +876,7 @@ export async function reconcileUsage(
   // deno-lint-ignore no-explicit-any
   db: any,
 ): Promise<number> {
-  const { data: pending } = await db
+  const { data: pending, error: pendingError } = await db
     .from("suggestions")
     .select("id, ticket_id, draft, created_at")
     .is("used", null)
@@ -820,18 +884,28 @@ export async function reconcileUsage(
     .not("draft", "is", null)
     .order("created_at", { ascending: false })
     .limit(20);
+  if (pendingError) throw new Error(`usage lookup failed: ${pendingError.message}`);
 
   let scored = 0;
   for (const row of pending ?? []) {
     try {
       const ticket = await fd.ticketWithConversations(row.ticket_id);
-      const outgoing = (ticket.conversations ?? []).filter((c) => !c.incoming && !c.private);
+      const outgoing = (ticket.conversations ?? []).filter((c) =>
+        !c.incoming && !c.private
+      );
       const newest = outgoing.length ? outgoing[outgoing.length - 1] : null;
       if (!newest || newest.created_at <= row.created_at) continue;
       const sim = similarity(row.draft ?? "", lastAgentReply(ticket));
-      await db.from("suggestions").update({ used: classifyUsage(sim), similarity: sim }).eq("id", row.id);
+      const { error } = await db.from("suggestions")
+        .update({ used: classifyUsage(sim), similarity: sim })
+        .eq("id", row.id);
+      if (error) throw new Error(error.message);
       scored++;
-    } catch { /* transient — try again next run */ }
+    } catch (err) {
+      console.error(
+        `usage row ${row.id} failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
   return scored;
 }

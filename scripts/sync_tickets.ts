@@ -11,7 +11,7 @@
 // Needs FRESHDESK_*, OPENAI_*, and SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.
 // Real closed-ticket PII is sent to OpenAI for embedding (DPA cleared, §11/§12).
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import {
   isIgnorableTicket,

@@ -1,20 +1,15 @@
-// feedback — records the agent's one-click verdict on a suggestion.
+// Legacy feedback confirmation.
 //
-// The private note carries three links (👍/✏️/👎), each pointing here with the
-// suggestion's unguessable feedback_token and a verdict. Clicking one writes the
-// verdict straight into `suggestions` and shows a short confirmation. This is the
-// "would I have sent this?" signal the whole experiment exists to collect (§8), and
-// the corpus a Gate 2 learning loop would train on.
+// New private notes link to the authenticated Coach Review app. Older notes may
+// still contain token links to this function, so they remain supported safely:
+//   GET  -> shows a confirmation page and NEVER changes data
+//   POST -> consumes one short-lived, generation-scoped token exactly once
 //
-// The confirmation is PLAIN TEXT on purpose: Supabase's edge-runtime would not
-// reliably serve our HTML as text/html (it rendered as raw source in the browser),
-// so a clean plain-text response is the robust choice for a throwaway confirm tab.
-//
-// Deploy with --no-verify-jwt: the agent clicks from their browser (no Supabase
-// JWT). Access is gated by the per-note token, which only appears in the private
-// note. The only write is a single verdict column on one row — deliberately narrow.
+// Deploy with --no-verify-jwt only for legacy links. The transactional database
+// RPC records a separate suggestion_reviews row and mirrors the compatibility
+// fields on suggestions.
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 
 const VERDICTS: Record<string, string> = {
   usable: "Would send",
@@ -22,20 +17,70 @@ const VERDICTS: Record<string, string> = {
   unusable: "Would not send",
 };
 
+function headers(contentType: string): Headers {
+  const h = new Headers();
+  h.set("Content-Type", `${contentType}; charset=utf-8`);
+  h.set("Cache-Control", "no-store");
+  h.set("Referrer-Policy", "no-referrer");
+  h.set(
+    "Content-Security-Policy",
+    "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+  );
+  return h;
+}
+
 function text(body: string, status = 200): Response {
-  const headers = new Headers();
-  headers.set("Content-Type", "text/plain; charset=utf-8");
-  headers.set("Cache-Control", "no-store");
-  return new Response(body, { status, headers });
+  return new Response(body, { status, headers: headers("text/plain") });
+}
+
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;");
+}
+
+function confirmPage(action: string, token: string, verdict: string): Response {
+  const label = VERDICTS[verdict];
+  const body = `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>Confirm Coach feedback</title>
+<style>body{font:16px system-ui;max-width:36rem;margin:4rem auto;padding:0 1rem;color:#202124}
+button{font:inherit;background:#1f5eff;color:#fff;border:0;border-radius:.45rem;padding:.7rem 1rem;cursor:pointer}
+.muted{color:#667085}</style></head>
+<body><h1>Confirm feedback</h1><p>You selected: <strong>${esc(label)}</strong>.</p>
+<p class="muted">Nothing has been saved yet.</p>
+<form method="post" action="${esc(action)}">
+<input type="hidden" name="t" value="${esc(token)}">
+<input type="hidden" name="v" value="${esc(verdict)}">
+<button type="submit">Save this verdict</button>
+</form></body></html>`;
+  return new Response(body, { status: 200, headers: headers("text/html") });
 }
 
 Deno.serve(async (req: Request) => {
   const url = new URL(req.url);
-  const token = url.searchParams.get("t") ?? "";
-  const verdict = url.searchParams.get("v") ?? "";
 
+  if (req.method === "GET") {
+    const token = url.searchParams.get("t") ?? "";
+    const verdict = url.searchParams.get("v") ?? "";
+    if (!token || !(verdict in VERDICTS)) {
+      return text("This feedback link is missing or malformed.", 400);
+    }
+    // Deliberately no database write on GET: scanners, previews, and prefetchers
+    // can open this URL without recording a verdict.
+    return confirmPage(url.pathname, token, verdict);
+  }
+
+  if (req.method !== "POST") return text("Method not allowed.", 405);
+
+  let form: FormData;
+  try {
+    form = await req.formData();
+  } catch {
+    return text("Malformed feedback submission.", 400);
+  }
+  const token = String(form.get("t") ?? "");
+  const verdict = String(form.get("v") ?? "");
   if (!token || !(verdict in VERDICTS)) {
-    return text("This feedback link is missing or malformed.", 400);
+    return text("This feedback submission is missing or malformed.", 400);
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
@@ -46,28 +91,24 @@ Deno.serve(async (req: Request) => {
 
   try {
     const db = createClient(supabaseUrl, serviceKey);
-    // Match on the unguessable token; set the verdict + when it was recorded.
-    const { data, error } = await db
-      .from("suggestions")
-      .update({ verdict, verdict_at: new Date().toISOString() })
-      .eq("feedback_token", token)
-      .select("ticket_id")
-      .maybeSingle();
-
+    const { data, error } = await db.rpc("record_legacy_feedback", {
+      p_token: token,
+      p_verdict: verdict,
+    });
     if (error) {
-      return text("Something went wrong saving your verdict. Please try again.", 500);
+      const expired = /expired|already used|not found/i.test(error.message ?? "");
+      return text(
+        expired
+          ? "This feedback link is expired or has already been used. Use the Coach Review app instead."
+          : "Something went wrong saving your verdict. Please use the Coach Review app.",
+        expired ? 409 : 500,
+      );
     }
-    if (!data) {
-      return text("We couldn't find a matching suggestion — this may be an old or already-superseded note.", 404);
-    }
-
-    const label = VERDICTS[verdict];
     return text(
-      `✅ Recorded: ${label}.\n\n` +
-        `Your verdict on ticket #${data.ticket_id} is saved — you can close this tab.\n\n` +
-        `Changed your mind? Just click a different option in the note.`,
+      `Recorded: ${VERDICTS[verdict]}.\n\n` +
+        `Your verdict on ticket #${data} is saved. You can close this tab.`,
     );
-  } catch (_e) {
-    return text("Something went wrong. Please try again.", 500);
+  } catch {
+    return text("Something went wrong. Please use the Coach Review app.", 500);
   }
 });
