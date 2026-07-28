@@ -61,6 +61,11 @@ on:
         type: boolean
         required: false
         default: true
+      approved_sample:
+        description: "replay only — confirm the previewed ticket sample may be sent to OpenAI"
+        type: boolean
+        required: false
+        default: false
 
 # Don't let two batch runs overlap — they write the same Supabase rows.
 concurrency:
@@ -84,6 +89,10 @@ jobs:
       # replay reads these as strings; empty is fine (LEARNING_LOOP!=="true", QA_COACH!=="false")
       LEARNING_LOOP: ${{ inputs.learning_loop }}
       QA_COACH: ${{ inputs.qa_coach }}
+      REPLAY_APPROVED: ${{ inputs.approved_sample }}
+      # Never print subjects, customer/agent text, drafts, or source excerpts in
+      # Actions logs/Summary. Local replay remains detailed by default.
+      CLOUD_LOG_MODE: safe
     steps:
       - uses: actions/checkout@v4
 
@@ -101,7 +110,7 @@ jobs:
 
       - uses: denoland/setup-deno@v2
         with:
-          deno-version: v2.x
+          deno-version: v2.9.4
 
       - name: Run batch job
         # Inputs come in via env (never interpolated into the script) to avoid shell injection.

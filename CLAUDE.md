@@ -423,7 +423,8 @@ claim" stance as the pipeline's grounding rules.
 **Review UI — a shared reviewer app (2026-07-23, DPA+IT cleared).** §9 parked "UI"
 out of Gate 1; with DPA + IT sign-off obtained, a small **read+judge** web app was
 added so agents can work through drafts and record verdicts without SQL/PowerShell.
-It is the `review-ui` Edge Function (public HTML, like `feedback`); auth + data
+The canonical app is `web/review.html`; the `review-ui` Edge Function is only a
+compatibility redirect to `REVIEW_APP_URL`. The page is public HTML; auth + data
 gating are entirely client-side + RLS.
 - **Security is RLS, not the app.** The page embeds only the **anon** key — never a
   service-role/Freshdesk/OpenAI key. Migration 18 adds an `app_reviewers` email
@@ -517,6 +518,39 @@ entirely from existing pipeline output — **no prompt change**, so the golden s
 baseline are untouched. Deferred in §4: richer incident model (4.2) and active incident
 detection (4.3, partly blocked by Freshdesk's no-free-text-search); source hierarchy (4.1)
 already largely lives in `prompts.ts`.
+
+**P0 reliability hardening (2026-07-28).** A technical review found three risks
+that outrank further prompt work: mutable evaluation rows, duplicate Freshdesk
+notes after an uncertain POST/database failure, and missed tickets from the old
+five-minute non-paginated window. The runtime contract is now:
+
+- A generation is immutable and unique on `(ticket_id, trigger_message_id,
+  prompt_version, model, run_variant)`. Replay uses INSERT and never overwrites a
+  judged generation. Human assessments are canonical in `suggestion_reviews`,
+  keyed to the immutable generation id; legacy review columns on `suggestions`
+  are a compatibility read projection maintained by narrow review RPCs.
+- Live delivery is an outbox state machine: `reserved → generated → posting →
+  posted` (`failed` is visible and resumable). The exact note HTML is stored
+  before Freshdesk is called. `POST /notes` has **zero automatic retries**. Each
+  note includes `simployer-ai-generation:<id>`; recovery checks existing private
+  notes for that marker before any POST, covering accepted POST + lost response.
+- Polling keeps a durable `(updated_at, ticket_id)` cursor, paginates every
+  Freshdesk page, transactionally enqueues monitored events before advancing the
+  cursor, and uses a database lease to prevent overlapping minute runs. The
+  responder is still re-checked on the freshly loaded ticket before reservation.
+- New notes route verdicts to the authenticated/RLS-gated Coach Review app. They
+  carry a safe generation deep-link, not a feedback token or verdict in a GET
+  URL. Legacy feedback GETs show confirmation only; the POST consumes a
+  generation-scoped token once.
+- GitHub batch jobs set `CLOUD_LOG_MODE=safe`: no ticket subject, customer/agent
+  text, draft, or source excerpt reaches Actions logs/Summary. Replay previews
+  IDs/subjects and exits before OpenAI unless `REPLAY_APPROVED=true`.
+
+Migration: `31_p0_reliability.sql`. Operational gates: `GOLIVE.md`. Supporting
+source-of-truth docs: `docs/ARCHITECTURE.md`, `SECURITY.md`, `EVALUATION.md`,
+`OPERATIONS.md`, and `DECISIONS.md`. Keep `DRY_RUN=true` and cron paused until the
+migration, synthetic marker-recovery test, key rotation, and supervised dry-run
+are confirmed.
 
 ---
 

@@ -13,7 +13,7 @@
 // ticket (§12). Real ticket text is sent to OpenAI for scoring (DPA cleared, §11).
 // Start with a small batch, confirm the ranking looks sane, then scale.
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import {
   buildContext,
@@ -37,19 +37,25 @@ const fd = new Freshdesk(env("FRESHDESK_DOMAIN"), env("FRESHDESK_API_KEY"));
 // This is a TRIAGE scan ("where to look"), so it defaults to the cheap model —
 // gpt-4o-mini is ~15x cheaper than gpt-4o and plenty for the QA rubric here. Override
 // with SCORE_MODEL (or OPENAI_MODEL) if you want the big model.
-const model = Deno.env.get("SCORE_MODEL") ?? Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
+const model = Deno.env.get("SCORE_MODEL") ?? Deno.env.get("OPENAI_MODEL") ??
+  "gpt-4o-mini";
 const llm = new LLM(env("OPENAI_API_KEY"), model);
+const safeLog = (Deno.env.get("CLOUD_LOG_MODE") ?? "").toLowerCase() === "safe";
 console.log(`Scoring model: ${model}.`);
 const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
 
 // ── choose tickets: explicit ids, or auto-pick an agent's recent CLOSED tickets ──
-let ids = Deno.args.map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
+let ids = Deno.args.map((s) => Number(s.trim())).filter((n) =>
+  Number.isFinite(n) && n > 0
+);
 
 if (!ids.length) {
   const sel = (Deno.env.get("SCORE_AGENT") ?? Deno.env.get("MY_AGENT_ID") ?? "").trim();
   if (!sel) {
     console.error("Usage: deno task score-history <ticketId ...>");
-    console.error("Or set SCORE_AGENT (name / email / id) + SCORE_COUNT to auto-pick closed tickets.");
+    console.error(
+      "Or set SCORE_AGENT (name / email / id) + SCORE_COUNT to auto-pick closed tickets.",
+    );
     Deno.exit(1);
   }
   let agentId = sel;
@@ -64,11 +70,14 @@ if (!ids.length) {
   }
   const count = Number(Deno.env.get("SCORE_COUNT") ?? "50");
   const excludeIds = new Set(
-    (Deno.env.get("SCORE_EXCLUDE_IDS") ?? "").split(",").map((s) => Number(s.trim())).filter(Boolean),
+    (Deno.env.get("SCORE_EXCLUDE_IDS") ?? "").split(",").map((s) => Number(s.trim()))
+      .filter(Boolean),
   );
   const picked: number[] = [];
   for (let page = 1; page <= 40 && picked.length < count; page++) {
-    const res = await fd.searchTickets(`status:5 AND agent_id:${agentId}`, page).catch(() => null);
+    const res = await fd.searchTickets(`status:5 AND agent_id:${agentId}`, page).catch(
+      () => null,
+    );
     if (!res || !(res.results ?? []).length) break;
     for (const t of res.results ?? []) {
       if (!isIgnorableTicket(t.subject) && !excludeIds.has(t.id)) picked.push(t.id);
@@ -82,7 +91,9 @@ if (!ids.length) {
   console.error("No tickets to score.");
   Deno.exit(1);
 }
-console.log(`Scoring the agents' replies on ${ids.length} ticket(s). Nothing is posted to Freshdesk.\n`);
+console.log(
+  `Scoring the agents' replies on ${ids.length} ticket(s). Nothing is posted to Freshdesk.\n`,
+);
 
 // runQaCoach only needs the LLM; the rest of the deps are unused here.
 const deps = { fd, llm, model, withRetrieval: false, excludeCategories: [], db };
@@ -90,7 +101,14 @@ const deps = { fd, llm, model, withRetrieval: false, excludeCategories: [], db }
 // Respect reviewer-flagged spam: never re-score a ticket someone marked as spam.
 const spamIds = new Set<number>();
 {
-  const { data } = await db.from("suggestions").select("ticket_id").eq("is_spam", true);
+  const { data, error } = await db.from("suggestions").select("ticket_id").eq(
+    "is_spam",
+    true,
+  );
+  if (error) {
+    console.error(`Spam lookup failed: ${error.message}`);
+    Deno.exit(1);
+  }
   for (const r of data ?? []) spamIds.add(r.ticket_id);
 }
 
@@ -100,20 +118,35 @@ const spamIds = new Set<number>();
 const skipScored = (Deno.env.get("SKIP_SCORED") ?? "true") !== "false";
 const alreadyScored = new Set<number>();
 if (skipScored) {
-  const { data } = await db.from("suggestions").select("ticket_id").not("agent_qa_score", "is", null);
+  const { data, error } = await db.from("suggestions").select("ticket_id")
+    .not("agent_qa_score", "is", null);
+  if (error) {
+    console.error(`Existing-score lookup failed: ${error.message}`);
+    Deno.exit(1);
+  }
   for (const r of data ?? []) alreadyScored.add(r.ticket_id);
 }
 
 let scored = 0, skipped = 0, failed = 0;
 for (const id of ids) {
   try {
-    if (spamIds.has(id)) { console.log(`  #${id}  skipped (flagged spam)`); skipped++; continue; }
-    if (alreadyScored.has(id)) { console.log(`  #${id}  skipped (already scored — SKIP_SCORED)`); skipped++; continue; }
+    if (spamIds.has(id)) {
+      console.log(`  #${id}  skipped (flagged spam)`);
+      skipped++;
+      continue;
+    }
+    if (alreadyScored.has(id)) {
+      console.log(`  #${id}  skipped (already scored — SKIP_SCORED)`);
+      skipped++;
+      continue;
+    }
     const t = await fd.ticketWithConversations(id);
     // Skip noise: call-log/marketing-reply by subject, or out-of-office/absence
     // auto-replies detected in the customer body (catches "Re: <campaign>" bounces
     // with no auto-reply prefix, e.g. #86174).
-    if (isIgnorableTicket(t.subject) || looksLikeAutoReply(latestCustomerMessage(t).text)) {
+    if (
+      isIgnorableTicket(t.subject) || looksLikeAutoReply(latestCustomerMessage(t).text)
+    ) {
       console.log(`  #${id}  skipped (auto/call-log/absence)`);
       skipped++;
       continue;
@@ -150,8 +183,14 @@ for (const id of ids) {
     };
     // Update an existing row for this (ticket, trigger) — preserving any AI draft —
     // else insert a minimal history-scan row a reviewer can later attach a gold answer to.
-    const { data: upd } = await db.from("suggestions").update(patch)
-      .eq("ticket_id", id).eq("trigger_message_id", triggerId).select("id");
+    const { data: upd, error: updateError } = await db.from("suggestions").update(patch)
+      .eq("ticket_id", id)
+      .eq("trigger_message_id", triggerId)
+      .eq("prompt_version", "agent-scan")
+      .eq("model", model)
+      .eq("run_variant", "agent-scan")
+      .select("id");
+    if (updateError) throw new Error(updateError.message);
     if (!upd || !upd.length) {
       const { error } = await db.from("suggestions").insert({
         ticket_id: id,
@@ -160,13 +199,19 @@ for (const id of ids) {
         subject: t.subject,
         confidence: "none",
         prompt_version: "agent-scan",
+        model,
+        run_variant: "agent-scan",
+        delivery_status: "generated",
         ...patch,
       });
       if (error) throw new Error(error.message);
     }
     scored++;
     console.log(
-      `  #${id}  agent QA ${a.totalScore}/100 ${a.verdict}${a.needsHumanReview ? " ⚠ review" : ""}  ${t.subject}`,
+      `  #${id}  agent QA ${a.totalScore}/100 ${a.verdict}${
+        a.needsHumanReview ? " ⚠ review" : ""
+      }` +
+        (safeLog ? "" : `  ${t.subject}`),
     );
   } catch (err) {
     failed++;
@@ -175,4 +220,6 @@ for (const id of ids) {
 }
 
 console.log(`\nDone. scored=${scored} skipped=${skipped} failed=${failed}.`);
-console.log("Worst-first rewrite targets are in the `rewrite_queue` view and the review app.");
+console.log(
+  "Worst-first rewrite targets are in the `rewrite_queue` view and the review app.",
+);

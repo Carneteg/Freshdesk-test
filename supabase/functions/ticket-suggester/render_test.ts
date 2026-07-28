@@ -1,5 +1,5 @@
 // Unit tests for the pure functions (CLAUDE.md §8). Run: `deno task test`.
-import { assertEquals, assertStringIncludes, assertThrows } from "@std/assert";
+import { assertEquals, assertStringIncludes, assertThrows } from "./test_assert.ts";
 import {
   agentReplyToLatestCustomer,
   buildContext,
@@ -39,19 +39,45 @@ Deno.test("deriveCoachMode: three-way classification (Fas 3.1)", () => {
   };
   // 🟢 grounded, high-confidence, send-ready strategies
   assertEquals(deriveCoachMode(base), "REPLY_READY");
-  assertEquals(deriveCoachMode({ ...base, answerStrategy: "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS" }), "REPLY_READY");
-  assertEquals(deriveCoachMode({ ...base, answerStrategy: "REQUEST_MISSING_INFORMATION" }), "REPLY_READY");
+  assertEquals(
+    deriveCoachMode({ ...base, answerStrategy: "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS" }),
+    "REPLY_READY",
+  );
+  assertEquals(
+    deriveCoachMode({ ...base, answerStrategy: "REQUEST_MISSING_INFORMATION" }),
+    "REPLY_READY",
+  );
   // 🔴 agent must act first — beats REPLY_READY even with a reply present
-  assertEquals(deriveCoachMode({ ...base, requiresManualCheck: true }), "AGENT_ACTION_REQUIRED");
-  assertEquals(deriveCoachMode({ ...base, sensitiveActionRequest: true }), "AGENT_ACTION_REQUIRED");
-  assertEquals(deriveCoachMode({ ...base, answerStrategy: "RECOMMEND_AGENT_VERIFICATION" }), "AGENT_ACTION_REQUIRED");
-  assertEquals(deriveCoachMode({ ...base, answerStrategy: "ESCALATE" }), "AGENT_ACTION_REQUIRED");
-  assertEquals(deriveCoachMode({ ...base, hasReply: false, resolutionStepCount: 2 }), "AGENT_ACTION_REQUIRED");
+  assertEquals(
+    deriveCoachMode({ ...base, requiresManualCheck: true }),
+    "AGENT_ACTION_REQUIRED",
+  );
+  assertEquals(
+    deriveCoachMode({ ...base, sensitiveActionRequest: true }),
+    "AGENT_ACTION_REQUIRED",
+  );
+  assertEquals(
+    deriveCoachMode({ ...base, answerStrategy: "RECOMMEND_AGENT_VERIFICATION" }),
+    "AGENT_ACTION_REQUIRED",
+  );
+  assertEquals(
+    deriveCoachMode({ ...base, answerStrategy: "ESCALATE" }),
+    "AGENT_ACTION_REQUIRED",
+  );
+  assertEquals(
+    deriveCoachMode({ ...base, hasReply: false, resolutionStepCount: 2 }),
+    "AGENT_ACTION_REQUIRED",
+  );
   // 🟡 in between: low confidence, routing (agent forwards), or empty abstain
   assertEquals(deriveCoachMode({ ...base, confidence: "low" }), "COACH_AGENT");
   assertEquals(deriveCoachMode({ ...base, answerStrategy: "ROUTE" }), "COACH_AGENT");
   assertEquals(
-    deriveCoachMode({ ...base, hasReply: false, confidence: "none", answerStrategy: "ABSTAIN" }),
+    deriveCoachMode({
+      ...base,
+      hasReply: false,
+      confidence: "none",
+      answerStrategy: "ABSTAIN",
+    }),
     "COACH_AGENT",
   );
 });
@@ -154,7 +180,10 @@ Deno.test("stripSignaturePlaceholders: removes placeholder signers, keeps the cl
     "Hei Kari,\n\nTakk!\n\nVennlig hilsen,",
   );
   assertEquals(stripSignaturePlaceholders("Best,\n[Agent's Name]"), "Best,");
-  assertEquals(stripSignaturePlaceholders("Med vennlig hilsen,\n[Ditt navn]"), "Med vennlig hilsen,");
+  assertEquals(
+    stripSignaturePlaceholders("Med vennlig hilsen,\n[Ditt navn]"),
+    "Med vennlig hilsen,",
+  );
   // Real names are untouched.
   assertEquals(stripSignaturePlaceholders("Hei Natalie, takk!"), "Hei Natalie, takk!");
 });
@@ -164,8 +193,20 @@ Deno.test("latestCustomerMessage: newest incoming defines the trigger id", () =>
     id: 42,
     description_text: "first question",
     conversations: [
-      { id: 9, body_text: "agent reply", incoming: false, private: false, created_at: "2026-01-02T00:00:00Z" },
-      { id: 11, body_text: "follow-up question", incoming: true, private: false, created_at: "2026-01-03T00:00:00Z" },
+      {
+        id: 9,
+        body_text: "agent reply",
+        incoming: false,
+        private: false,
+        created_at: "2026-01-02T00:00:00Z",
+      },
+      {
+        id: 11,
+        body_text: "follow-up question",
+        incoming: true,
+        private: false,
+        created_at: "2026-01-03T00:00:00Z",
+      },
     ],
   } as unknown as Ticket;
   const r = latestCustomerMessage(t);
@@ -175,7 +216,11 @@ Deno.test("latestCustomerMessage: newest incoming defines the trigger id", () =>
 });
 
 Deno.test("latestCustomerMessage: falls back to description when no incoming convo", () => {
-  const t = { id: 7, description_text: "only the description", conversations: [] } as unknown as Ticket;
+  const t = {
+    id: 7,
+    description_text: "only the description",
+    conversations: [],
+  } as unknown as Ticket;
   assertEquals(latestCustomerMessage(t).triggerId, "desc:7");
 });
 
@@ -195,9 +240,27 @@ Deno.test("lastAgentReply: returns the final outgoing public message", () => {
     id: 1,
     description_text: "q",
     conversations: [
-      { id: 1, body_text: "first answer", incoming: false, private: false, created_at: "2026-01-01T00:00:00Z" },
-      { id: 2, body_text: "internal note", incoming: false, private: true, created_at: "2026-01-02T00:00:00Z" },
-      { id: 3, body_text: "final answer", incoming: false, private: false, created_at: "2026-01-03T00:00:00Z" },
+      {
+        id: 1,
+        body_text: "first answer",
+        incoming: false,
+        private: false,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: 2,
+        body_text: "internal note",
+        incoming: false,
+        private: true,
+        created_at: "2026-01-02T00:00:00Z",
+      },
+      {
+        id: 3,
+        body_text: "final answer",
+        incoming: false,
+        private: false,
+        created_at: "2026-01-03T00:00:00Z",
+      },
     ],
   } as unknown as Ticket;
   assertEquals(lastAgentReply(t), "final answer");
@@ -240,7 +303,10 @@ Deno.test("renderNote: high-confidence shows scores, draft, and a linked source"
   assertStringIncludes(html, "HIGH");
   assertStringIncludes(html, "answers 3 of 3 question(s)");
   assertStringIncludes(html, "Line one<br>Line two");
-  assertStringIncludes(html, '<a href="https://x.freshdesk.com/a/solutions/articles/5">Reset guide</a>');
+  assertStringIncludes(
+    html,
+    '<a href="https://x.freshdesk.com/a/solutions/articles/5">Reset guide</a>',
+  );
   assertStringIncludes(html, "KB article #5");
 });
 
@@ -261,7 +327,10 @@ Deno.test("renderNote: a past-ticket source links to the ticket", () => {
     qaAnswered: 1,
     qaTotal: 1,
   });
-  assertStringIncludes(html, '<a href="https://x.freshdesk.com/a/tickets/9001">Similar payroll question</a>');
+  assertStringIncludes(
+    html,
+    '<a href="https://x.freshdesk.com/a/tickets/9001">Similar payroll question</a>',
+  );
   assertStringIncludes(html, "Ticket #9001");
 });
 
@@ -271,7 +340,10 @@ Deno.test("similarity: identical text is 1, disjoint is 0", () => {
 });
 
 Deno.test("similarity: partial overlap is between 0 and 1", () => {
-  const s = similarity("reset your password in settings", "reset password from the settings page");
+  const s = similarity(
+    "reset your password in settings",
+    "reset password from the settings page",
+  );
   if (!(s > 0 && s < 1)) throw new Error(`expected partial overlap, got ${s}`);
 });
 
@@ -354,7 +426,8 @@ Deno.test("buildContext: includes internal notes and agent replies, labelled", (
       },
       {
         id: 2,
-        body_text: "Det verkar som att Didrik Salte redan är registrerad som administratör.",
+        body_text:
+          "Det verkar som att Didrik Salte redan är registrerad som administratör.",
         incoming: false,
         private: true,
         created_at: "2026-01-02T00:00:00Z",
@@ -431,7 +504,10 @@ Deno.test("looksLikeAutoReply: detects SV/NO/EN absence replies, not normal text
 // the system" phrasings must be caught even if they slip past the prompt.
 Deno.test("containsFalseSystemAccess: catches first-person system-access claims", () => {
   assertEquals(containsFalseSystemAccess("Jag har kontrollerat och rollen finns."), true);
-  assertEquals(containsFalseSystemAccess("Jeg ser i systemet at brukeren er administrator."), true);
+  assertEquals(
+    containsFalseSystemAccess("Jeg ser i systemet at brukeren er administrator."),
+    true,
+  );
   assertEquals(containsFalseSystemAccess("I have verified the account exists."), true);
   // Correct, attributed phrasing must NOT trip the guard.
   assertEquals(
@@ -476,8 +552,13 @@ Deno.test("renderNote: reply and resolution steps are separate sections", () => 
     confidence: "low",
     draft: "Hei, vi ser på saken og kommer tilbake.",
     answerStrategy: "ESCALATE",
-    agentAnalysis: "404s in AI search usually mean a reindex is needed; not covered by the KB.",
-    resolutionSteps: ["Reindex the customer's search", "Request system access if needed", "Escalate to the technical team"],
+    agentAnalysis:
+      "404s in AI search usually mean a reindex is needed; not covered by the KB.",
+    resolutionSteps: [
+      "Reindex the customer's search",
+      "Request system access if needed",
+      "Escalate to the technical team",
+    ],
     promptVersion: "test",
     searchQueries: [],
     sources: [],
@@ -498,7 +579,14 @@ Deno.test("renderNote: reply and resolution steps are separate sections", () => 
 // At confidence none there is no send-ready reply, but the resolution track and
 // analysis still carry substance — never a hollow note.
 Deno.test("renderNote: suppresses sources when asking for clarification, keeps them when answering", () => {
-  const src = [{ ref: "kb:1", kind: "kb" as const, id: 1, title: "How to contact support", text: "…", url: "u" }];
+  const src = [{
+    ref: "kb:1",
+    kind: "kb" as const,
+    id: 1,
+    title: "How to contact support",
+    text: "…",
+    url: "u",
+  }];
   const base = {
     confidence: "high" as const,
     draft: "Kan du gi flere detaljer?",
@@ -509,12 +597,18 @@ Deno.test("renderNote: suppresses sources when asking for clarification, keeps t
     qaTotal: 1,
   };
   // Asking for missing info → sources are keyword noise, hide them.
-  const clarifying = renderNote({ ...base, answerStrategy: "REQUEST_MISSING_INFORMATION" });
+  const clarifying = renderNote({
+    ...base,
+    answerStrategy: "REQUEST_MISSING_INFORMATION",
+  });
   assertEquals(clarifying.includes("Sources:"), false);
   assertEquals(clarifying.includes("Searched for:"), false);
 
   // Actually answering from the KB → sources shown as usual.
-  const answering = renderNote({ ...base, answerStrategy: "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS" });
+  const answering = renderNote({
+    ...base,
+    answerStrategy: "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS",
+  });
   assertStringIncludes(answering, "Sources:");
   assertStringIncludes(answering, "How to contact support");
 });
@@ -540,7 +634,10 @@ Deno.test("renderNote: verdict links render only when feedback url + token are p
     feedbackToken: "tok-123",
   });
   assertStringIncludes(withFeedback, "Would you have sent this?");
-  assertStringIncludes(withFeedback, "https://ref.functions.supabase.co/feedback?t=tok-123&amp;v=usable");
+  assertStringIncludes(
+    withFeedback,
+    "https://ref.functions.supabase.co/feedback?t=tok-123&amp;v=usable",
+  );
   assertStringIncludes(withFeedback, "t=tok-123&amp;v=edited");
   assertStringIncludes(withFeedback, "t=tok-123&amp;v=unusable");
 });
@@ -550,7 +647,10 @@ Deno.test("renderNote: none confidence still shows resolution steps, not just a 
     confidence: "none",
     draft: "",
     agentAnalysis: "Likely a policy question the KB does not cover.",
-    resolutionSteps: ["Confirm the customer's identity", "Ask the manager to re-issue the contract"],
+    resolutionSteps: [
+      "Confirm the customer's identity",
+      "Ask the manager to re-issue the contract",
+    ],
     promptVersion: "test",
     searchQueries: [],
     sources: [],
@@ -573,10 +673,34 @@ const CLOSED_TICKET = {
   status: 5,
   description_text: "Please give me admin access.",
   conversations: [
-    { id: 1, body_text: "Who should be the admin?", incoming: false, private: false, created_at: "2026-01-01T10:00:00Z" },
-    { id: 2, body_text: "Me, anna@example.com", incoming: true, private: false, created_at: "2026-01-02T10:00:00Z" },
-    { id: 3, body_text: "Done — you now have admin access.", incoming: false, private: false, created_at: "2026-01-03T10:00:00Z" },
-    { id: 4, body_text: "resolved", incoming: false, private: true, created_at: "2026-01-03T10:05:00Z" },
+    {
+      id: 1,
+      body_text: "Who should be the admin?",
+      incoming: false,
+      private: false,
+      created_at: "2026-01-01T10:00:00Z",
+    },
+    {
+      id: 2,
+      body_text: "Me, anna@example.com",
+      incoming: true,
+      private: false,
+      created_at: "2026-01-02T10:00:00Z",
+    },
+    {
+      id: 3,
+      body_text: "Done — you now have admin access.",
+      incoming: false,
+      private: false,
+      created_at: "2026-01-03T10:00:00Z",
+    },
+    {
+      id: 4,
+      body_text: "resolved",
+      incoming: false,
+      private: true,
+      created_at: "2026-01-03T10:05:00Z",
+    },
   ],
 } as unknown as Ticket;
 
@@ -598,14 +722,23 @@ Deno.test("ticketAsOfLatestCustomer: no incoming message drops all conversations
     status: 5,
     description_text: "first question",
     conversations: [
-      { id: 1, body_text: "here is the answer", incoming: false, private: false, created_at: "2026-01-02T00:00:00Z" },
+      {
+        id: 1,
+        body_text: "here is the answer",
+        incoming: false,
+        private: false,
+        created_at: "2026-01-02T00:00:00Z",
+      },
     ],
   } as unknown as Ticket;
   assertEquals(ticketAsOfLatestCustomer(t).conversations?.length, 0);
 });
 
 Deno.test("agentReplyToLatestCustomer: returns the reply sent AFTER the trigger", () => {
-  assertEquals(agentReplyToLatestCustomer(CLOSED_TICKET), "Done — you now have admin access.");
+  assertEquals(
+    agentReplyToLatestCustomer(CLOSED_TICKET),
+    "Done — you now have admin access.",
+  );
 });
 
 // Cold start: test the ticket before the agent's FIRST reply, so we grade the
@@ -631,7 +764,13 @@ Deno.test("ticketBeforeFirstAgentReply: no agent reply keeps the whole ticket", 
     status: 2,
     description_text: "opening",
     conversations: [
-      { id: 1, body_text: "more detail", incoming: true, private: false, created_at: "2026-01-02T00:00:00Z" },
+      {
+        id: 1,
+        body_text: "more detail",
+        incoming: true,
+        private: false,
+        created_at: "2026-01-02T00:00:00Z",
+      },
     ],
   } as unknown as Ticket;
   assertEquals(ticketBeforeFirstAgentReply(t).conversations?.length, 1);
@@ -641,8 +780,16 @@ Deno.test("ticketBeforeFirstAgentReply: no agent reply keeps the whole ticket", 
 // ── Exact dialogue-turn sync (#84875, #84611) ───────────────────────────────────
 
 Deno.test("looksLikeHoldingReply: skips short acknowledgments, keeps real answers", () => {
-  assertEquals(looksLikeHoldingReply("Hei! Takk for din henvendelse, vi ser på saken og återkommer."), true);
-  assertEquals(looksLikeHoldingReply("Thanks for reaching out — we're looking into it."), true);
+  assertEquals(
+    looksLikeHoldingReply(
+      "Hei! Takk for din henvendelse, vi ser på saken og återkommer.",
+    ),
+    true,
+  );
+  assertEquals(
+    looksLikeHoldingReply("Thanks for reaching out — we're looking into it."),
+    true,
+  );
   // A concrete question is substantive even if short.
   assertEquals(looksLikeHoldingReply("Who should be the admin?"), false);
   // A long reply that merely opens with thanks is substantive.
@@ -666,10 +813,34 @@ Deno.test("replayTurn: skips a holding reply and grades the substantive turn", (
     status: 5,
     description_text: "Search returns 404.",
     conversations: [
-      { id: 1, body_text: "Hi, thanks for reaching out — we're looking into it.", incoming: false, private: false, created_at: "2026-02-01T09:00:00Z" },
-      { id: 2, body_text: "Any update?", incoming: true, private: false, created_at: "2026-02-01T11:00:00Z" },
-      { id: 3, body_text: "We reindexed your search; it now works. Please reload.", incoming: false, private: false, created_at: "2026-02-02T09:00:00Z" },
-      { id: 4, body_text: "closed", incoming: false, private: true, created_at: "2026-02-02T09:05:00Z" },
+      {
+        id: 1,
+        body_text: "Hi, thanks for reaching out — we're looking into it.",
+        incoming: false,
+        private: false,
+        created_at: "2026-02-01T09:00:00Z",
+      },
+      {
+        id: 2,
+        body_text: "Any update?",
+        incoming: true,
+        private: false,
+        created_at: "2026-02-01T11:00:00Z",
+      },
+      {
+        id: 3,
+        body_text: "We reindexed your search; it now works. Please reload.",
+        incoming: false,
+        private: false,
+        created_at: "2026-02-02T09:00:00Z",
+      },
+      {
+        id: 4,
+        body_text: "closed",
+        incoming: false,
+        private: true,
+        created_at: "2026-02-02T09:05:00Z",
+      },
     ],
   } as unknown as Ticket;
 
@@ -697,8 +868,20 @@ Deno.test("replayTurn: all replies holding → falls back to the first", () => {
     status: 5,
     description_text: "opening",
     conversations: [
-      { id: 1, body_text: "Thanks, we're looking into it.", incoming: false, private: false, created_at: "2026-02-01T09:00:00Z" },
-      { id: 2, body_text: "Still investigating this, we'll get back to you.", incoming: false, private: false, created_at: "2026-02-02T09:00:00Z" },
+      {
+        id: 1,
+        body_text: "Thanks, we're looking into it.",
+        incoming: false,
+        private: false,
+        created_at: "2026-02-01T09:00:00Z",
+      },
+      {
+        id: 2,
+        body_text: "Still investigating this, we'll get back to you.",
+        incoming: false,
+        private: false,
+        created_at: "2026-02-02T09:00:00Z",
+      },
     ],
   } as unknown as Ticket;
   const turn = replayTurn(t);
@@ -713,7 +896,13 @@ Deno.test("replayTurn: no public agent reply → nothing to grade", () => {
     status: 2,
     description_text: "opening",
     conversations: [
-      { id: 1, body_text: "more detail", incoming: true, private: false, created_at: "2026-02-01T09:00:00Z" },
+      {
+        id: 1,
+        body_text: "more detail",
+        incoming: true,
+        private: false,
+        created_at: "2026-02-01T09:00:00Z",
+      },
     ],
   } as unknown as Ticket;
   const turn = replayTurn(t);
@@ -729,7 +918,8 @@ Deno.test("renderNote: low/none note still shows the agent analysis", () => {
     confidence: "none",
     draft: "",
     answerStrategy: "RECOMMEND_AGENT_VERIFICATION",
-    agentAnalysis: "Likely an expired signing link; usually resolved by the manager re-issuing the agreement. Verify whose contract before advising.",
+    agentAnalysis:
+      "Likely an expired signing link; usually resolved by the manager re-issuing the agreement. Verify whose contract before advising.",
     promptVersion: "test",
     searchQueries: [],
     sources: [],
@@ -748,8 +938,20 @@ Deno.test("buildContext: marks the latest real customer message as the one to an
     status: 2,
     description_text: "First question.",
     conversations: [
-      { id: 1, body_text: "Agent answer.", incoming: false, private: false, created_at: "2026-01-01T00:00:00Z" },
-      { id: 2, body_text: "New follow-up question.", incoming: true, private: false, created_at: "2026-01-02T00:00:00Z" },
+      {
+        id: 1,
+        body_text: "Agent answer.",
+        incoming: false,
+        private: false,
+        created_at: "2026-01-01T00:00:00Z",
+      },
+      {
+        id: 2,
+        body_text: "New follow-up question.",
+        incoming: true,
+        private: false,
+        created_at: "2026-01-02T00:00:00Z",
+      },
     ],
   } as unknown as Ticket;
   const ctx = buildContext(t);

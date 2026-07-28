@@ -1,6 +1,5 @@
 # Deno
 .deno/
-deno.lock
 
 # Node tooling (tools/ document generators)
 node_modules/

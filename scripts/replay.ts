@@ -1,8 +1,8 @@
 // scripts/replay.ts — run CLOSED tickets through the pipeline and PRINT the
 // result next to what the agent actually sent. Posts NOTHING (CLAUDE.md §6 Step 4).
 //
-// First run: start with 5 tickets. The chosen ids + subjects are printed before
-// anything is sent to the LLM, so you can confirm the sample (CLAUDE.md §12).
+// First run: start with 5 tickets. The chosen ids + subjects are printed and the
+// process STOPS before OpenAI until REPLAY_APPROVED=true (CLAUDE.md §12).
 //
 //   deno task replay 1001 1002 1003 1004 1005
 //   REPLAY_TICKET_IDS=1001,1002,1003 deno task replay
@@ -10,7 +10,7 @@
 // Note: replaying real closed tickets sends real customer content to the LLM
 // provider (OpenAI). The DPA position is confirmed OK for Gate 1 (CLAUDE.md §11).
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 import { Freshdesk, LLM } from "../supabase/functions/ticket-suggester/clients.ts";
 import {
   classifyUsage,
@@ -27,6 +27,7 @@ import {
   runPipeline,
   toRow,
 } from "../supabase/functions/ticket-suggester/pipeline.ts";
+import { PROMPT_VERSION } from "../supabase/functions/ticket-suggester/prompts.ts";
 
 function env(name: string): string {
   const v = Deno.env.get(name) ?? "";
@@ -38,13 +39,23 @@ function env(name: string): string {
 }
 
 const fd = new Freshdesk(env("FRESHDESK_DOMAIN"), env("FRESHDESK_API_KEY"));
+const safeLog = (Deno.env.get("CLOUD_LOG_MODE") ?? "").toLowerCase() === "safe";
+const replayApproved = (Deno.env.get("REPLAY_APPROVED") ?? "false") === "true";
+
+function safeError(err: unknown): string {
+  return (err instanceof Error ? err.message : String(err)).replace(/\s+/g, " ").slice(
+    0,
+    500,
+  );
+}
 
 const raw = Deno.args.length
   ? Deno.args
   : (Deno.env.get("REPLAY_TICKET_IDS") ?? "").split(",");
 let ids = raw.map((s) => Number(s.trim())).filter((n) => Number.isFinite(n) && n > 0);
 
-// Persist each result to `suggestions` (upsert) so verdicts + gate1_scorecard work.
+// Persist each result as an immutable generation so verdicts + scorecards cannot
+// drift onto a later prompt/model/variant.
 // Created here (early) because COHORT selection below reads the cohort table.
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -63,7 +74,9 @@ console.log(
 const cohort = (Deno.env.get("COHORT") ?? "").trim().toLowerCase();
 if (!ids.length && cohort) {
   if (!db) {
-    console.error("COHORT needs Supabase — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.");
+    console.error(
+      "COHORT needs Supabase — set SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY.",
+    );
     Deno.exit(1);
   }
   if (!["learning", "development", "holdout"].includes(cohort)) {
@@ -95,7 +108,9 @@ if (!ids.length && cohort) {
       `${cap > 0 ? ` (capped at ${cap})` : ""}.\n`,
   );
   if (!ids.length) {
-    console.error(`No '${cohort}' tickets with a pipeline row found — run a base replay first.`);
+    console.error(
+      `No '${cohort}' tickets with a pipeline row found — run a base replay first.`,
+    );
     Deno.exit(1);
   }
 }
@@ -108,8 +123,12 @@ if (!ids.length) {
   const count = Number(Deno.env.get("REPLAY_COUNT") ?? "10");
   const sel = (Deno.env.get("REPLAY_AGENT") ?? Deno.env.get("MY_AGENT_ID") ?? "").trim();
   if (!sel) {
-    console.error("Usage: deno task replay <ticketId ...>   (or REPLAY_TICKET_IDS=1,2,3)");
-    console.error("Or set REPLAY_AGENT (name / email / id) — or MY_AGENT_ID — to auto-pick closed tickets.");
+    console.error(
+      "Usage: deno task replay <ticketId ...>   (or REPLAY_TICKET_IDS=1,2,3)",
+    );
+    console.error(
+      "Or set REPLAY_AGENT (name / email / id) — or MY_AGENT_ID — to auto-pick closed tickets.",
+    );
     Deno.exit(1);
   }
 
@@ -119,13 +138,21 @@ if (!ids.length) {
     try {
       const agent = await fd.findAgent(sel);
       if (!agent) {
-        console.error(`No agent matched "${sel}". Try their exact email, or set REPLAY_AGENT to the numeric agent id.`);
+        console.error(
+          `No agent matched "${sel}". Try their exact email, or set REPLAY_AGENT to the numeric agent id.`,
+        );
         Deno.exit(1);
       }
       agentId = String(agent.id);
-      console.log(`Matched agent "${agent.contact?.name}" (id ${agentId}, ${agent.contact?.email}).`);
+      console.log(
+        `Matched agent "${agent.contact?.name}" (id ${agentId}, ${agent.contact?.email}).`,
+      );
     } catch (err) {
-      console.error(`Agent lookup failed (${err instanceof Error ? err.message : err}) — needs admin API.`);
+      console.error(
+        `Agent lookup failed (${
+          err instanceof Error ? err.message : err
+        }) — needs admin API.`,
+      );
       console.error(`Set REPLAY_AGENT to the numeric agent id instead.`);
       Deno.exit(1);
     }
@@ -149,9 +176,15 @@ if (!ids.length) {
     }
     ids = picked.slice(0, count);
     const exNote = excludeIds.size ? `, excluding ${excludeIds.size} id(s)` : "";
-    console.log(`Auto-selected ${ids.length} recent CLOSED ticket(s) for agent ${agentId}${exNote}. Set REPLAY_COUNT to change.\n`);
+    console.log(
+      `Auto-selected ${ids.length} recent CLOSED ticket(s) for agent ${agentId}${exNote}. Set REPLAY_COUNT to change.\n`,
+    );
   } catch (err) {
-    console.error(`Auto-select failed (${err instanceof Error ? err.message : err}). Pass ticket ids explicitly.`);
+    console.error(
+      `Auto-select failed (${
+        err instanceof Error ? err.message : err
+      }). Pass ticket ids explicitly.`,
+    );
     Deno.exit(1);
   }
   if (!ids.length) {
@@ -160,7 +193,9 @@ if (!ids.length) {
   }
 }
 if (ids.length > 5) {
-  console.warn(`\n⚠  ${ids.length} tickets. CLAUDE.md §12: start with 5, scale once it looks right.\n`);
+  console.warn(
+    `\n⚠  ${ids.length} tickets. CLAUDE.md §12: start with 5, scale once it looks right.\n`,
+  );
 }
 const model = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o";
 const llm = new LLM(env("OPENAI_API_KEY"), model);
@@ -170,7 +205,9 @@ const llm = new LLM(env("OPENAI_API_KEY"), model);
 // the holdout before making either standard.
 const tierModel = Deno.env.get("TIER_MODEL") || undefined;
 const qaModel = Deno.env.get("QA_MODEL") || undefined;
-if (tierModel) console.log(`Cost tiering ON: analyse+verify on ${tierModel}, draft on ${model}.`);
+if (tierModel) {
+  console.log(`Cost tiering ON: analyse+verify on ${tierModel}, draft on ${model}.`);
+}
 const withRetrieval = (Deno.env.get("WITH_RETRIEVAL") ?? "true") !== "false";
 // QA Coach (CLAUDE.md §12, "mode A"): score the AI's own draft against the rubric,
 // using the same context it had. One extra LLM call per scored ticket — default on
@@ -182,15 +219,28 @@ const excludeCategories = (Deno.env.get("EXCLUDE_SOLUTION_CATEGORIES") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 const excludeSubjects = (Deno.env.get("EXCLUDE_SUBJECTS") ?? "")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+const runVariant = Deno.env.get("REPLAY_VARIANT") ||
+  [
+    "replay",
+    withRetrieval ? "retrieval" : "no-retrieval",
+    tierModel ? `tier=${tierModel}` : "",
+  ].filter(Boolean).join(":");
+const requestedPromptVersion = PROMPT_VERSION +
+  ((Deno.env.get("LEARNING_LOOP") ?? "false") === "true" ? "+gold" : "");
 
-// (db, the Supabase client, is created near the top so COHORT selection can use it.
-// Upsert on (ticket_id, trigger_message_id) — re-runs update the row and never
-// clobber a verdict you've set, since verdict isn't in the payload.)
+// (db, the Supabase client, is created near the top so COHORT selection can use it.)
 
 // Respect reviewer-flagged spam: never re-process a ticket someone marked as spam.
 const spamIds = new Set<number>();
 if (db) {
-  const { data } = await db.from("suggestions").select("ticket_id").eq("is_spam", true);
+  const { data, error } = await db.from("suggestions").select("ticket_id").eq(
+    "is_spam",
+    true,
+  );
+  if (error) {
+    console.error(`Spam lookup failed: ${error.message}`);
+    Deno.exit(1);
+  }
   for (const r of data ?? []) spamIds.add(r.ticket_id);
 }
 
@@ -200,7 +250,15 @@ if (db) {
 const skipScored = (Deno.env.get("SKIP_SCORED") ?? "false") === "true";
 const replayedIds = new Set<number>();
 if (skipScored && db) {
-  const { data } = await db.from("suggestions").select("ticket_id").not("coach_mode", "is", null);
+  const { data, error } = await db.from("suggestions").select("ticket_id")
+    .not("coach_mode", "is", null)
+    .eq("prompt_version", requestedPromptVersion)
+    .eq("model", model)
+    .eq("run_variant", runVariant);
+  if (error) {
+    console.error(`Scored-generation lookup failed: ${error.message}`);
+    Deno.exit(1);
+  }
   for (const r of data ?? []) replayedIds.add(r.ticket_id);
 }
 
@@ -211,9 +269,13 @@ for (const id of ids) {
   try {
     const t = await fd.ticketWithConversations(id);
     tickets.push(t);
-    console.log(`  #${t.id}  [status ${t.status}]  ${t.subject}`);
+    console.log(
+      safeLog
+        ? `  #${t.id}  [status ${t.status}]`
+        : `  #${t.id}  [status ${t.status}]  ${t.subject}`,
+    );
   } catch (err) {
-    console.error(`  #${id}  FAILED to load: ${err instanceof Error ? err.message : err}`);
+    console.error(`  #${id}  FAILED to load: ${safeError(err)}`);
   }
 }
 
@@ -228,12 +290,26 @@ const kept = tickets.filter((t) =>
 );
 const dropped = tickets.length - kept.length;
 if (dropped) {
-  console.log(`\n(excluded ${dropped} call-log/receipt/auto-reply ticket(s) — not handled by this framework)`);
+  console.log(
+    `\n(excluded ${dropped} call-log/receipt/auto-reply ticket(s) — not handled by this framework)`,
+  );
+}
+
+// Approval gate: loading Freshdesk metadata is read-only, but no customer content is
+// sent to OpenAI until the sample has been explicitly approved.
+if (!replayApproved) {
+  console.log(
+    "\nPREVIEW ONLY — no ticket content was sent to OpenAI and nothing was written. " +
+      "Review the sample above, then rerun with REPLAY_APPROVED=true.",
+  );
+  Deno.exit(0);
 }
 
 // Known-incidents playbook (knowledge layer) — only when Supabase is configured.
 const incidents = db ? await loadIncidents(db) : [];
-if (incidents.length) console.log(`(playbook: ${incidents.length} known incident(s) loaded)`);
+if (incidents.length) {
+  console.log(`(playbook: ${incidents.length} known incident(s) loaded)`);
+}
 
 // Learning loop (§12): feed reviewer-written ideal answers back into the draft as
 // style/approach exemplars. Opt-in with LEARNING_LOOP=true; stored under a
@@ -260,11 +336,20 @@ for (const t of kept) {
     const turn = replayTurn(t);
     const s = await runPipeline(
       {
-        fd, llm, model, withRetrieval, excludeCategories, incidents,
+        fd,
+        llm,
+        model,
+        withRetrieval,
+        excludeCategories,
+        incidents,
         db: db ?? undefined,
         // No leakage: exclude past tickets resolved at/after the graded turn's time.
         retrievalBefore: turn.targetAt ?? undefined,
-        withLearning, goldExemplars, tierModel, qaModel,
+        withLearning,
+        goldExemplars,
+        tierModel,
+        qaModel,
+        runVariant,
       },
       turn.view,
     );
@@ -274,17 +359,42 @@ for (const t of kept) {
 
     // Score the AI draft against the QA rubric (only when there's a send-ready reply).
     // QA_SAMPLE=N scores only every Nth kept ticket — (scored+failed) is the 0-based index.
-    const deps = { fd, llm, model, withRetrieval, excludeCategories, incidents, db: db ?? undefined, qaModel };
+    const deps = {
+      fd,
+      llm,
+      model,
+      withRetrieval,
+      excludeCategories,
+      incidents,
+      db: db ?? undefined,
+      qaModel,
+    };
     const doQa = withQaCoach && ((scored + failed) % qaSample === 0);
     const qa = doQa ? await qaScoreDraft(deps, turn.view, s) : null;
 
     if (db) {
-      const { error } = await db.from("suggestions").upsert(
+      const { error } = await db.from("suggestions").insert(
         // Store the agent's actual reply as reference/gold training material.
-        toRow(s, { used, similarity: sim, qa, agentSentReply: actual || null }),
-        { onConflict: "ticket_id,trigger_message_id" },
+        {
+          ...toRow(s, { used, similarity: sim, qa, agentSentReply: actual || null }),
+          delivery_status: "generated",
+        },
       );
-      if (error) console.error(`  (db save failed for #${t.id}: ${error.message})`);
+      if (error?.code === "23505") {
+        console.log(`  #${t.id}  immutable generation already exists — not overwritten`);
+      } else if (error) {
+        throw new Error(`db save failed: ${error.message}`);
+      }
+    }
+
+    if (safeLog) {
+      console.log(
+        `#${t.id} success mode=${s.coach_mode} confidence=${s.confidence} ` +
+          `qa=${s.qa_answered}/${s.qa_total} latency_ms=${s.latency_ms} ` +
+          `sources=${s.sources.length} variant=${s.run_variant}`,
+      );
+      scored++;
+      continue;
     }
 
     console.log(bar);
@@ -297,7 +407,9 @@ for (const t of kept) {
     // NOTE: text-overlap is a WEAK proxy — low overlap usually means the agent had a
     // concrete answer and the AI was generic, NOT that the AI was ignored. Judge on
     // cause + action + grounding (the verdict column), not this number.
-    console.log(`text-overlap: ${sim} vs agent (weak proxy — judge cause/action/grounding, not this)`);
+    console.log(
+      `text-overlap: ${sim} vs agent (weak proxy — judge cause/action/grounding, not this)`,
+    );
     if (qa) {
       const a = qa.assessment;
       console.log(
@@ -305,7 +417,9 @@ for (const t of kept) {
           `${a.needsHumanReview ? " ⚠ needs human review" : ""}  (rubric v${qa.version})`,
       );
       if (a.topThreeImprovements.length) {
-        console.log("  top improvements:\n    - " + a.topThreeImprovements.join("\n    - "));
+        console.log(
+          "  top improvements:\n    - " + a.topThreeImprovements.join("\n    - "),
+        );
       }
     } else if (withQaCoach) {
       console.log("QA coach: (no send-ready draft to score)");
@@ -318,9 +432,13 @@ for (const t of kept) {
     }
     console.log("\nREPLY TO CUSTOMER:\n" + (s.draft ?? "(no send-ready reply yet)"));
     if (s.resolution_steps.length) {
-      console.log("\nHOW TO RESOLVE (for the agent):\n  - " + s.resolution_steps.join("\n  - "));
+      console.log(
+        "\nHOW TO RESOLVE (for the agent):\n  - " + s.resolution_steps.join("\n  - "),
+      );
     }
-    if (s.agent_analysis) console.log("\nAI ANALYSIS (for the agent):\n" + s.agent_analysis);
+    if (s.agent_analysis) {
+      console.log("\nAI ANALYSIS (for the agent):\n" + s.agent_analysis);
+    }
     if (s.rationale) console.log("\nWHY (rationale):\n" + s.rationale);
     if (s.follow_up_questions.length) {
       console.log("\nFOLLOW-UP QUESTIONS:\n  - " + s.follow_up_questions.join("\n  - "));
@@ -329,20 +447,26 @@ for (const t of kept) {
       console.log("\nREPRO (agent):\n  - " + s.bug_guidance.repro_steps.join("\n  - "));
     }
     if (s.bug_guidance.customer_steps.length) {
-      console.log("\nCUSTOMER STEPS:\n  - " + s.bug_guidance.customer_steps.join("\n  - "));
+      console.log(
+        "\nCUSTOMER STEPS:\n  - " + s.bug_guidance.customer_steps.join("\n  - "),
+      );
     }
     const turnNote = turn.index < 0
       ? " (agent never replied publicly)"
       : turn.skipped
-      ? ` (graded against agent reply #${turn.index + 1}; skipped ${turn.skipped} holding/auto reply(ies))`
+      ? ` (graded against agent reply #${
+        turn.index + 1
+      }; skipped ${turn.skipped} holding/auto reply(ies))`
       : ` (graded against the agent's first substantive reply)`;
-    console.log("\nACTUALLY SENT BY AGENT" + turnNote + ":\n" + (actual || "(none found)"));
+    console.log(
+      "\nACTUALLY SENT BY AGENT" + turnNote + ":\n" + (actual || "(none found)"),
+    );
     console.log("");
     scored++;
   } catch (err) {
     console.log(bar);
-    console.log(`#${t.id}  ${t.subject}`);
-    console.error("PIPELINE ERROR:", err instanceof Error ? err.message : err);
+    console.log(safeLog ? `#${t.id}` : `#${t.id}  ${t.subject}`);
+    console.error("PIPELINE ERROR:", safeError(err));
     console.log("");
     failed++;
   }
@@ -352,5 +476,7 @@ for (const t of kept) {
 const droppedNoise = tickets.length - kept.length;
 console.log(
   `\nDone. scored=${scored} skipped=${droppedNoise} failed=${failed}.` +
-    (droppedNoise ? ` (${droppedNoise} call-log/auto-reply/spam ticket(s) excluded before replay.)` : ""),
+    (droppedNoise
+      ? ` (${droppedNoise} call-log/auto-reply/spam ticket(s) excluded before replay.)`
+      : ""),
 );

@@ -1,202 +1,190 @@
-# Freshdesk AI suggested replies — Gate 1
+# Freshdesk AI Coach — Gate 1
 
-A background job that watches **one agent's** Freshdesk tickets, drafts a
-suggested reply grounded in the knowledge base, and posts it as a **private
-note**. The agent judges each one — "would I have sent this?" — and the
-`gate1_scorecard` view turns those judgements into a usable-percentage.
+An internal Simployer experiment that watches a small, named set of Freshdesk
+agents and posts a private AI coaching note on a new customer turn.
 
-This is a two-week experiment, not a product. Read [`CLAUDE.md`](./CLAUDE.md)
-first — it holds the decisions, the build order, and the resolved design
-questions (§12). This README is just setup + how to run.
+The coach:
 
-## Layout
+1. extracts what is verified in the ticket;
+2. retrieves relevant approved knowledge;
+3. proposes agent checks, routing, and next steps;
+4. writes a customer-ready reply only when it is genuinely grounded;
+5. abstains when the cause or action is not established.
 
+It never sends a customer reply. The only live Freshdesk writes are one private
+note and up to three merged keyword tags on the same ticket.
+
+Read `CLAUDE.md` for project rules and `docs/DECISIONS.md` for current technical
+decisions. Deployment is blocked until every gate in `GOLIVE.md` is complete.
+
+## Architecture
+
+Three systems only:
+
+- Freshdesk — trigger, ticket data, KB, private note, tags;
+- Supabase Frankfurt — Edge Functions, Postgres, review/auth, cron;
+- OpenAI — analyse, draft, verify, offline QA.
+
+See:
+
+- `docs/ARCHITECTURE.md`
+- `docs/SECURITY.md`
+- `docs/EVALUATION.md`
+- `docs/OPERATIONS.md`
+
+## Reliability model
+
+Each generation is immutable and uniquely identified by:
+
+```text
+ticket_id
++ trigger_message_id
++ prompt_version
++ model
++ run_variant
 ```
-supabase/migrations/01_init.sql                    suggestions table + evaluation views
+
+The live poller:
+
+- paginates all Freshdesk updates from a durable cursor;
+- writes monitored events to a database queue before advancing the cursor;
+- uses a database lease to prevent overlapping runs;
+- reserves a generation before calling OpenAI;
+- stores the exact private note in an outbox;
+- disables automatic retries for `POST /notes`;
+- embeds a unique marker and checks it before any recovery POST;
+- stores human reviews separately in `suggestion_reviews`.
+
+## Repository layout
+
+```text
 supabase/functions/ticket-suggester/
-    index.ts        polling loop + pipeline (analyse → retrieve → draft → verify → post)
-    clients.ts      Freshdesk + Claude clients (timeouts, 429 handling)
-    prompts.ts      the three prompts  ← the product
-    render.ts       pure helpers (extractJSON, strip, esc, renderNote, …)
-    render_test.ts  unit tests for the pure helpers
-scripts/replay.ts   run closed tickets through the pipeline, post nothing
+  index.ts       cursor, queue, reservation, outbox, live delivery
+  clients.ts     Freshdesk + OpenAI clients
+  pipeline.ts    analyse → retrieve → draft → verify
+  prompts.ts     product behaviour
+  render.ts      deterministic safety/rendering helpers
+
+supabase/functions/feedback/
+  index.ts       confirmation-only legacy feedback path
+
+supabase/migrations/
+  31_p0_reliability.sql  immutable runs, reviews, outbox, cursor, queue, lease
+
+scripts/
+  replay.ts              offline evaluation; never posts to Freshdesk
+  score_history.ts       offline agent-reply QA triage
+  sync_tickets.ts        semantic precedent index
+  assign_cohorts.ts      locked learning/development/holdout split
+  knowledge_gaps.ts      missing-knowledge report
+
+web/review.html           authenticated, RLS-gated review app
+supabase/functions/review-ui/
+                          compatibility redirect to REVIEW_APP_URL
 ```
 
-## Prerequisites
+## Requirements
 
-- [Deno](https://deno.land) 1.44+
-- A Freshdesk API key — a service account posts the notes; `MY_AGENT_ID` is the
-  monitored agent (**Tobias Carneteg**) whose tickets get watched
-- An **OpenAI** API key (`OPENAI_API_KEY`; `OPENAI_MODEL` default `gpt-4o`)
-- A Supabase project — **Frankfurt / EU Central** (region is permanent)
-  - Provisioned: **`simployer-ticket-suggester`** — ref `pqwnpcibymtmcpnqlkle`,
-    region `eu-central-1`, URL `https://pqwnpcibymtmcpnqlkle.supabase.co`.
-    Schema `01_init.sql` is already applied; `suggestions` has RLS enabled and
-    the evaluation views run `security_invoker`.
+- Deno `2.9.4` (CI is pinned to the same version);
+- Freshdesk service-account API key;
+- OpenAI API key;
+- Supabase project in Frankfurt / EU Central;
+- DPA approval for the current OpenAI + Supabase data flow.
 
-## Setup
+Supabase JS imports are pinned to `2.110.8`.
+
+## Local setup
 
 ```bash
-cp .env.example .env      # then fill it in
-deno task check           # typecheck
-deno task test            # unit tests for the pure functions
+cp .env.example .env
+deno task check
+deno task test
 ```
 
-Apply the schema (via the Supabase SQL editor, or the CLI):
+Never commit `.env` or credentials.
+
+## Database
+
+Apply migrations in order. Migration 31 must be applied before deploying code
+that uses the durable queue/outbox or separate review RPCs.
 
 ```bash
-supabase db push          # applies supabase/migrations/01_init.sql
+supabase db push
 ```
 
-## The build order (from CLAUDE.md §6 — do not skip ahead)
+Do not apply migration 15's production schedule until `GOLIVE.md` is complete.
 
-1. **Verify the Freshdesk API.** The client was written from docs, not a live
-   instance. `searchSolutions` / `searchTickets` are explicitly marked
-   `UNVERIFIED` in `clients.ts` — confirm them first and fix the client to match.
-2. **Minimal end-to-end.** `WITH_RETRIEVAL=false` — ticket in → Claude → note out.
-3. **Add retrieval.** Before trusting past tickets, check ten resolved ones (see
-   §6 Step 3). Past-ticket search is intentionally left out of `retrieve()` until
-   that check passes; KB solutions only for now.
-4. **Replay.** See below. This is how quality gets judged.
-5. **Schedule.** Only after replay looks reasonable (see Scheduling).
+## Replay: preview, approve, run
 
-## Running the replay harness (Step 4)
+Replay reads closed tickets and writes evaluation rows to Supabase. It never
+posts a note or tag. Real ticket content is sent to OpenAI only after approval.
 
-Nothing is posted. Start with **5** closed tickets whose answer you know; the
-chosen ids + subjects are printed before anything is sent to Anthropic.
+First command — read-only preview:
 
 ```bash
 deno task replay 1001 1002 1003 1004 1005
-# or
-REPLAY_TICKET_IDS=1001,1002,1003,1004,1005 deno task replay
 ```
 
-For each ticket it prints the suggestion (with confidence + sources) next to
-what the agent actually sent, so you can compare.
-
-## Running batch jobs in the cloud (GitHub Actions) — no laptop
-
-The `replay`, `score-history` and `sync-tickets` jobs can be run from GitHub
-instead of locally in PowerShell — see `.github/workflows/batch-jobs.yml`.
-None of them post to Freshdesk; they read Freshdesk + OpenAI and write results to
-Supabase, exactly like a local run. Real ticket text is sent to OpenAI (DPA
-cleared, §11).
-
-**One-time setup — add these repo secrets** (Settings → Secrets and variables →
-Actions): `FRESHDESK_DOMAIN`, `FRESHDESK_API_KEY`, `OPENAI_API_KEY`,
-`MY_AGENT_ID`, `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (optional:
-`OPENAI_MODEL`, defaults to `gpt-4o`).
-
-**Run it:** Actions tab → **Batch jobs** → *Run workflow* → pick the job
-(`score-history` / `replay` / `sync-tickets` / `assign-cohorts`), optionally set
-ticket ids, agent, count, or the replay toggles. Output (including the per-ticket
-log) shows in the run; results land in Supabase and are reviewed in the web app as
-usual.
-
-`assign-cohorts` locks tickets into learning/development/holdout sets (scaling plan
-Fas 2.1) so the holdout stays a clean, leak-free test set — run it *before* writing
-gold answers. Read the split with the `cohort_summary` / `gate1_scorecard_by_cohort`
-views.
-
-`knowledge-gaps` prints the topics where the AI couldn't ground an answer — the
-weekly "what KB to write" list (scaling plan Fas 4.4). Backed by the
-`knowledge_gaps` / `knowledge_gap_tickets` views.
-
-This takes the batch/eval work off your machine. The self-running **live poller**
-(deploy + `pg_cron`) is a separate, larger step — see Scheduling + GOLIVE.md, and
-note it needs the security review of the note/tag writes first.
-
-## Running the poller locally
+The script prints the selected IDs and subjects, then stops. After approving the
+sample, rerun:
 
 ```bash
-deno task serve
-# then, in another shell:
-curl -H "x-cron-secret: $CRON_SECRET" http://localhost:8000/
+REPLAY_APPROVED=true deno task replay 1001 1002 1003 1004 1005
 ```
 
-## Go live — one agent, private notes (Step 5)
+Replay uses `INSERT`, never `UPSERT`. If the same immutable generation already
+exists, it is reported and left unchanged.
 
-Gate 1 runs for **one** monitored agent (`MY_AGENT_ID`) and only ever writes
-**private notes** (plus up to 3 keyword tags) on *that agent's* tickets. It has
-never run against a live Freshdesk instance (CLAUDE.md §4), so roll out in stages
-— each step de-risks the next. This is **not** a multi-agent rollout; that is a
-Gate 2 decision and is explicitly out of scope (§9).
+## GitHub batch jobs
 
-**1. Deploy both functions** — the poller (custom cron-secret auth) and the
-feedback endpoint the note's 👍/✏️/👎 links call (agents click from the browser):
+The manual `Batch jobs` workflow supports replay, score-history, sync-tickets,
+assign-cohorts, and knowledge-gaps.
 
-```bash
-supabase functions deploy ticket-suggester --project-ref pqwnpcibymtmcpnqlkle --no-verify-jwt
-supabase functions deploy feedback        --project-ref pqwnpcibymtmcpnqlkle --no-verify-jwt
-```
+Cloud jobs set `CLOUD_LOG_MODE=safe`; Actions logs and summaries exclude ticket
+subjects, customer/agent text, drafts, and source excerpts. For replay, first run
+with `approved_sample=false`, inspect the preview, then rerun the same sample with
+`approved_sample=true`.
 
-The note's verdict links write straight to `suggestions.verdict`, so
-`gate1_scorecard` fills itself as the agent judges each note. The feedback URL is
-derived from `SUPABASE_URL` automatically; set `FEEDBACK_URL` only to override it.
+The production repository/environment should require manual approval before
+workflows receive service-role or production credentials.
 
-**2. Set the function secrets** (never commit these):
+## Review
 
-```bash
-supabase secrets set --project-ref pqwnpcibymtmcpnqlkle \
-  FRESHDESK_DOMAIN=… FRESHDESK_API_KEY=… MY_AGENT_ID=… \
-  OPENAI_API_KEY=… OPENAI_MODEL=gpt-4o CRON_SECRET=…
-# DRY_RUN defaults to TRUE — the function posts nothing until you set it false.
-```
+New private notes link to the authenticated Coach Review app. Browser writes use
+narrow RPCs:
 
-**3. Supervised dry-run.** With `DRY_RUN` on (the default), trigger one run and
-inspect what it *would* have posted — nothing is written to Freshdesk:
+- `submit_generation_verdict`
+- `save_generation_gold_answer`
+- `mark_generation_spam`
 
-```bash
-curl -H "x-cron-secret: <CRON_SECRET>" \
-  https://pqwnpcibymtmcpnqlkle.functions.supabase.co/ticket-suggester
-# response includes "dry_run": true, "mine": N, "processed": N, "posted": 0
-```
+RLS plus `app_reviewers` is the authorization boundary. New notes contain a safe
+generation ID deep-link, not a bearer-like token or verdict in the URL.
 
-Then check the logged suggestions — confirm every row is the monitored agent's
-ticket and the notes read well:
+Legacy feedback links remain confirmation-only: GET displays a page; POST consumes
+the scoped token once.
+
+## Evaluation
+
+The human verdict remains the gold standard. Read overall figures together with:
 
 ```sql
-select ticket_id, confidence, answer_strategy, qa_answered, qa_total, note_id
-from suggestions order by created_at desc limit 20;   -- note_id is null in dry-run
+select * from gate1_scorecard;
+select * from gate1_scorecard_by_cohort;
+select * from coach_mode_scorecard;
+select * from calibration;
+select * from qa_scorecard;
+select * from knowledge_gaps;
 ```
 
-**4. Enable posting.** Only once the dry-run looks right:
+The key safety measures are reply-ready precision, false-green rate, abstention
+accuracy, and critical error rate. Critical legal/deletion/access/PII/false-promise
+errors should be effectively zero before a wider pilot.
 
-```bash
-supabase secrets set --project-ref pqwnpcibymtmcpnqlkle DRY_RUN=false
-```
+## Current blockers
 
-**5. Schedule it.** Run `supabase/migrations/15_schedule.sql` **manually** (it needs
-the project URL + `CRON_SECRET`, so it is not part of the normal migration run and
-stores them in Vault). It schedules `pg_cron` to call the function every minute.
-Enabling the schedule while `DRY_RUN` is still true is safe — it polls and logs but
-posts nothing. Pause anytime with
-`select cron.unschedule('ticket-suggester-every-minute');`.
+- confirm and document OpenAI-key rotation/revocation;
+- decide legal retention and deletion propagation;
+- validate migration 31 in a non-production Supabase environment;
+- complete the supervised dry-run and synthetic marker-recovery test.
 
-## Evaluating
-
-Record each verdict on the `suggestions` row (`usable` / `edited` / `unusable`),
-then read the views:
-
-```sql
-select * from gate1_scorecard;   -- usable-% per prompt version (human verdict)
-select * from calibration;       -- watch the (high, unusable) cell (§8)
-select * from usage_scorecard;   -- used/partly/not + avg Q/A coverage + similarity
-select * from failures;          -- every crashed run, never silent (§10)
-```
-
-Each private note carries a **Confidence** badge, a **Q/A score** ("answers 2 of
-3 questions"), a short **rationale** ("why this answers the ticket"), and its
-**sources as hyperlinks** — KB solutions link to the article, past tickets to the
-ticket. Whether the note actually got used (used / partly / not) is derived
-automatically by comparing the draft to the reply the agent eventually sent.
-
-After any prompt change, bump `PROMPT_VERSION` in `prompts.ts` and re-run the
-**same** tickets so `gate1_scorecard` is comparable across versions.
-
-## Data protection
-
-Ticket content may contain employee personal data. The DPA position on **OpenAI**
-+ Supabase is confirmed OK for Gate 1 (2026-07-22), so real ticket text may be
-sent to OpenAI — including via the replay harness. Any *new* data source or a
-further provider change needs its own sign-off. See CLAUDE.md §11–§12.
+Until then: keep cron paused and `DRY_RUN=true`.

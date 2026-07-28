@@ -8,7 +8,13 @@ const DEFAULT_TIMEOUT_MS = 20_000;
 
 export class HttpError extends Error {
   constructor(readonly status: number, readonly url: string, readonly body: string) {
-    super(`HTTP ${status} for ${url}: ${body.slice(0, 300)}`);
+    // Keep response bodies and URL queries out of logs: Freshdesk errors can echo
+    // ticket/customer data. Callers still retain status + endpoint for diagnosis.
+    let endpoint = "(invalid URL)";
+    try {
+      endpoint = new URL(url).pathname;
+    } catch { /* keep the safe fallback */ }
+    super(`HTTP ${status} for ${endpoint}`);
     this.name = "HttpError";
   }
 }
@@ -23,7 +29,7 @@ async function fetchWithRetry(
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const maxRetries = opts.maxRetries ?? 2;
 
-  for (let attempt = 0; ; attempt++) {
+  for (let attempt = 0;; attempt++) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs);
     let res: Response;
@@ -119,7 +125,10 @@ export class Freshdesk {
 
   private async get<T>(path: string, timeoutMs?: number): Promise<T> {
     const url = `${this.base}${path}`;
-    const res = await fetchWithRetry(url, { method: "GET", headers: { authorization: this.auth } }, {
+    const res = await fetchWithRetry(url, {
+      method: "GET",
+      headers: { authorization: this.auth },
+    }, {
       timeoutMs,
     });
     if (!res.ok) throw new HttpError(res.status, url, await res.text());
@@ -143,7 +152,9 @@ export class Freshdesk {
   async findAgent(query: string): Promise<Agent | null> {
     const q = query.trim().toLowerCase();
     if (q.includes("@")) {
-      const byEmail = await this.get<Agent[]>(`/agents?email=${encodeURIComponent(query.trim())}`);
+      const byEmail = await this.get<Agent[]>(
+        `/agents?email=${encodeURIComponent(query.trim())}`,
+      );
       return byEmail[0] ?? null;
     }
     const words = q.split(/\s+/).filter(Boolean);
@@ -154,15 +165,31 @@ export class Freshdesk {
     }) ?? null;
   }
 
-  // Tickets updated at/after an ISO timestamp, oldest first. Freshdesk paginates.
-  listUpdatedTickets(updatedSince: string): Promise<TicketSummary[]> {
+  // One page of tickets updated at/after an ISO timestamp, oldest first.
+  listUpdatedTickets(updatedSince: string, page = 1): Promise<TicketSummary[]> {
     const q = new URLSearchParams({
       updated_since: updatedSince,
       order_by: "updated_at",
       order_type: "asc",
       per_page: "100",
+      page: String(page),
     });
     return this.get<TicketSummary[]>(`/tickets?${q}`);
+  }
+
+  // Fetch every page before the caller advances its durable cursor. Throwing on
+  // the safety limit is intentional: advancing a partial scan would lose tickets.
+  async listAllUpdatedTickets(
+    updatedSince: string,
+    maxPages = 50,
+  ): Promise<TicketSummary[]> {
+    const all: TicketSummary[] = [];
+    for (let page = 1; page <= maxPages; page++) {
+      const rows = await this.listUpdatedTickets(updatedSince, page);
+      all.push(...rows);
+      if (rows.length < 100) return all;
+    }
+    throw new Error(`Freshdesk pagination exceeded the ${maxPages}-page safety limit`);
   }
 
   ticketWithConversations(id: number): Promise<Ticket> {
@@ -174,7 +201,9 @@ export class Freshdesk {
   // failure as "no sources", never a crash.
   async searchSolutions(term: string): Promise<Solution[]> {
     const q = new URLSearchParams({ term });
-    const res = await this.get<{ results?: Solution[] } | Solution[]>(`/search/solutions?${q}`);
+    const res = await this.get<{ results?: Solution[] } | Solution[]>(
+      `/search/solutions?${q}`,
+    );
     return Array.isArray(res) ? res : (res.results ?? []);
   }
 
@@ -183,7 +212,10 @@ export class Freshdesk {
   // a bare term returns HTTP 400 (verified 2026-07-22). This is why past-ticket
   // retrieval stays out of the pipeline (KB-only). Kept for possible future
   // field-based use; callers must pass a valid `keyword:value` query, not prose.
-  searchTickets(query: string, page = 1): Promise<{ results: TicketSummary[]; total: number }> {
+  searchTickets(
+    query: string,
+    page = 1,
+  ): Promise<{ results: TicketSummary[]; total: number }> {
     const q = new URLSearchParams({ query: `"${query}"`, page: String(page) });
     return this.get<{ results: TicketSummary[]; total: number }>(`/search/tickets?${q}`);
   }
@@ -195,10 +227,27 @@ export class Freshdesk {
       method: "POST",
       headers: { authorization: this.auth, "content-type": "application/json" },
       body: JSON.stringify({ body: bodyHtml, private: true }),
+    }, {
+      // POST /notes is not idempotent. A 5xx/lost response may still mean Freshdesk
+      // accepted the note, so the outbox must recover by marker instead of retrying.
+      maxRetries: 0,
     });
     if (!res.ok) throw new HttpError(res.status, url, await res.text());
     const note = await res.json() as { id: number };
     return note.id;
+  }
+
+  // Recovery path for an uncertain note POST. The delivery marker is part of the
+  // stored note HTML, so a later run can prove that Freshdesk already accepted it.
+  async findPrivateNoteByMarker(
+    ticketId: number,
+    marker: string,
+  ): Promise<number | null> {
+    const ticket = await this.ticketWithConversations(ticketId);
+    const note = (ticket.conversations ?? [])
+      .filter((c) => c.private)
+      .find((c) => (c.body_text ?? "").includes(marker));
+    return note?.id ?? null;
   }
 
   // Second write (CLAUDE.md §12): replace the ticket's tag set. PUT /tickets/{id}
@@ -253,7 +302,9 @@ export class LLM {
     }, { timeoutMs: opts.timeoutMs ?? 60_000 });
 
     if (!res.ok) throw new HttpError(res.status, url, await res.text());
-    const data = await res.json() as { choices: Array<{ message?: { content?: string } }> };
+    const data = await res.json() as {
+      choices: Array<{ message?: { content?: string } }>;
+    };
     return data.choices?.[0]?.message?.content ?? "";
   }
 
@@ -266,7 +317,12 @@ export class LLM {
     user: string,
     // deno-lint-ignore no-explicit-any
     jsonSchema: any,
-    opts: { temperature?: number; maxTokens?: number; timeoutMs?: number; model?: string } = {},
+    opts: {
+      temperature?: number;
+      maxTokens?: number;
+      timeoutMs?: number;
+      model?: string;
+    } = {},
   ): Promise<T> {
     const url = "https://api.openai.com/v1/chat/completions";
     const res = await fetchWithRetry(url, {
@@ -285,7 +341,9 @@ export class LLM {
     }, { timeoutMs: opts.timeoutMs ?? 60_000 });
 
     if (!res.ok) throw new HttpError(res.status, url, await res.text());
-    const data = await res.json() as { choices: Array<{ message?: { content?: string } }> };
+    const data = await res.json() as {
+      choices: Array<{ message?: { content?: string } }>;
+    };
     const content = data.choices?.[0]?.message?.content ?? "";
     if (!content) throw new Error("LLM returned no structured content");
     return JSON.parse(content) as T;
@@ -297,8 +355,14 @@ export class LLM {
     const url = "https://api.openai.com/v1/embeddings";
     const res = await fetchWithRetry(url, {
       method: "POST",
-      headers: { authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
-      body: JSON.stringify({ model: "text-embedding-3-small", input: text.slice(0, 8000) }),
+      headers: {
+        authorization: `Bearer ${this.apiKey}`,
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({
+        model: "text-embedding-3-small",
+        input: text.slice(0, 8000),
+      }),
     }, { timeoutMs: opts.timeoutMs ?? 30_000 });
     if (!res.ok) throw new HttpError(res.status, url, await res.text());
     const data = await res.json() as { data: Array<{ embedding: number[] }> };

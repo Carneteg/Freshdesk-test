@@ -6,7 +6,7 @@
 // Adapted from the package's tests/qa-rubric.test.ts to use the repo's @std/assert
 // (the shipped copy imports std over https; the rest of this repo uses jsr).
 
-import { assert, assertEquals, assertThrows } from "@std/assert";
+import { assert, assertEquals, assertThrows } from "./test_assert.ts";
 import {
   calculateTotalScore,
   calculateWeightedPoints,
@@ -40,8 +40,14 @@ Deno.test("perfect score totals 100", () => {
 });
 
 Deno.test("accuracy 1-2 forces a human review verdict regardless of total", () => {
-  assertEquals(determineVerdict(90, 2), { verdict: "Needs review", needsHumanReview: true });
-  assertEquals(determineVerdict(100, 1), { verdict: "Needs review", needsHumanReview: true });
+  assertEquals(determineVerdict(90, 2), {
+    verdict: "Needs review",
+    needsHumanReview: true,
+  });
+  assertEquals(determineVerdict(100, 1), {
+    verdict: "Needs review",
+    needsHumanReview: true,
+  });
 });
 
 Deno.test("verdict buckets", () => {
@@ -91,7 +97,11 @@ Deno.test("validator rejects a scorecard in the wrong order", () => {
 Deno.test("buildQaCoachUserPrompt falls back to 'Not provided.' for empty fields", () => {
   // customerMessage/ticketContext/agentReply required; requirements + languageOverride
   // empty here → 2 fallbacks (plus the 3 required ones passed as blank → 5 total).
-  const out = buildQaCoachUserPrompt({ customerMessage: "", ticketContext: "", agentReply: "" });
+  const out = buildQaCoachUserPrompt({
+    customerMessage: "",
+    ticketContext: "",
+    agentReply: "",
+  });
   assertEquals(out.split("Not provided.").length - 1, 5);
 });
 
@@ -106,7 +116,9 @@ Deno.test("buildQaCoachUserPrompt inserts values and keeps section order", () =>
   assert(out.includes("KB: reset via /login."));
   assert(out.includes("Try resetting your password."));
   assert(out.includes("Answer in English."));
-  assert(out.indexOf("CUSTOMER'S ORIGINAL MESSAGE") < out.indexOf("AGENT REPLY TO ASSESS"));
+  assert(
+    out.indexOf("CUSTOMER'S ORIGINAL MESSAGE") < out.indexOf("AGENT REPLY TO ASSESS"),
+  );
   assert(out.includes("Do not use knowledge outside supplied content"));
 });
 
@@ -117,8 +129,14 @@ Deno.test("schema is strict with a 7-item scorecard carrying both id and name", 
   assertEquals(card.maxItems, 7);
   // The schema enums are readonly tuples (as const); compare as plain string arrays
   // so assertEquals doesn't infer the fixed-length tuple type for both sides.
-  assertEquals<readonly string[]>(card.items.properties.criterionId.enum, QA_CRITERIA.map((c) => c.id));
-  assertEquals<readonly string[]>(card.items.properties.criterion.enum, QA_CRITERIA.map((c) => c.name));
+  assertEquals<readonly string[]>(
+    card.items.properties.criterionId.enum,
+    QA_CRITERIA.map((c) => c.id),
+  );
+  assertEquals<readonly string[]>(
+    card.items.properties.criterion.enum,
+    QA_CRITERIA.map((c) => c.name),
+  );
 });
 
 Deno.test("system prompt encodes the accuracy override and verdict buckets", () => {

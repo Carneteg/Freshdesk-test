@@ -166,7 +166,10 @@ const MARKETING_SUBJECT = [
   "upptäck allt som simployer expert har att erbjuda",
 ];
 
-export function isIgnorableTicket(subject: string, extraSubstrings: string[] = []): boolean {
+export function isIgnorableTicket(
+  subject: string,
+  extraSubstrings: string[] = [],
+): boolean {
   const s = subject ?? "";
   if (CALL_LOG_SUBJECT.test(s) || AUTO_REPLY_SUBJECT.test(s)) return true;
   const lower = s.toLowerCase();
@@ -265,12 +268,28 @@ export function ticketBeforeFirstAgentReply(t: Ticket): Ticket {
 // real answer, so it is NOT here — only a short reply whose substance is a promise to
 // come back later is skipped.
 const HOLDING_HINTS = [
-  "looking into", "look into this", "we'll get back", "get back to you",
-  "investigating this", "working on it", "we are on it",
-  "ser på saken", "ser paa saken", "ser nærmere", "ser naermere",
-  "återkommer", "aterkommer", "vi undersöker", "vi undersoker", "vi kollar",
-  "kommer tilbake", "undersøker", "undersoker", "vi kikker",
-  "vi ser på det", "vi ser paa det",
+  "looking into",
+  "look into this",
+  "we'll get back",
+  "get back to you",
+  "investigating this",
+  "working on it",
+  "we are on it",
+  "ser på saken",
+  "ser paa saken",
+  "ser nærmere",
+  "ser naermere",
+  "återkommer",
+  "aterkommer",
+  "vi undersöker",
+  "vi undersoker",
+  "vi kollar",
+  "kommer tilbake",
+  "undersøker",
+  "undersoker",
+  "vi kikker",
+  "vi ser på det",
+  "vi ser paa det",
 ];
 
 export function looksLikeHoldingReply(text: string): boolean {
@@ -308,7 +327,8 @@ export function replayTurn(t: Ticket): ReplayTurn {
   // First substantive public reply — skip auto-replies and holding acknowledgments
   // so we grade against the turn that actually answered.
   let idx = outgoing.findIndex(
-    (c) => !looksLikeAutoReply(c.body_text ?? "") && !looksLikeHoldingReply(c.body_text ?? ""),
+    (c) =>
+      !looksLikeAutoReply(c.body_text ?? "") && !looksLikeHoldingReply(c.body_text ?? ""),
   );
   if (idx === -1) idx = 0; // all holding/auto → fall back to the first reply
 
@@ -403,7 +423,9 @@ export function buildContext(t: Ticket): string {
     .filter((x): x is string => typeof x === "string" && x.trim().length > 0);
   if (onFile.length) {
     lines.push(
-      `CUSTOMER ON FILE: ${onFile.join(" · ")} — already known from the ticket; do NOT ask the customer to provide an email or identity that is already here.`,
+      `CUSTOMER ON FILE: ${
+        onFile.join(" · ")
+      } — already known from the ticket; do NOT ask the customer to provide an email or identity that is already here.`,
     );
   }
 
@@ -435,12 +457,20 @@ export function buildContext(t: Ticket): string {
   }
 
   for (const c of convos) {
-    const who = c.private ? "INTERNAL NOTE (agent/internal)" : c.incoming ? "CUSTOMER" : "AGENT REPLY";
+    const who = c.private
+      ? "INTERNAL NOTE (agent/internal)"
+      : c.incoming
+      ? "CUSTOMER"
+      : "AGENT REPLY";
     const auto = c.incoming && looksLikeAutoReply(c.body_text ?? "")
       ? " [likely AUTOMATIC / out-of-office reply — do NOT treat as an answer]"
       : "";
     const respond = latestIncoming && c.id === latestIncoming.id ? RESPOND : "";
-    lines.push("", `[${c.created_at}] ${who}${auto}${respond}:`, strip(c.body_text ?? ""));
+    lines.push(
+      "",
+      `[${c.created_at}] ${who}${auto}${respond}:`,
+      strip(c.body_text ?? ""),
+    );
   }
 
   return lines.join("\n").slice(0, 12000);
@@ -480,8 +510,11 @@ export interface NoteData {
   qaAnswered: number;
   qaTotal: number;
   unsupportedNote?: string;
+  // Preferred feedback path: the authenticated, RLS-gated review app. A generation
+  // deep-link is safe to expose; no write token or verdict lives in the URL.
+  reviewUrl?: string;
   // One-click verdict links (§8/§12). Rendered only when both are present — i.e.
-  // on a posted note, never in the replay harness.
+  // on legacy posted notes. New notes use reviewUrl instead.
   feedbackUrl?: string;
   feedbackToken?: string;
 }
@@ -594,7 +627,9 @@ export function renderNote(r: NoteData): string {
     const reason = r.confidenceReason && r.confidenceReason.trim()
       ? ` — ${esc(r.confidenceReason)}`
       : "";
-    out.push(`<p><strong>Suggested approach:</strong> ${esc(strategyLabel)}${reason}</p>`);
+    out.push(
+      `<p><strong>Suggested approach:</strong> ${esc(strategyLabel)}${reason}</p>`,
+    );
   }
 
   // Agent-facing analysis — always shown when present. This is what keeps a
@@ -636,7 +671,9 @@ export function renderNote(r: NoteData): string {
 
   // Things the AI could not establish from the text — a to-confirm list.
   if (r.unknowns && r.unknowns.length) {
-    out.push(`<p><strong>Not established from the ticket (confirm before relying on it):</strong></p>`);
+    out.push(
+      `<p><strong>Not established from the ticket (confirm before relying on it):</strong></p>`,
+    );
     out.push(renderList(r.unknowns, false));
   }
 
@@ -667,29 +704,45 @@ export function renderNote(r: NoteData): string {
 
   if (!clarifying) {
     if (r.searchQueries.length) {
-      out.push(`<p><strong>Searched for:</strong> ${esc(r.searchQueries.join(", "))}</p>`);
+      out.push(
+        `<p><strong>Searched for:</strong> ${esc(r.searchQueries.join(", "))}</p>`,
+      );
     }
     if (r.sources.length) {
-      out.push(`<p><strong>Sources:</strong></p><ul>${r.sources.map(renderSource).join("")}</ul>`);
+      out.push(
+        `<p><strong>Sources:</strong></p><ul>${
+          r.sources.map(renderSource).join("")
+        }</ul>`,
+      );
     } else {
-      out.push("<p><strong>Sources:</strong> none found — possible knowledge-base gap.</p>");
+      out.push(
+        "<p><strong>Sources:</strong> none found — possible knowledge-base gap.</p>",
+      );
     }
   }
 
   if (r.unsupportedNote) out.push(`<p><em>${esc(r.unsupportedNote)}</em></p>`);
 
-  // One-click verdict — the "would I have sent this?" signal this whole experiment
-  // exists to collect (§8). Each link writes straight to `suggestions` via the
-  // feedback function, keyed by an unguessable per-note token.
-  if (r.feedbackUrl && r.feedbackToken) {
+  // New notes route feedback through the authenticated review app. This avoids
+  // state-changing GET links being triggered by link scanners/prefetchers.
+  if (r.reviewUrl) {
+    out.push(
+      `<p><strong>Would you have sent this?</strong> ` +
+        `<a href="${esc(r.reviewUrl)}">Review this generation in Coach Review</a></p>`,
+    );
+  } else if (r.feedbackUrl && r.feedbackToken) {
+    // Legacy fallback only. The feedback function now renders a confirmation form;
+    // its GET no longer changes state.
     const link = (v: string, label: string) =>
-      `<a href="${esc(r.feedbackUrl!)}?t=${esc(r.feedbackToken!)}&amp;v=${v}">${label}</a>`;
+      `<a href="${esc(r.feedbackUrl!)}?t=${
+        esc(r.feedbackToken!)
+      }&amp;v=${v}">${label}</a>`;
     out.push(
       `<p><strong>Would you have sent this?</strong> ` +
         `${link("usable", "👍 Yes, would send")} · ` +
         `${link("edited", "✏️ With edits")} · ` +
         `${link("unusable", "👎 No")}` +
-        ` <span style="color:#888">(one click — records your verdict)</span></p>`,
+        ` <span style="color:#888">(opens a confirmation page)</span></p>`,
     );
   }
 

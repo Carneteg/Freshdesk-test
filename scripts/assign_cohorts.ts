@@ -10,7 +10,7 @@
 // is NEVER moved, so the holdout can't drift into training. Run this BEFORE writing
 // gold answers / learning runs so the holdout is clean from the start.
 
-import { createClient } from "npm:@supabase/supabase-js@2";
+import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 
 function env(name: string): string {
   const v = Deno.env.get(name) ?? "";
