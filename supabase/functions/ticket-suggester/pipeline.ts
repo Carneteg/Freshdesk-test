@@ -51,6 +51,7 @@ interface Analysis {
   detected_intent: string;
   keywords: string[];
   questions_asked: string[];
+  latest_unresolved_request: string;
   search_queries: string[];
   security_sensitive: boolean;
   sensitive_action_request: boolean;
@@ -160,6 +161,8 @@ export interface Suggestion {
   ticket_url: string;
   trigger_message_id: string;
   customer_message: string;
+  conversation_context: string;
+  latest_unresolved_request: string;
   subject: string;
   language: string;
   ticket_type: string;
@@ -214,6 +217,7 @@ async function analyse(
     detected_intent: str(j.detected_intent),
     keywords: strList(j.keywords),
     questions_asked: strList(j.questions_asked),
+    latest_unresolved_request: str(j.latest_unresolved_request),
     search_queries: strList(j.search_queries),
     security_sensitive: j.security_sensitive === true,
     sensitive_action_request: j.sensitive_action_request === true,
@@ -422,6 +426,7 @@ export async function runPipeline(
       sensitive_action_request: a.sensitive_action_request,
       sensitive_action_desc: a.sensitive_action_desc,
       questions_asked: a.questions_asked,
+      latest_unresolved_request: a.latest_unresolved_request,
       facts_from_customer: a.facts_from_customer,
       facts_from_agent: a.facts_from_agent,
       facts_from_internal_notes: a.facts_from_internal_notes,
@@ -621,6 +626,8 @@ export async function runPipeline(
     ticket_url: deps.fd.ticketUrl(ticket.id),
     trigger_message_id: triggerId,
     customer_message: customerMessage,
+    conversation_context: context,
+    latest_unresolved_request: a.latest_unresolved_request,
     subject: ticket.subject,
     language: a.language,
     ticket_type: a.ticket_type,
@@ -756,6 +763,8 @@ export function toRow(
     ticket_url: s.ticket_url,
     trigger_message_id: s.trigger_message_id,
     customer_message: s.customer_message,
+    conversation_context: s.conversation_context,
+    latest_unresolved_request: s.latest_unresolved_request,
     subject: s.subject,
     language: s.language,
     ticket_type: s.ticket_type,
