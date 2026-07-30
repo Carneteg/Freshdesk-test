@@ -565,13 +565,21 @@ and stored in `suggestions.customer_subscriptions` but **never enters any LLM
 prompt**; lookups **abstain on ambiguity** (never guess between multiple matching
 accounts); every failure is contained (`unavailable`) so a CRM outage can never
 suppress the required note; response bodies are kept out of errors/logs. Account
-resolution (2026-07-30, superseding the unpushed Codex commit 2593078): requester
-**contact email first**, then — because subscriptions live per *account/company*
-and many requester emails have no CRM contact — a fallback via the ticket's
-**Freshdesk company name**, exact case-insensitive equality against one single CRM
-account (`matchedBy` records which path matched; a company-name match is labelled
-in the note). Feature is opt-in via `FRESHWORKS_CRM_ENABLED`; the replay harness
-never constructs the CRM client, so evaluation runs are unaffected.
+resolution (2026-07-30, superseding the unpushed Codex commit 2593078) is a
+**matching ladder on the initial (brand) name** — in practice the keys we hold
+(email domain, Freshdesk company name) rarely equal the CRM account name
+verbatim ("acme.se" / "Acme" vs "Acme Sverige AB"): (1) requester **contact
+email**, exact; (2) the ticket's **Freshdesk company name** — stem equality
+(case/diacritics folded, trailing legal suffixes AB/AS/Oy/… stripped), then
+word-boundary prefix; (3) the requester's **email domain** — CRM website-domain
+equality, then name-stem relation; freemail domains never resolve. Every tier
+still requires exactly ONE account. **Several similar accounts → status
+`ambiguous`**, rendered as an explicit "check the CRM manually" warning for the
+agent (per Tobias: ambiguity must prompt a manual check, never look like "no
+match" and never be guessed away). `matchedBy` records which tier matched; the
+weak tiers (name prefix, email domain) carry a verify nudge in the note. Feature
+is opt-in via `FRESHWORKS_CRM_ENABLED`; the replay harness never constructs the
+CRM client, so evaluation runs are unaffected.
 
 ## 13. Repeatable workflows — Claude skills & `tools/`
 

@@ -150,7 +150,7 @@ Deno.test("FreshworksCRM reads approved fields from custom-field response shapes
   }
 });
 
-Deno.test("FreshworksCRM does not guess when requester-to-account match is ambiguous", async () => {
+Deno.test("FreshworksCRM: one email on several CRM accounts is ambiguous — manual check", async () => {
   const original = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = (() => {
@@ -167,9 +167,10 @@ Deno.test("FreshworksCRM does not guess when requester-to-account match is ambig
 
   try {
     assertEquals(await client().subscriptionsForRequester("shared@example.com"), {
-      status: "no_match",
+      status: "ambiguous",
       subscriptions: [],
     });
+    // Hard stop: the domain tier is never tried on known-ambiguous data.
     assertEquals(calls, 1);
   } finally {
     globalThis.fetch = original;
@@ -226,7 +227,8 @@ Deno.test("FreshworksCRM falls back to the ticket's company when the email has n
     });
     assertEquals(urls.length, 3);
     const lookup = new URL(urls[1]);
-    assertEquals(lookup.searchParams.get("q"), "Acme AB");
+    // The query term is the normalised brand stem, not the raw company string.
+    assertEquals(lookup.searchParams.get("q"), "acme");
     assertEquals(lookup.searchParams.get("f"), "name");
     assertEquals(lookup.searchParams.get("entities"), "sales_account");
   } finally {
@@ -234,7 +236,7 @@ Deno.test("FreshworksCRM falls back to the ticket's company when the email has n
   }
 });
 
-Deno.test("FreshworksCRM does not guess between duplicate company names", async () => {
+Deno.test("FreshworksCRM reports SEVERAL similar accounts as ambiguous — agent checks manually", async () => {
   const original = globalThis.fetch;
   let calls = 0;
   globalThis.fetch = (() => {
@@ -251,9 +253,170 @@ Deno.test("FreshworksCRM does not guess between duplicate company names", async 
 
   try {
     assertEquals(await client().subscriptionsForCustomer({ companyName: "Acme AB" }), {
-      status: "no_match",
+      status: "ambiguous",
       subscriptions: [],
     });
+    assertEquals(calls, 1);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM ambiguity hard-stops the ladder — the email-domain tier is never tried", async () => {
+  const original = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.includes("entities=contact")) {
+      return Promise.resolve(json({ contacts: { contacts: [] } }));
+    }
+    return Promise.resolve(json({
+      sales_accounts: {
+        sales_accounts: [
+          { id: 1, name: "Acme Sverige AB" },
+          { id: 2, name: "Acme Norge AS" },
+        ],
+      },
+    }));
+  }) as typeof fetch;
+
+  try {
+    const result = await client().subscriptionsForCustomer({
+      requesterEmail: "anna@acme.se",
+      companyName: "Acme",
+    });
+    assertEquals(result, { status: "ambiguous", subscriptions: [] });
+    // contact lookup + ONE account lookup — no further tier after ambiguity.
+    assertEquals(urls.length, 2);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM word-prefix match ('Acme' -> 'Acme Sverige AB') is labelled for verification", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("entities=sales_account")) {
+      return Promise.resolve(json({
+        sales_accounts: {
+          sales_accounts: [
+            { id: 42, name: "Acme Sverige AB" },
+            { id: 43, name: "Acmecorp AB" }, // no word boundary -> never a candidate
+          ],
+        },
+      }));
+    }
+    return Promise.resolve(json({
+      cm_subscription: [{
+        custom_field: {
+          cf_account_number: 42,
+          cf_product_name: "Simployer HR",
+          cf_renewal_status: "Active",
+          cf_end_date: "2027-01-31",
+        },
+      }],
+    }));
+  }) as typeof fetch;
+
+  try {
+    const result = await client().subscriptionsForCustomer({ companyName: "Acme" });
+    assertEquals(result.status, "found");
+    assertEquals(result.matchedBy, "company_name_prefix");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM resolves via the email domain: website match beats a differing name", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("entities=contact")) {
+      return Promise.resolve(json({ contacts: { contacts: [] } }));
+    }
+    if (url.includes("entities=sales_account")) {
+      return Promise.resolve(json({
+        sales_accounts: {
+          sales_accounts: [
+            { id: 9, name: "Nordic HR Partner", website: "https://www.acme.se" },
+          ],
+        },
+      }));
+    }
+    return Promise.resolve(json({
+      cm_subscription: [{
+        custom_field: {
+          cf_account_number: 9,
+          cf_product_name: "Simployer One",
+          cf_renewal_status: "Active",
+          cf_end_date: "2026-11-30",
+        },
+      }],
+    }));
+  }) as typeof fetch;
+
+  try {
+    const result = await client().subscriptionsForCustomer({
+      requesterEmail: "anna@acme.se",
+    });
+    assertEquals(result.status, "found");
+    assertEquals(result.matchedBy, "email_domain");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM folds Nordic diacritics: malarenergi.se matches Mälarenergi AB", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("entities=contact")) {
+      return Promise.resolve(json({ contacts: { contacts: [] } }));
+    }
+    if (url.includes("entities=sales_account")) {
+      return Promise.resolve(json({
+        sales_accounts: { sales_accounts: [{ id: 5, name: "Mälarenergi AB" }] },
+      }));
+    }
+    return Promise.resolve(json({
+      cm_subscription: [{
+        custom_field: {
+          cf_account_number: 5,
+          cf_product_name: "Simployer HR",
+          cf_renewal_status: "Active",
+          cf_end_date: "2027-06-30",
+        },
+      }],
+    }));
+  }) as typeof fetch;
+
+  try {
+    const result = await client().subscriptionsForCustomer({
+      requesterEmail: "info@malarenergi.se",
+    });
+    assertEquals(result.status, "found");
+    assertEquals(result.matchedBy, "email_domain");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM never resolves a company from a freemail domain", async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (() => {
+    calls++;
+    return Promise.resolve(json({ contacts: { contacts: [] } }));
+  }) as typeof fetch;
+
+  try {
+    assertEquals(
+      await client().subscriptionsForCustomer({ requesterEmail: "maria@gmail.com" }),
+      { status: "no_match", subscriptions: [] },
+    );
+    // Only the contact lookup — the domain tier must refuse freemail.
     assertEquals(calls, 1);
   } finally {
     globalThis.fetch = original;
@@ -284,12 +447,18 @@ Deno.test("FreshworksCRM prefers the contact-email match over the company name",
   }) as typeof fetch;
 
   try {
+    let companyFetched = false;
     const result = await client().subscriptionsForCustomer({
       requesterEmail: "customer@example.com",
-      companyName: "Acme AB",
+      // Lazy loader: must never run when the contact-email tier already matched.
+      companyName: () => {
+        companyFetched = true;
+        return Promise.resolve("Acme AB");
+      },
     });
     assertEquals(result.status, "found");
     assertEquals(result.matchedBy, "contact_email");
+    assertEquals(companyFetched, false);
     // The company lookup must never have been called.
     assertEquals(urls.some((u) => u.includes("entities=sales_account")), false);
   } finally {

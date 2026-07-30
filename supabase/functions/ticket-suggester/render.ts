@@ -529,10 +529,13 @@ export interface CustomerSubscription {
 }
 
 export interface CustomerSubscriptionContext {
-  status: "found" | "no_match" | "unavailable";
-  // How the CRM account was resolved: the requester's contact email, or the
-  // ticket's Freshdesk company name (fallback — subscriptions live per account).
-  matchedBy?: "contact_email" | "company_name";
+  // `ambiguous` = SEVERAL similar CRM accounts matched — the agent must pick
+  // manually; guessing between customers is never allowed.
+  status: "found" | "no_match" | "ambiguous" | "unavailable";
+  // How the CRM account was resolved, most→least specific: the requester's
+  // contact email; the ticket's company name (stem equality / word-prefix); or
+  // the requester's email domain (subscriptions live per account/company).
+  matchedBy?: "contact_email" | "company_name" | "company_name_prefix" | "email_domain";
   subscriptions: CustomerSubscription[];
 }
 
@@ -616,6 +619,11 @@ function renderCustomerSubscriptions(context: CustomerSubscriptionContext): stri
     return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
       "<em>no CRM account could be matched from the requester email or the ticket's company.</em></p>";
   }
+  if (context.status === "ambiguous") {
+    return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
+      "⚠️ <em>several similar CRM accounts match this customer — " +
+      "check the CRM manually before relying on any subscription data.</em></p>";
+  }
   if (!context.subscriptions.length) {
     return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
       "<em>no subscriptions found for the matched account.</em></p>";
@@ -635,11 +643,17 @@ function renderCustomerSubscriptions(context: CustomerSubscriptionContext): stri
     `</tr>`
   ).join("");
 
-  // Company-name matches are exact but less specific than a contact match — say
-  // so, in case the ticket was filed under the wrong Freshdesk company.
-  const matchNote = context.matchedBy === "company_name"
-    ? " <em>(matched via the ticket's company)</em>"
-    : "";
+  // Anything weaker than a contact match says HOW it matched — and the weak
+  // tiers (name prefix / email domain) carry an explicit verify nudge, since
+  // the ticket could be filed under the wrong company.
+  const MATCH_NOTE: Record<string, string> = {
+    company_name: " <em>(matched via the ticket's company)</em>",
+    company_name_prefix:
+      " <em>(matched via the ticket's company — the name differs slightly, verify it is the right account)</em>",
+    email_domain:
+      " <em>(matched via the requester's email domain — verify it is the right account)</em>",
+  };
+  const matchNote = (context.matchedBy && MATCH_NOTE[context.matchedBy]) || "";
   return `<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong>${matchNote}</p>` +
     `<table style="border-collapse:collapse">` +
     `<thead><tr>` +

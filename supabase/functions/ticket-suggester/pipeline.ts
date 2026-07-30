@@ -398,23 +398,20 @@ export async function runPipeline(
   // Independent of generation: start the verified CRM lookup in parallel, but
   // contain every failure so a temporary CRM issue never suppresses the required
   // Freshdesk private note. Do not log the requester email, company name, or API
-  // response. Requester email first; if that has no CRM contact, fall back to the
-  // ticket's Freshdesk company name (subscriptions live per account/company). The
-  // company fetch is lazy — one extra Freshdesk GET only when the email path missed.
-  const crm = deps.crm;
-  const customerSubscriptions = crm
-    ? (async () => {
-      const viaEmail = await crm.subscriptionsForCustomer({
-        requesterEmail: ticket.requester?.email ?? ticket.email,
-      });
-      if (viaEmail.status === "found" || !ticket.company_id) return viaEmail;
-      const companyName = await deps.fd.company(ticket.company_id)
-        .then((c) => c.name ?? null)
-        .catch(() => null); // no company resolvable -> keep the email result
-      if (!companyName) return viaEmail;
-      const viaCompany = await crm.subscriptionsForCustomer({ companyName });
-      return viaCompany.status === "found" ? viaCompany : viaEmail;
-    })().catch((error) => {
+  // response. The client runs the full matching ladder (contact email → company
+  // name stem → email domain, ambiguity = "check manually"); the Freshdesk
+  // company GET is lazy — it only happens when the email tier missed.
+  const companyId = ticket.company_id;
+  const customerSubscriptions = deps.crm
+    ? deps.crm.subscriptionsForCustomer({
+      requesterEmail: ticket.requester?.email ?? ticket.email,
+      companyName: companyId
+        ? () =>
+          deps.fd.company(companyId)
+            .then((c) => c.name ?? null)
+            .catch(() => null) // no company resolvable -> ladder skips this tier
+        : null,
+    }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(
         `Freshworks CRM subscription lookup failed for ticket ${ticket.id}: ${

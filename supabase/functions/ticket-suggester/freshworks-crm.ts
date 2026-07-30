@@ -36,6 +36,7 @@ interface CrmContact {
 interface CrmSalesAccount {
   id?: number | string | null;
   name?: string | null;
+  website?: string | null;
 }
 
 type JsonObject = Record<string, unknown>;
@@ -108,13 +109,94 @@ function exactContacts(payload: unknown, email: string): CrmContact[] {
   );
 }
 
-// Exact, case-insensitive company-name equality. Substring/fuzzy hits from the
-// lookup endpoint are dropped: subscriptions must never surface for a lookalike.
-function exactAccounts(payload: unknown, name: string): CrmSalesAccount[] {
-  const target = name.trim().toLowerCase();
-  return (lookupRows(payload, "sales_accounts") as CrmSalesAccount[]).filter(
-    (row) => String(row.name ?? "").trim().toLowerCase() === target,
+// ── Name-stem matching ────────────────────────────────────────────────────────
+// In practice the keys we hold (Freshdesk company name, requester email domain)
+// rarely equal the CRM account name verbatim — "acme.se" / "Acme" vs
+// "Acme Sverige AB". Matching therefore runs on the INITIAL (brand) name: fold
+// case + Nordic diacritics, drop punctuation, strip trailing legal-form
+// suffixes. Every tier still requires exactly ONE candidate — normalisation
+// widens recall, uniqueness keeps us from ever guessing.
+
+const LEGAL_SUFFIXES = new Set([
+  "ab", "as", "asa", "aps", "a/s", "oy", "oyj", "ay", "hf", "ehf",
+  "ltd", "llc", "inc", "gmbh", "ag", "kb", "hb", "sa", "plc", "co",
+]);
+
+export function nameStem(value: string): string {
+  const folded = value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // å/ä→a, ö→o, é→e …
+    .replace(/ø/g, "o")
+    .replace(/æ/g, "ae")
+    .replace(/ß/g, "ss")
+    .replace(/[^a-z0-9/ ]+/g, " ") // keep "/" for "a/s"
+    .replace(/\s+/g, " ")
+    .trim();
+  const words = folded.split(" ");
+  // Only TRAILING legal suffixes are stripped ("Acme AB" -> "acme");
+  // interior words are part of the brand ("Acme AB Holding" keeps its "ab").
+  while (words.length > 1 && LEGAL_SUFFIXES.has(words[words.length - 1])) {
+    words.pop();
+  }
+  return words.join(" ");
+}
+
+// Word-boundary prefix in either direction: "acme" ~ "acme sverige", but never
+// "acme" ~ "acmecorp".
+function stemsRelated(a: string, b: string): boolean {
+  return a === b || a.startsWith(`${b} `) || b.startsWith(`${a} `);
+}
+
+// Freemail domains are shared across customers and must never resolve a company.
+const FREEMAIL = new Set([
+  "gmail.com", "googlemail.com", "hotmail.com", "hotmail.se", "hotmail.no",
+  "outlook.com", "live.com", "live.se", "live.no", "msn.com", "yahoo.com",
+  "icloud.com", "me.com", "mac.com", "aol.com", "proton.me", "protonmail.com",
+  "gmx.com", "gmx.de", "mail.com", "online.no", "telia.com", "telia.se",
+  "comhem.se", "bredband.net", "spray.se",
+]);
+
+function emailDomain(email: string): string | null {
+  const at = email.lastIndexOf("@");
+  const domain = at > 0 ? email.slice(at + 1).trim().toLowerCase() : "";
+  if (!domain.includes(".") || FREEMAIL.has(domain)) return null;
+  return domain;
+}
+
+// "acme.se" / "acme.co.uk" -> "acme". The label before the TLD is the brand key.
+function domainStem(domain: string): string | null {
+  const parts = domain.split(".").filter(Boolean);
+  if (parts.length < 2) return null;
+  let label = parts[parts.length - 2];
+  if ((label === "co" || label === "com") && parts.length >= 3) {
+    label = parts[parts.length - 3];
+  }
+  const stem = nameStem(label);
+  return stem.length >= 3 ? stem : null;
+}
+
+function websiteDomain(value: unknown): string | null {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value.includes("://") ? value : `https://${value}`);
+    return url.hostname.toLowerCase().replace(/^www\./, "");
+  } catch {
+    return null;
+  }
+}
+
+// One account id, or "ambiguous" the moment a tier has several candidates —
+// known-ambiguous data must hard-stop the whole ladder, not degrade to a
+// weaker tier that would "resolve" it.
+type AccountMatch = { id: number } | "ambiguous" | null;
+
+function uniqueId(rows: CrmSalesAccount[]): AccountMatch {
+  const ids = Array.from(
+    new Set(rows.map((row) => accountId(row.id)).filter((id): id is number => id !== null)),
   );
+  if (ids.length === 1) return { id: ids[0] };
+  return ids.length > 1 ? "ambiguous" : null;
 }
 
 function contactAccountIds(contact: CrmContact): number[] {
@@ -225,7 +307,7 @@ export class FreshworksCRM {
     return await response.json();
   }
 
-  private async accountForRequester(email: string): Promise<number | null> {
+  private async accountForRequester(email: string): Promise<AccountMatch> {
     const query = new URLSearchParams({
       q: email.trim(),
       f: "email",
@@ -235,29 +317,59 @@ export class FreshworksCRM {
     const ids = Array.from(
       new Set(exactContacts(payload, email).flatMap(contactAccountIds)),
     );
-    // Never guess when one email maps to multiple CRM accounts.
-    return ids.length === 1 ? ids[0] : null;
+    // One email mapping to SEVERAL CRM accounts is exactly the "similar customer
+    // records" case — surface it for a manual check, never guess.
+    if (ids.length === 1) return { id: ids[0] };
+    return ids.length > 1 ? "ambiguous" : null;
   }
 
-  // Subscriptions live on the CRM *account* (company), and many requester emails
-  // have no CRM contact at all — so the ticket's Freshdesk company name is a
-  // legitimate second key. Exact-name equality only, and never when the same name
-  // matches more than one account.
-  private async accountForCompanyName(name: string): Promise<number | null> {
+  private async lookupAccounts(term: string): Promise<CrmSalesAccount[]> {
     const query = new URLSearchParams({
-      q: name.trim(),
+      q: term,
       f: "name",
       entities: "sales_account",
     });
     const payload = await this.get(`/lookup?${query}`);
-    const ids = Array.from(
-      new Set(
-        exactAccounts(payload, name)
-          .map((row) => accountId(row.id))
-          .filter((id): id is number => id !== null),
-      ),
+    return lookupRows(payload, "sales_accounts") as CrmSalesAccount[];
+  }
+
+  // Subscriptions live on the CRM *account* (company), and many requester emails
+  // have no CRM contact at all — so the ticket's Freshdesk company name is a
+  // legitimate second key. Stem equality first, then word-boundary prefix; each
+  // tier must resolve to exactly ONE account, and known ambiguity hard-stops.
+  private async accountForCompanyName(
+    name: string,
+  ): Promise<{ id: number; matchedBy: "company_name" | "company_name_prefix" } | "ambiguous" | null> {
+    const stem = nameStem(name);
+    if (!stem) return null;
+    const rows = await this.lookupAccounts(stem);
+    const equal = uniqueId(rows.filter((row) => nameStem(String(row.name ?? "")) === stem));
+    if (equal === "ambiguous") return "ambiguous";
+    if (equal) return { id: equal.id, matchedBy: "company_name" };
+    const related = uniqueId(
+      rows.filter((row) => stemsRelated(nameStem(String(row.name ?? "")), stem)),
     );
-    return ids.length === 1 ? ids[0] : null;
+    if (related === "ambiguous") return "ambiguous";
+    return related ? { id: related.id, matchedBy: "company_name_prefix" } : null;
+  }
+
+  // Last key: the requester's email domain. The account's website domain is the
+  // strongest signal ("acme.se" == "acme.se"); otherwise the domain's brand
+  // label must stem-match the account name. Freemail domains never resolve.
+  private async accountForEmailDomain(
+    email: string,
+  ): Promise<{ id: number } | "ambiguous" | null> {
+    const domain = emailDomain(email);
+    const stem = domain ? domainStem(domain) : null;
+    if (!domain || !stem) return null;
+    const rows = await this.lookupAccounts(stem);
+    const byWebsite = uniqueId(rows.filter((row) => websiteDomain(row.website) === domain));
+    if (byWebsite === "ambiguous") return "ambiguous";
+    if (byWebsite) return byWebsite;
+    const byName = uniqueId(
+      rows.filter((row) => stemsRelated(nameStem(String(row.name ?? "")), stem)),
+    );
+    return byName === "ambiguous" ? "ambiguous" : byName;
   }
 
   private async subscriptionsForAccount(
@@ -281,31 +393,54 @@ export class FreshworksCRM {
       }));
   }
 
-  // Requester email first (most specific), then the ticket's company name as a
-  // fallback. Both paths abstain (`no_match`) rather than guess on ambiguity.
+  // The matching ladder, most→least specific; every tier requires exactly ONE
+  // account. The moment a tier sees SEVERAL similar accounts the whole ladder
+  // stops with `ambiguous` — rendered as "check manually", never guessed away:
+  //   1. requester contact email (exact)
+  //   2. ticket company name — stem equality, then word-boundary prefix
+  //   3. requester email domain — website equality, then name-stem relation
+  // `companyName` may be a lazy loader so the Freshdesk company GET only happens
+  // when the email tier missed.
   async subscriptionsForCustomer(customer: {
     requesterEmail?: string | null;
-    companyName?: string | null;
+    companyName?: string | null | (() => Promise<string | null>);
   }): Promise<CustomerSubscriptionContext> {
     const email = customer.requesterEmail?.trim() ?? "";
     if (email) {
       const byEmail = await this.accountForRequester(email);
+      if (byEmail === "ambiguous") return { status: "ambiguous", subscriptions: [] };
       if (byEmail) {
         return {
           status: "found",
           matchedBy: "contact_email",
-          subscriptions: await this.subscriptionsForAccount(byEmail),
+          subscriptions: await this.subscriptionsForAccount(byEmail.id),
         };
       }
     }
-    const company = customer.companyName?.trim() ?? "";
+    const company = (
+      typeof customer.companyName === "function"
+        ? await customer.companyName().catch(() => null)
+        : customer.companyName
+    )?.trim() ?? "";
     if (company) {
       const byCompany = await this.accountForCompanyName(company);
+      if (byCompany === "ambiguous") return { status: "ambiguous", subscriptions: [] };
       if (byCompany) {
         return {
           status: "found",
-          matchedBy: "company_name",
-          subscriptions: await this.subscriptionsForAccount(byCompany),
+          matchedBy: byCompany.matchedBy,
+          subscriptions: await this.subscriptionsForAccount(byCompany.id),
+        };
+      }
+    }
+    if (email) {
+      const byDomain = await this.accountForEmailDomain(email);
+      if (byDomain === "ambiguous") return { status: "ambiguous", subscriptions: [] };
+      if (byDomain) {
+        return {
+          status: "found",
+          matchedBy: "email_domain",
+          subscriptions: await this.subscriptionsForAccount(byDomain.id),
         };
       }
     }

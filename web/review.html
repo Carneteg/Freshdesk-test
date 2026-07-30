@@ -191,7 +191,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-07-30-customer-subscriptions";
+var APP_VERSION = "v2026-07-30-crm-fallback";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -1062,8 +1062,21 @@ function subscriptionContextEl(context) {
     return box;
   }
   if (context.status === "no_match") {
-    box.appendChild(set(el("p", "sstate"), "No CRM account matched the requester email."));
+    box.appendChild(set(el("p", "sstate"), "No CRM account matched the requester email or the ticket's company."));
     return box;
+  }
+  if (context.status === "ambiguous") {
+    box.appendChild(set(el("p", "sstate"), "⚠️ Several similar CRM accounts match this customer — check the CRM manually before relying on subscription data."));
+    return box;
+  }
+
+  var matchNotes = {
+    company_name: "Matched via the ticket's company.",
+    company_name_prefix: "Matched via the ticket's company — the name differs slightly, verify it is the right account.",
+    email_domain: "Matched via the requester's email domain — verify it is the right account."
+  };
+  if (context.matchedBy && matchNotes[context.matchedBy]) {
+    box.appendChild(set(el("p", "sstate"), matchNotes[context.matchedBy]));
   }
 
   var subscriptions = Array.isArray(context.subscriptions) ? context.subscriptions : [];
