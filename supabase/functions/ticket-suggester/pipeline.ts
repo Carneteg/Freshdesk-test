@@ -5,6 +5,7 @@
 // the only place that starts a server.
 
 import { Freshdesk, LLM, type Ticket } from "./clients.ts";
+import { FreshworksCRM } from "./freshworks-crm.ts";
 import {
   analysePrompt,
   ANSWER_STRATEGIES,
@@ -29,6 +30,7 @@ import {
   classifyUsage,
   type CoachMode,
   type Confidence,
+  type CustomerSubscriptionContext,
   containsFalseSystemAccess,
   deriveCoachMode,
   extractJSON,
@@ -115,6 +117,9 @@ type Db = any;
 
 export interface PipelineDeps {
   fd: Freshdesk;
+  // Optional, read-only Freshworks CRM subscription context. The returned
+  // values are rendered directly in the private note and never sent to the LLM.
+  crm?: FreshworksCRM;
   llm: LLM;
   model: string;
   withRetrieval: boolean;
@@ -194,6 +199,7 @@ export interface Suggestion {
   model: string;
   run_variant: string;
   latency_ms: number;
+  customer_subscriptions: CustomerSubscriptionContext | null;
   note_html: string;
   feedback_token: string | null;
   error: string | null;
@@ -389,6 +395,22 @@ export async function runPipeline(
   const start = Date.now();
   const { triggerId, text: customerMessage } = latestCustomerMessage(ticket);
   const context = buildContext(ticket); // FULL chronological, source-labelled context
+  // Independent of generation: start the verified CRM lookup in parallel, but
+  // contain every failure so a temporary CRM issue never suppresses the required
+  // Freshdesk private note. Do not log the requester email or API response.
+  const customerSubscriptions = deps.crm
+    ? deps.crm.subscriptionsForRequester(
+      ticket.requester?.email ?? ticket.email,
+    ).catch((error) => {
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `Freshworks CRM subscription lookup failed for ticket ${ticket.id}: ${
+          message.replace(/\s+/g, " ").slice(0, 300)
+        }`,
+      );
+      return { status: "unavailable" as const, subscriptions: [] };
+    })
+    : Promise.resolve(undefined);
   // Legacy one-click feedback only. New notes use the authenticated review app and
   // therefore need no bearer-like write token in the URL.
   const feedbackToken = deps.feedbackUrl && !deps.reviewUrl ? crypto.randomUUID() : null;
@@ -591,6 +613,7 @@ export async function runPipeline(
     resolutionStepCount: draft.resolution_steps.length,
   });
 
+  const resolvedCustomerSubscriptions = await customerSubscriptions;
   const note = renderNote({
     confidence: draft.confidence,
     coachMode,
@@ -612,6 +635,7 @@ export async function runPipeline(
     qaAnswered,
     qaTotal,
     unsupportedNote,
+    customerSubscriptions: resolvedCustomerSubscriptions,
     reviewUrl: deps.reviewUrl
       ? `${deps.reviewUrl.replace(/#.*$/, "")}#generation=${
         deps.generationId ?? ticket.id
@@ -659,6 +683,7 @@ export async function runPipeline(
     model: deps.model,
     run_variant: deps.runVariant ?? "unspecified",
     latency_ms: Date.now() - start,
+    customer_subscriptions: resolvedCustomerSubscriptions ?? null,
     note_html: note,
     feedback_token: feedbackToken,
     error: null,
@@ -807,6 +832,7 @@ export function toRow(
     model: s.model,
     run_variant: s.run_variant,
     latency_ms: s.latency_ms,
+    customer_subscriptions: s.customer_subscriptions,
     note_html: s.note_html,
     feedback_token: s.feedback_token,
     error: s.error,

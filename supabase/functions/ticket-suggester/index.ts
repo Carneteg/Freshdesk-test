@@ -12,9 +12,13 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 import { Freshdesk, LLM } from "./clients.ts";
+import { FreshworksCRM } from "./freshworks-crm.ts";
 import { PROMPT_VERSION } from "./prompts.ts";
 import { deriveTags, isIgnorableTicket, latestCustomerMessage } from "./render.ts";
 import { loadIncidents, reconcileUsage, runPipeline, toRow } from "./pipeline.ts";
+
+const SIMPLOYER_SUBSCRIPTIONS_PATH =
+  "/custom_module/cm_subscription/view/31008500658?q[]=%7B%22name%22%3A%22cf_account_number%22%2C%22operator%22%3A4%2C%22value%22%3A%22{account_id}%22%2C%22domType%22%3A6%7D";
 
 // ── Config ────────────────────────────────────────────────────────────────────
 
@@ -45,6 +49,17 @@ interface Config {
   dryRun: boolean;
   // Authenticated review app. New notes link here; they never carry write tokens.
   reviewUrl: string;
+  // Optional read-only Freshworks CRM context. It is a separate key/source from
+  // Freshdesk and stays off until the tenant-specific module endpoint is verified.
+  crmEnabled: boolean;
+  crmBaseUrl: string;
+  crmApiKey: string;
+  crmSubscriptionsPath: string;
+  crmSubscriptionsCollection: string;
+  crmAccountField: string;
+  crmProductField: string;
+  crmRenewalStatusField: string;
+  crmEndDateField: string;
 }
 
 // Comma-separated env list -> lowercased, trimmed, non-empty.
@@ -88,6 +103,21 @@ function loadConfig(): Config {
     // Safe by default: post only when DRY_RUN is explicitly "false".
     dryRun: (Deno.env.get("DRY_RUN") ?? "true") !== "false",
     reviewUrl: Deno.env.get("REVIEW_APP_URL") ?? "",
+    crmEnabled: (Deno.env.get("FRESHWORKS_CRM_ENABLED") ?? "false") === "true",
+    crmBaseUrl: Deno.env.get("FRESHWORKS_CRM_BASE_URL") ?? "",
+    crmApiKey: Deno.env.get("FRESHWORKS_CRM_API_KEY") ?? "",
+    crmSubscriptionsPath: Deno.env.get("FRESHWORKS_CRM_SUBSCRIPTIONS_PATH") ??
+      SIMPLOYER_SUBSCRIPTIONS_PATH,
+    crmSubscriptionsCollection: Deno.env.get("FRESHWORKS_CRM_SUBSCRIPTIONS_COLLECTION") ??
+      "cm_subscription",
+    crmAccountField: Deno.env.get("FRESHWORKS_CRM_ACCOUNT_FIELD") ??
+      "cf_account_number",
+    crmProductField: Deno.env.get("FRESHWORKS_CRM_PRODUCT_FIELD") ??
+      "cf_product_name",
+    crmRenewalStatusField: Deno.env.get("FRESHWORKS_CRM_RENEWAL_STATUS_FIELD") ??
+      "cf_renewal_status",
+    crmEndDateField: Deno.env.get("FRESHWORKS_CRM_END_DATE_FIELD") ??
+      "cf_end_date",
   };
 }
 
@@ -259,6 +289,21 @@ async function ensureNotePosted(
 
 async function pollOnce(cfg: Config): Promise<Summary> {
   const fd = new Freshdesk(cfg.domain, cfg.apiKey);
+  const crm = cfg.crmEnabled
+    ? new FreshworksCRM({
+      baseUrl: cfg.crmBaseUrl || env("FRESHWORKS_CRM_BASE_URL"),
+      apiKey: cfg.crmApiKey || env("FRESHWORKS_CRM_API_KEY"),
+      subscriptionsPathTemplate: cfg.crmSubscriptionsPath ||
+        env("FRESHWORKS_CRM_SUBSCRIPTIONS_PATH"),
+      subscriptionsCollection: cfg.crmSubscriptionsCollection ||
+        env("FRESHWORKS_CRM_SUBSCRIPTIONS_COLLECTION"),
+      accountField: cfg.crmAccountField || env("FRESHWORKS_CRM_ACCOUNT_FIELD"),
+      productField: cfg.crmProductField || env("FRESHWORKS_CRM_PRODUCT_FIELD"),
+      renewalStatusField: cfg.crmRenewalStatusField ||
+        env("FRESHWORKS_CRM_RENEWAL_STATUS_FIELD"),
+      endDateField: cfg.crmEndDateField || env("FRESHWORKS_CRM_END_DATE_FIELD"),
+    })
+    : undefined;
   const llm = new LLM(cfg.openaiKey, cfg.model);
   const db = createClient(cfg.supabaseUrl, cfg.serviceKey);
   const summary: Summary = {
@@ -460,6 +505,7 @@ async function pollOnce(cfg: Config): Promise<Summary> {
         if (reservation.action === "generate") {
           const s = await runPipeline({
             fd,
+            crm,
             llm,
             model: cfg.model,
             withRetrieval: cfg.withRetrieval,
