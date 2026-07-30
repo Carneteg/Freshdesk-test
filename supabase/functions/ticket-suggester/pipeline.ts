@@ -902,6 +902,25 @@ export async function loadIncidents(
 
 // Load the reviewer-written ideal answers (the "what good looks like" corpus) for
 // the learning loop (§12). A failure or empty corpus just means "no exemplars".
+// Gold answers may carry light HTML from the review app's formatting editor;
+// prompts want prose. Block-ish closers become newlines, list items become
+// dashes, remaining tags drop, core entities decode. Plain text passes through.
+export function stripHtmlForPrompt(text: string): string {
+  if (!/[<&]/.test(text)) return text;
+  return text
+    .replace(/<\s*(?:br|\/p|\/div|\/h[1-6]|\/blockquote|\/li|\/ul|\/ol)\s*\/?>/gi, "\n")
+    .replace(/<\s*li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // Gold answers on HOLDOUT tickets are excluded (scaling plan Fas 2.1 / migration 25):
 // the locked test set must never leak into generation as a few-shot exemplar.
 export async function loadGoldExemplars(
@@ -943,7 +962,7 @@ export async function loadGoldExemplars(
       ticket_id: r.ticket_id,
       subject: r.subject ?? `Ticket #${r.ticket_id}`,
       language: r.language ?? null,
-      gold_answer: r.gold_answer,
+      gold_answer: stripHtmlForPrompt(r.gold_answer),
     }));
 }
 

@@ -114,6 +114,15 @@
   .gold .gl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:5px}
   textarea{width:100%;min-height:88px;font-family:inherit;font-size:14.5px;line-height:1.6;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--ink);resize:vertical}
   textarea:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .fmtbar{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:4px}
+  .fbtn{font-size:12.5px;padding:3px 9px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--ink);cursor:pointer}
+  .fbtn:hover{border-color:var(--accent)}
+  .goldedit{width:100%;min-height:88px;font-family:inherit;font-size:14.5px;line-height:1.6;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--ink);overflow:auto;white-space:pre-wrap}
+  .goldedit:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
+  .goldedit:empty::before{content:attr(data-placeholder);color:var(--muted);pointer-events:none}
+  .goldedit ul,.goldedit ol{margin:4px 0 4px 22px;white-space:normal}
+  .goldedit p,.goldedit div{margin:0}
+
   .goldbar{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}
   .goldbar .st{font-size:12px;color:var(--ink-3)}
   .noreply{font-style:italic;color:var(--ink-3);font-size:13.5px;margin:2px 0 12px}
@@ -191,7 +200,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-07-30-crm-fallback";
+var APP_VERSION = "v2026-07-30-rich-editor";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -591,7 +600,8 @@ document.addEventListener("keydown", function (e) {
     e.preventDefault(); if (c && c._setVerdict) c._setVerdict(v);
   } else if (k === "g") {
     if (activeIdx < 0) return;
-    var ta = cardEls[activeIdx].querySelector("textarea");
+    var ta = cardEls[activeIdx].querySelector(".goldedit") ||
+      cardEls[activeIdx].querySelector("textarea");
     if (ta) { e.preventDefault(); ta.focus(); }
   }
 });
@@ -696,15 +706,18 @@ function cardEl(r) {
 
   var gold = el("div", "gold");
   gold.appendChild(set(el("span", "gl"), "Ideal answer (training material)"));
-  var ta = document.createElement("textarea");
+  // Rich-text editor (agent request): formatting toolbar + understands pasted
+  // HTML. The shim is textarea-compatible, so the save plumbing is unchanged.
+  var ta = richEditor(
+    r.agent_sent_reply ? "Write the ideal answer, or start from the agent's reply above…" : "Write the ideal answer the AI should learn from…",
+    "Ideal answer (training material) for ticket " + r.ticket_id,
+  );
   ta.value = r.gold_answer || "";
-  ta.placeholder = r.agent_sent_reply ? "Write the ideal answer, or start from the agent's reply above…" : "Write the ideal answer the AI should learn from…";
-  ta.setAttribute("aria-label", "Ideal answer (training material) for ticket " + r.ticket_id);
   var st = el("span", "st"); st.setAttribute("aria-live", "polite");
   st.textContent = r.gold_answer ? ("saved" + (r.gold_answer_by ? " · " + r.gold_answer_by : "")) : "";
   // autosave (#5): debounce ~1s after typing stops; the manual button stays as a fallback.
   ta.oninput = function () { scheduleGoldSave(r, ta, st, mark); };
-  gold.appendChild(ta);
+  gold.appendChild(ta.root);
 
   var gbar = el("div", "goldbar");
   var gactions = el("div", "goldactions");
@@ -1049,6 +1062,136 @@ function proseEl(text) {
 // Verified Freshworks CRM context is rendered directly from stored structured
 // data. It is not AI output, and only the three approved subscription fields are
 // accepted here.
+// ---- rich-text ideal-answer editor (agent request): a formatter that also ----
+// ---- understands pasted HTML. Everything rendered goes through the        ----
+// ---- allowlist sanitizer below -- gold answers are reviewer-written data  ----
+// ---- shown to other reviewers, so no script/style/attribute may survive.  ----
+var FMT_ALLOWED = { B:1, STRONG:1, I:1, EM:1, U:1, P:1, BR:1, DIV:1, UL:1, OL:1, LI:1, A:1, H3:1, H4:1, BLOCKQUOTE:1 };
+var FMT_DROP = /^(SCRIPT|STYLE|IFRAME|OBJECT|EMBED|SVG|MATH|LINK|META|FORM|INPUT|BUTTON|TEXTAREA|SELECT|VIDEO|AUDIO|IMG|HEAD|TITLE)$/;
+
+function sanitizeHtml(html) {
+  // DOMParser documents are inert: scripts never execute during parsing.
+  var doc = new DOMParser().parseFromString("<div>" + String(html || "") + "</div>", "text/html");
+  var root = doc.body.firstChild;
+  (function clean(node) {
+    var kids = Array.prototype.slice.call(node.childNodes);
+    for (var i = 0; i < kids.length; i++) {
+      var child = kids[i];
+      if (child.parentNode !== node) continue;
+      if (child.nodeType === 3) continue;             // text
+      if (child.nodeType !== 1) { node.removeChild(child); continue; } // comments etc
+      var tag = child.nodeName;
+      if (FMT_DROP.test(tag)) { node.removeChild(child); continue; }
+      if (!FMT_ALLOWED[tag]) {
+        clean(child); // sanitize inside first, then unwrap (keep the content)
+        while (child.firstChild) node.insertBefore(child.firstChild, child);
+        node.removeChild(child);
+        continue;
+      }
+      for (var a = child.attributes.length - 1; a >= 0; a--) {
+        var an = child.attributes[a].name;
+        if (!(tag === "A" && an === "href")) child.removeAttribute(an);
+      }
+      if (tag === "A") {
+        var href = child.getAttribute("href") || "";
+        if (!/^(https?:|mailto:)/i.test(href)) child.removeAttribute("href");
+        else { child.setAttribute("rel", "noopener noreferrer"); child.setAttribute("target", "_blank"); }
+      }
+      clean(child);
+    }
+  })(root);
+  return root.innerHTML;
+}
+
+function escHtml(text) {
+  return String(text || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function domToPlain(node) {
+  var out = "";
+  for (var i = 0; i < node.childNodes.length; i++) {
+    var c = node.childNodes[i];
+    if (c.nodeType === 3) out += c.nodeValue;
+    else if (c.nodeName === "BR") out += "\n";
+    else { out += domToPlain(c); if (/^(DIV|P|LI|H3|H4|BLOCKQUOTE)$/.test(c.nodeName)) out += "\n"; }
+  }
+  return out;
+}
+
+// Plain answers stay plain (the training corpus should not fill with markup
+// nobody asked for); only real formatting (bold/lists/links/...) is stored as HTML.
+function editorValue(ed) {
+  var html = sanitizeHtml(ed.innerHTML);
+  var probe = document.createElement("div");
+  probe.innerHTML = html;
+  if (!probe.querySelector("b,strong,i,em,u,ul,ol,li,a,h3,h4,blockquote")) {
+    return domToPlain(probe).replace(/\u00a0/g, " ").replace(/\n{3,}/g, "\n\n").trim();
+  }
+  return html.trim();
+}
+
+function setEditorValue(ed, v) {
+  v = v || "";
+  if (/<[a-z][^>]*>/i.test(v)) ed.innerHTML = sanitizeHtml(v);
+  else ed.innerHTML = escHtml(v).replace(/\r?\n/g, "<br>");
+}
+
+// Returns a textarea-compatible shim ({value, focus, oninput}) so the save/
+// autosave plumbing is unchanged.
+function richEditor(placeholder, ariaLabel) {
+  var wrap = el("div", "goldwrap");
+  var bar = el("div", "fmtbar");
+  var ed = el("div", "goldedit");
+  ed.contentEditable = "true";
+  ed.setAttribute("role", "textbox");
+  ed.setAttribute("aria-multiline", "true");
+  ed.setAttribute("aria-label", ariaLabel);
+  ed.setAttribute("data-placeholder", placeholder);
+
+  function fmtBtn(labelHtml, title, run) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "fbtn"; b.innerHTML = labelHtml; b.title = title;
+    b.setAttribute("aria-label", title);
+    b.onmousedown = function (e) { e.preventDefault(); }; // keep the text selection
+    b.onclick = function (e) {
+      e.preventDefault(); ed.focus(); run();
+      ed.dispatchEvent(new Event("input", { bubbles: false })); // trigger autosave
+    };
+    bar.appendChild(b);
+  }
+  fmtBtn("<b>B</b>", "Bold", function () { document.execCommand("bold"); });
+  fmtBtn("<i>I</i>", "Italic", function () { document.execCommand("italic"); });
+  fmtBtn("<u>U</u>", "Underline", function () { document.execCommand("underline"); });
+  fmtBtn("&bull; list", "Bullet list", function () { document.execCommand("insertUnorderedList"); });
+  fmtBtn("1. list", "Numbered list", function () { document.execCommand("insertOrderedList"); });
+  fmtBtn("link", "Insert link (https://...)", function () {
+    var url = window.prompt("Link URL (https://...)");
+    if (url && /^https?:\/\//i.test(url)) document.execCommand("createLink", false, url);
+  });
+  fmtBtn("&times; format", "Remove formatting", function () {
+    document.execCommand("removeFormat"); document.execCommand("unlink");
+  });
+
+  // Pasted HTML (e.g. copied from Freshdesk) is understood: sanitized and kept
+  // formatted. Plain text keeps its line breaks.
+  ed.addEventListener("paste", function (e) {
+    e.preventDefault();
+    var html = e.clipboardData && e.clipboardData.getData("text/html");
+    var text = e.clipboardData && e.clipboardData.getData("text/plain");
+    if (html) document.execCommand("insertHTML", false, sanitizeHtml(html));
+    else if (text) document.execCommand("insertHTML", false, escHtml(text).replace(/\r?\n/g, "<br>"));
+  });
+
+  wrap.appendChild(bar); wrap.appendChild(ed);
+  return {
+    root: wrap,
+    get value() { return editorValue(ed); },
+    set value(v) { setEditorValue(ed, v); },
+    focus: function () { ed.focus(); },
+    set oninput(fn) { ed.addEventListener("input", fn); },
+  };
+}
+
 function subscriptionContextEl(context) {
   var box = el("section", "subs");
   box.appendChild(set(el("span", "sl"), "Customer subscriptions · verified Freshworks CRM data"));
