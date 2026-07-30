@@ -372,10 +372,16 @@ Deno.test("renderNote: ambiguous CRM match tells the agent to check manually", (
     sources: [],
     qaAnswered: 0,
     qaTotal: 1,
-    customerSubscriptions: { status: "ambiguous", subscriptions: [] },
+    customerSubscriptions: {
+      status: "ambiguous",
+      subscriptions: [],
+      candidates: ["Acme Sverige AB", "Acme Norge <AS>"],
+    },
   });
   assertStringIncludes(html, "several similar CRM accounts match");
   assertStringIncludes(html, "check the CRM manually");
+  // Candidate names are shown (escaped) so the agent sees WHAT to choose between.
+  assertStringIncludes(html, "Candidates: Acme Sverige AB · Acme Norge &lt;AS&gt;.");
 });
 
 Deno.test("renderNote: weak CRM matches carry a verify nudge", () => {

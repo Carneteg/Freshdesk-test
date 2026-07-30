@@ -122,24 +122,44 @@ const LEGAL_SUFFIXES = new Set([
   "ltd", "llc", "inc", "gmbh", "ag", "kb", "hb", "sa", "plc", "co",
 ]);
 
-export function nameStem(value: string): string {
+// A name split into its brand stem and the stripped legal-form suffix. The
+// suffix matters: "Acme AB" and "Acme AS" share a stem but are legally DISTINCT
+// entities -- treating them as equal would put the wrong customer's data in a
+// note, so suffix-incompatible pairs may only ever match as a WEAK (verify) tier.
+export interface NameParts {
+  stem: string;
+  suffix: string | null;
+}
+
+export function nameParts(value: string): NameParts {
   const folded = value
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "") // å/ä→a, ö→o, é→e …
-    .replace(/ø/g, "o")
-    .replace(/æ/g, "ae")
-    .replace(/ß/g, "ss")
+    .replace(/[\u0300-\u036f]/g, "") // fold diacritics: a-ring/a-uml -> a, o-uml -> o
+    .replace(/\u00f8/g, "o")
+    .replace(/\u00e6/g, "ae")
+    .replace(/\u00df/g, "ss")
     .replace(/[^a-z0-9/ ]+/g, " ") // keep "/" for "a/s"
     .replace(/\s+/g, " ")
     .trim();
   const words = folded.split(" ");
   // Only TRAILING legal suffixes are stripped ("Acme AB" -> "acme");
   // interior words are part of the brand ("Acme AB Holding" keeps its "ab").
+  const stripped: string[] = [];
   while (words.length > 1 && LEGAL_SUFFIXES.has(words[words.length - 1])) {
-    words.pop();
+    stripped.unshift(words.pop() as string);
   }
-  return words.join(" ");
+  return { stem: words.join(" "), suffix: stripped.length ? stripped.join(" ") : null };
+}
+
+export function nameStem(value: string): string {
+  return nameParts(value).stem;
+}
+
+// Equal suffixes, or at least one side without one ("Acme" ~ "Acme AB"). Both
+// sides carrying DIFFERENT legal forms ("Acme AB" vs "Acme AS") is incompatible.
+function suffixCompatible(a: NameParts, b: NameParts): boolean {
+  return a.suffix === null || b.suffix === null || a.suffix === b.suffix;
 }
 
 // Word-boundary prefix in either direction: "acme" ~ "acme sverige", but never
@@ -164,15 +184,21 @@ function emailDomain(email: string): string | null {
   return domain;
 }
 
-// "acme.se" / "acme.co.uk" -> "acme". The label before the TLD is the brand key.
+// "acme.se" / "acme.co.uk" / "oslo.kommune.no" -> "acme"/"oslo". The brand key
+// is the label left of the PUBLIC suffix -- which can be two labels (co.uk,
+// kommune.no). Without this, "oslo.kommune.no" would yield the generic word
+// "kommune" and stem-match unrelated accounts.
+const SECOND_LEVEL_SUFFIXES = new Set([
+  "co", "com", "org", "net", "gov", "edu", "ac", "mil", "priv",
+  "kommune", "herad", "fylke", "idrett", // Norwegian public second-levels
+]);
+
 function domainStem(domain: string): string | null {
   const parts = domain.split(".").filter(Boolean);
   if (parts.length < 2) return null;
-  let label = parts[parts.length - 2];
-  if ((label === "co" || label === "com") && parts.length >= 3) {
-    label = parts[parts.length - 3];
-  }
-  const stem = nameStem(label);
+  let idx = parts.length - 2;
+  if (idx > 0 && SECOND_LEVEL_SUFFIXES.has(parts[idx])) idx--;
+  const stem = nameStem(parts[idx]);
   return stem.length >= 3 ? stem : null;
 }
 
@@ -186,18 +212,39 @@ function websiteDomain(value: unknown): string | null {
   }
 }
 
-// One account id, or "ambiguous" the moment a tier has several candidates —
+// One account id, or ambiguity the moment a tier has several candidates --
 // known-ambiguous data must hard-stop the whole ladder, not degrade to a
-// weaker tier that would "resolve" it.
-type AccountMatch = { id: number } | "ambiguous" | null;
+// weaker tier that would "resolve" it. Ambiguity carries up to three candidate
+// account names so the note can tell the agent WHAT to choose between.
+type AccountMatch = { id: number } | { ambiguous: string[] } | null;
 
-function uniqueId(rows: CrmSalesAccount[]): AccountMatch {
-  const ids = Array.from(
-    new Set(rows.map((row) => accountId(row.id)).filter((id): id is number => id !== null)),
-  );
-  if (ids.length === 1) return { id: ids[0] };
-  return ids.length > 1 ? "ambiguous" : null;
+function candidateNames(rows: CrmSalesAccount[]): string[] {
+  const names = rows
+    .map((row) => String(row.name ?? "").trim())
+    .filter(Boolean);
+  return Array.from(new Set(names)).slice(0, 3);
 }
+
+function uniqueAccount(rows: CrmSalesAccount[]): AccountMatch {
+  if (!rows.length) return null;
+  const ids = new Set<number>();
+  let unparseable = false;
+  for (const row of rows) {
+    const id = accountId(row.id);
+    if (id === null) unparseable = true;
+    else ids.add(id);
+  }
+  // A similar record we cannot even identify still counts as a similar record:
+  // resolving "around" it would hide exactly the case the ladder must surface.
+  if (ids.size === 1 && !unparseable) return { id: ids.values().next().value as number };
+  return { ambiguous: candidateNames(rows) };
+}
+
+// The /lookup endpoint is a bounded type-ahead: a "full-looking" response may
+// hide the true duplicate off-page, so a unique NAME-based hit inside such a
+// response is not trusted (CLAUDE.md sect. 7: verify, do not assume -- tighten
+// or drop after a live check of the real cap).
+const LOOKUP_TRUNCATION_GUARD = 10;
 
 function contactAccountIds(contact: CrmContact): number[] {
   const ids = [
@@ -318,9 +365,10 @@ export class FreshworksCRM {
       new Set(exactContacts(payload, email).flatMap(contactAccountIds)),
     );
     // One email mapping to SEVERAL CRM accounts is exactly the "similar customer
-    // records" case — surface it for a manual check, never guess.
+    // records" case -- surface it for a manual check, never guess. (The contact
+    // payload carries no account names, so no candidates to show here.)
     if (ids.length === 1) return { id: ids[0] };
-    return ids.length > 1 ? "ambiguous" : null;
+    return ids.length > 1 ? { ambiguous: [] } : null;
   }
 
   private async lookupAccounts(term: string): Promise<CrmSalesAccount[]> {
@@ -334,42 +382,80 @@ export class FreshworksCRM {
   }
 
   // Subscriptions live on the CRM *account* (company), and many requester emails
-  // have no CRM contact at all — so the ticket's Freshdesk company name is a
-  // legitimate second key. Stem equality first, then word-boundary prefix; each
-  // tier must resolve to exactly ONE account, and known ambiguity hard-stops.
+  // have no CRM contact at all -- so the ticket's Freshdesk company name is a
+  // legitimate second key. Suffix-compatible stem equality is the STRONG tier;
+  // a differing legal form ("Acme AS" vs "Acme AB") or a word-boundary prefix
+  // is only ever a WEAK (verify-nudged) tier. Ambiguity hard-stops.
   private async accountForCompanyName(
     name: string,
-  ): Promise<{ id: number; matchedBy: "company_name" | "company_name_prefix" } | "ambiguous" | null> {
-    const stem = nameStem(name);
-    if (!stem) return null;
-    const rows = await this.lookupAccounts(stem);
-    const equal = uniqueId(rows.filter((row) => nameStem(String(row.name ?? "")) === stem));
-    if (equal === "ambiguous") return "ambiguous";
-    if (equal) return { id: equal.id, matchedBy: "company_name" };
-    const related = uniqueId(
-      rows.filter((row) => stemsRelated(nameStem(String(row.name ?? "")), stem)),
-    );
-    if (related === "ambiguous") return "ambiguous";
-    return related ? { id: related.id, matchedBy: "company_name_prefix" } : null;
+  ): Promise<
+    | { id: number; matchedBy: "company_name" | "company_name_prefix" }
+    | { ambiguous: string[] }
+    | null
+  > {
+    const key = nameParts(name);
+    if (!key.stem) return null;
+    const rows = await this.lookupAccounts(key.stem);
+    const possiblyTruncated = rows.length >= LOOKUP_TRUNCATION_GUARD;
+    const withParts = rows.map((row) => ({
+      row,
+      parts: nameParts(String(row.name ?? "")),
+    }));
+
+    const strongRows = withParts
+      .filter(({ parts }) => parts.stem === key.stem && suffixCompatible(parts, key))
+      .map(({ row }) => row);
+    const strong = uniqueAccount(strongRows);
+    if (strong && "ambiguous" in strong) return strong;
+    if (strong) {
+      return possiblyTruncated
+        ? { ambiguous: candidateNames(rows) }
+        : { id: strong.id, matchedBy: "company_name" };
+    }
+
+    // Same stem under a DIFFERENT legal form, or a word-boundary-related stem.
+    const weakRows = withParts
+      .filter(({ parts }) =>
+        Boolean(parts.stem) &&
+        (parts.stem === key.stem || stemsRelated(parts.stem, key.stem))
+      )
+      .map(({ row }) => row);
+    const weak = uniqueAccount(weakRows);
+    if (weak && "ambiguous" in weak) return weak;
+    if (weak) {
+      return possiblyTruncated
+        ? { ambiguous: candidateNames(rows) }
+        : { id: weak.id, matchedBy: "company_name_prefix" };
+    }
+    return null;
   }
 
   // Last key: the requester's email domain. The account's website domain is the
-  // strongest signal ("acme.se" == "acme.se"); otherwise the domain's brand
-  // label must stem-match the account name. Freemail domains never resolve.
-  private async accountForEmailDomain(
-    email: string,
-  ): Promise<{ id: number } | "ambiguous" | null> {
+  // strongest signal ("acme.se" == "acme.se") and tight enough to trust even in
+  // a full-looking response; a name-stem relation is weaker and is not. NOTE:
+  // candidates come from a NAME search, so an account whose name shares nothing
+  // with the domain cannot surface here -- the website key CONFIRMS name-adjacent
+  // candidates. A dedicated website lookup needs a live-instance check first.
+  private async accountForEmailDomain(email: string): Promise<AccountMatch> {
     const domain = emailDomain(email);
     const stem = domain ? domainStem(domain) : null;
     if (!domain || !stem) return null;
+    // Compare websites in URL-canonical (punycode) form so IDN domains match.
+    const ascii = toAsciiDomain(domain);
     const rows = await this.lookupAccounts(stem);
-    const byWebsite = uniqueId(rows.filter((row) => websiteDomain(row.website) === domain));
-    if (byWebsite === "ambiguous") return "ambiguous";
+    const possiblyTruncated = rows.length >= LOOKUP_TRUNCATION_GUARD;
+
+    const byWebsite = uniqueAccount(
+      rows.filter((row) => websiteDomain(row.website) === ascii),
+    );
     if (byWebsite) return byWebsite;
-    const byName = uniqueId(
+
+    const byName = uniqueAccount(
       rows.filter((row) => stemsRelated(nameStem(String(row.name ?? "")), stem)),
     );
-    return byName === "ambiguous" ? "ambiguous" : byName;
+    if (byName && "ambiguous" in byName) return byName;
+    if (byName) return possiblyTruncated ? { ambiguous: candidateNames(rows) } : byName;
+    return null;
   }
 
   private async subscriptionsForAccount(
@@ -393,14 +479,18 @@ export class FreshworksCRM {
       }));
   }
 
-  // The matching ladder, most→least specific; every tier requires exactly ONE
+  // The matching ladder, most->least specific; every tier requires exactly ONE
   // account. The moment a tier sees SEVERAL similar accounts the whole ladder
-  // stops with `ambiguous` — rendered as "check manually", never guessed away:
+  // stops with `ambiguous` (plus up to three candidate names) -- rendered as
+  // "check manually", never guessed away:
   //   1. requester contact email (exact)
-  //   2. ticket company name — stem equality, then word-boundary prefix
-  //   3. requester email domain — website equality, then name-stem relation
+  //   2. ticket company name -- suffix-compatible stem equality, then the weak
+  //      set (differing legal form / word-boundary prefix)
+  //   3. requester email domain -- website equality, then name-stem relation
   // `companyName` may be a lazy loader so the Freshdesk company GET only happens
-  // when the email tier missed.
+  // when the email tier missed. The loader is deliberately NOT caught here: a
+  // transport failure must surface as `unavailable` via the pipeline's outer
+  // catch, not read as "no company" (a confident false negative).
   async subscriptionsForCustomer(customer: {
     requesterEmail?: string | null;
     companyName?: string | null | (() => Promise<string | null>);
@@ -408,7 +498,7 @@ export class FreshworksCRM {
     const email = customer.requesterEmail?.trim() ?? "";
     if (email) {
       const byEmail = await this.accountForRequester(email);
-      if (byEmail === "ambiguous") return { status: "ambiguous", subscriptions: [] };
+      if (byEmail && "ambiguous" in byEmail) return ambiguousContext(byEmail.ambiguous);
       if (byEmail) {
         return {
           status: "found",
@@ -419,12 +509,12 @@ export class FreshworksCRM {
     }
     const company = (
       typeof customer.companyName === "function"
-        ? await customer.companyName().catch(() => null)
+        ? await customer.companyName()
         : customer.companyName
     )?.trim() ?? "";
     if (company) {
       const byCompany = await this.accountForCompanyName(company);
-      if (byCompany === "ambiguous") return { status: "ambiguous", subscriptions: [] };
+      if (byCompany && "ambiguous" in byCompany) return ambiguousContext(byCompany.ambiguous);
       if (byCompany) {
         return {
           status: "found",
@@ -435,7 +525,7 @@ export class FreshworksCRM {
     }
     if (email) {
       const byDomain = await this.accountForEmailDomain(email);
-      if (byDomain === "ambiguous") return { status: "ambiguous", subscriptions: [] };
+      if (byDomain && "ambiguous" in byDomain) return ambiguousContext(byDomain.ambiguous);
       if (byDomain) {
         return {
           status: "found",
@@ -451,5 +541,21 @@ export class FreshworksCRM {
     requesterEmail: string | null | undefined,
   ): Promise<CustomerSubscriptionContext> {
     return await this.subscriptionsForCustomer({ requesterEmail });
+  }
+}
+
+function ambiguousContext(candidates: string[]): CustomerSubscriptionContext {
+  return {
+    status: "ambiguous",
+    subscriptions: [],
+    ...(candidates.length ? { candidates } : {}),
+  };
+}
+
+function toAsciiDomain(domain: string): string {
+  try {
+    return new URL(`https://${domain}`).hostname.toLowerCase();
+  } catch {
+    return domain;
   }
 }

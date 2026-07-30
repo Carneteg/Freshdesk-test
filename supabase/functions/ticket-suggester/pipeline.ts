@@ -4,7 +4,7 @@
 // any caller can import runPipeline WITHOUT pulling in Deno.serve. index.ts is
 // the only place that starts a server.
 
-import { Freshdesk, LLM, type Ticket } from "./clients.ts";
+import { Freshdesk, HttpError, LLM, type Ticket } from "./clients.ts";
 import { FreshworksCRM } from "./freshworks-crm.ts";
 import {
   analysePrompt,
@@ -409,7 +409,14 @@ export async function runPipeline(
         ? () =>
           deps.fd.company(companyId)
             .then((c) => c.name ?? null)
-            .catch(() => null) // no company resolvable -> ladder skips this tier
+            .catch((error) => {
+              // A missing company (404) just skips the tier. Transport errors
+              // (429/5xx/timeouts) must propagate to the outer catch and render
+              // `unavailable` — "no company checked" must never be reported as
+              // the confident "no CRM account could be matched".
+              if (error instanceof HttpError && error.status === 404) return null;
+              throw error;
+            })
         : null,
     }).catch((error) => {
       const message = error instanceof Error ? error.message : String(error);

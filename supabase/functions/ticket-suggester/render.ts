@@ -536,6 +536,9 @@ export interface CustomerSubscriptionContext {
   // contact email; the ticket's company name (stem equality / word-prefix); or
   // the requester's email domain (subscriptions live per account/company).
   matchedBy?: "contact_email" | "company_name" | "company_name_prefix" | "email_domain";
+  // On `ambiguous`: up to three candidate account names, so the agent sees WHAT
+  // to choose between when checking the CRM manually.
+  candidates?: string[];
   subscriptions: CustomerSubscription[];
 }
 
@@ -620,9 +623,12 @@ function renderCustomerSubscriptions(context: CustomerSubscriptionContext): stri
       "<em>no CRM account could be matched from the requester email or the ticket's company.</em></p>";
   }
   if (context.status === "ambiguous") {
+    const names = (context.candidates ?? []).map((name) => esc(name)).join(" · ");
     return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
       "⚠️ <em>several similar CRM accounts match this customer — " +
-      "check the CRM manually before relying on any subscription data.</em></p>";
+      "check the CRM manually before relying on any subscription data." +
+      (names ? ` Candidates: ${names}.` : "") +
+      "</em></p>";
   }
   if (!context.subscriptions.length) {
     return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +

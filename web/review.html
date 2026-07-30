@@ -1066,7 +1066,10 @@ function subscriptionContextEl(context) {
     return box;
   }
   if (context.status === "ambiguous") {
-    box.appendChild(set(el("p", "sstate"), "⚠️ Several similar CRM accounts match this customer — check the CRM manually before relying on subscription data."));
+    var msg = "⚠️ Several similar CRM accounts match this customer — check the CRM manually before relying on subscription data.";
+    var candidates = Array.isArray(context.candidates) ? context.candidates.filter(function (n) { return typeof n === "string" && n.trim(); }) : [];
+    if (candidates.length) msg += " Candidates: " + candidates.join(" · ") + ".";
+    box.appendChild(set(el("p", "sstate"), msg));
     return box;
   }
 

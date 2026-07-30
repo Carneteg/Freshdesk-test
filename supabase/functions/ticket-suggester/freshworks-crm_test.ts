@@ -255,6 +255,7 @@ Deno.test("FreshworksCRM reports SEVERAL similar accounts as ambiguous — agent
     assertEquals(await client().subscriptionsForCustomer({ companyName: "Acme AB" }), {
       status: "ambiguous",
       subscriptions: [],
+      candidates: ["Acme AB", "acme ab"],
     });
     assertEquals(calls, 1);
   } finally {
@@ -286,7 +287,11 @@ Deno.test("FreshworksCRM ambiguity hard-stops the ladder — the email-domain ti
       requesterEmail: "anna@acme.se",
       companyName: "Acme",
     });
-    assertEquals(result, { status: "ambiguous", subscriptions: [] });
+    assertEquals(result, {
+      status: "ambiguous",
+      subscriptions: [],
+      candidates: ["Acme Sverige AB", "Acme Norge AS"],
+    });
     // contact lookup + ONE account lookup — no further tier after ambiguity.
     assertEquals(urls.length, 2);
   } finally {
@@ -329,7 +334,7 @@ Deno.test("FreshworksCRM word-prefix match ('Acme' -> 'Acme Sverige AB') is labe
   }
 });
 
-Deno.test("FreshworksCRM resolves via the email domain: website match beats a differing name", async () => {
+Deno.test("FreshworksCRM email-domain tier: a unique website match resolves what names alone cannot", async () => {
   const original = globalThis.fetch;
   globalThis.fetch = ((input: RequestInfo | URL) => {
     const url = String(input);
@@ -337,10 +342,14 @@ Deno.test("FreshworksCRM resolves via the email domain: website match beats a di
       return Promise.resolve(json({ contacts: { contacts: [] } }));
     }
     if (url.includes("entities=sales_account")) {
+      // Candidates necessarily come from a NAME search (f=name), so both are
+      // name-adjacent to "acme" — by name alone this would be AMBIGUOUS; the
+      // website equality is what uniquely confirms the right account.
       return Promise.resolve(json({
         sales_accounts: {
           sales_accounts: [
-            { id: 9, name: "Nordic HR Partner", website: "https://www.acme.se" },
+            { id: 9, name: "Acme Group AS", website: "https://www.acme.se" },
+            { id: 8, name: "Acme Consulting AS" },
           ],
         },
       }));
@@ -363,6 +372,127 @@ Deno.test("FreshworksCRM resolves via the email domain: website match beats a di
     });
     assertEquals(result.status, "found");
     assertEquals(result.matchedBy, "email_domain");
+    assertEquals(result.subscriptions, [{
+      productName: "Simployer One",
+      renewalStatus: "Active",
+      endDate: "2026-11-30",
+    }]);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM: differing legal forms (Acme AS vs Acme AB) only match WEAKLY", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("entities=sales_account")) {
+      return Promise.resolve(json({
+        sales_accounts: { sales_accounts: [{ id: 77, name: "Acme AB" }] },
+      }));
+    }
+    return Promise.resolve(json({
+      cm_subscription: [{
+        custom_field: {
+          cf_account_number: 77,
+          cf_product_name: "Simployer HR",
+          cf_renewal_status: "Active",
+          cf_end_date: "2027-03-31",
+        },
+      }],
+    }));
+  }) as typeof fetch;
+
+  try {
+    // The Norwegian entity is not in the CRM; only the Swedish sister exists.
+    // This must NOT be presented as a strong company match.
+    const result = await client().subscriptionsForCustomer({ companyName: "Acme AS" });
+    assertEquals(result.status, "found");
+    assertEquals(result.matchedBy, "company_name_prefix");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM domain stem skips public second-level suffixes (oslo.kommune.no -> oslo)", async () => {
+  const original = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.includes("entities=contact")) {
+      return Promise.resolve(json({ contacts: { contacts: [] } }));
+    }
+    if (url.includes("entities=sales_account")) {
+      return Promise.resolve(json({
+        sales_accounts: { sales_accounts: [{ id: 12, name: "Oslo Kommune" }] },
+      }));
+    }
+    return Promise.resolve(json({
+      cm_subscription: [{
+        custom_field: {
+          cf_account_number: 12,
+          cf_product_name: "Simployer HR",
+          cf_renewal_status: "Active",
+          cf_end_date: "2027-08-31",
+        },
+      }],
+    }));
+  }) as typeof fetch;
+
+  try {
+    const result = await client().subscriptionsForCustomer({
+      requesterEmail: "anna@oslo.kommune.no",
+    });
+    assertEquals(result.status, "found");
+    assertEquals(result.matchedBy, "email_domain");
+    const lookup = new URL(urls[1]);
+    // The brand key is "oslo", never the generic public label "kommune".
+    assertEquals(lookup.searchParams.get("q"), "oslo");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM treats a full-looking lookup page as possibly truncated -> ambiguous", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.includes("entities=sales_account")) {
+      const rows = [{ id: 100, name: "Nordic AB" }];
+      for (let i = 1; i < 10; i++) {
+        rows.push({ id: 100 + i, name: `Nordic Partner ${i} AS` });
+      }
+      return Promise.resolve(json({ sales_accounts: { sales_accounts: rows } }));
+    }
+    throw new Error("subscriptions must not be fetched from a truncated match");
+  }) as typeof fetch;
+
+  try {
+    // "Nordic AB" IS a unique stem-equal hit — but 10 returned rows means the
+    // true duplicate may be off-page, so the ladder must not trust it.
+    const result = await client().subscriptionsForCustomer({ companyName: "Nordic" });
+    assertEquals(result.status, "ambiguous");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM: a similar record with an unparseable id still means ambiguous", async () => {
+  const original = globalThis.fetch;
+  globalThis.fetch = (() =>
+    Promise.resolve(json({
+      sales_accounts: {
+        sales_accounts: [
+          { id: 7, name: "Acme AB" },
+          { id: null, name: "Acme AB" },
+        ],
+      },
+    }))) as typeof fetch;
+
+  try {
+    const result = await client().subscriptionsForCustomer({ companyName: "Acme" });
+    assertEquals(result.status, "ambiguous");
   } finally {
     globalThis.fetch = original;
   }
