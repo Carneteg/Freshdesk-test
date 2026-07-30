@@ -554,6 +554,25 @@ are confirmed.
 
 ---
 
+**Freshworks CRM subscription context — a FOURTH system (2026-07-30).** Approved by
+Tobias (PR #34): the pipeline may enrich the private note with the customer's
+**verified subscriptions** from Freshworks CRM — `Product name`, `Renewal status`,
+`End date`, nothing else. This deliberately amends §3's "three systems total":
+Freshworks CRM is a fourth system, but **read-only** (GET only, separate API key,
+`FRESHWORKS_CRM_*` env; §3's "only writes" list is unchanged). Guardrails, all
+enforced in `freshworks-crm.ts`/`pipeline.ts`: CRM data is rendered into the note
+and stored in `suggestions.customer_subscriptions` but **never enters any LLM
+prompt**; lookups **abstain on ambiguity** (never guess between multiple matching
+accounts); every failure is contained (`unavailable`) so a CRM outage can never
+suppress the required note; response bodies are kept out of errors/logs. Account
+resolution (2026-07-30, superseding the unpushed Codex commit 2593078): requester
+**contact email first**, then — because subscriptions live per *account/company*
+and many requester emails have no CRM contact — a fallback via the ticket's
+**Freshdesk company name**, exact case-insensitive equality against one single CRM
+account (`matchedBy` records which path matched; a company-name match is labelled
+in the note). Feature is opt-in via `FRESHWORKS_CRM_ENABLED`; the replay harness
+never constructs the CRM client, so evaluation runs are unaffected.
+
 ## 13. Repeatable workflows — Claude skills & `tools/`
 
 Recurring workflows are packaged as **project skills** under `.claude/skills/`

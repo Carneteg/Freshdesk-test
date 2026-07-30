@@ -341,6 +341,28 @@ Deno.test("renderNote: shows only the three approved CRM subscription fields", (
   assertEquals(html.includes("Created by"), false);
 });
 
+Deno.test("renderNote: a company-name CRM match says so", () => {
+  const html = renderNote({
+    confidence: "none",
+    draft: "",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+    customerSubscriptions: {
+      status: "found",
+      matchedBy: "company_name",
+      subscriptions: [{
+        productName: "Simployer HR",
+        renewalStatus: "Active",
+        endDate: "2027-01-31",
+      }],
+    },
+  });
+  assertStringIncludes(html, "matched via the ticket's company");
+});
+
 Deno.test("renderNote: CRM lookup failures stay explicit and non-fatal", () => {
   const noMatch = renderNote({
     confidence: "none",

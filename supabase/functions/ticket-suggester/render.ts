@@ -530,6 +530,9 @@ export interface CustomerSubscription {
 
 export interface CustomerSubscriptionContext {
   status: "found" | "no_match" | "unavailable";
+  // How the CRM account was resolved: the requester's contact email, or the
+  // ticket's Freshdesk company name (fallback — subscriptions live per account).
+  matchedBy?: "contact_email" | "company_name";
   subscriptions: CustomerSubscription[];
 }
 
@@ -611,7 +614,7 @@ function renderCustomerSubscriptions(context: CustomerSubscriptionContext): stri
   }
   if (context.status === "no_match") {
     return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
-      "<em>no CRM account could be matched from the requester email.</em></p>";
+      "<em>no CRM account could be matched from the requester email or the ticket's company.</em></p>";
   }
   if (!context.subscriptions.length) {
     return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
@@ -632,7 +635,12 @@ function renderCustomerSubscriptions(context: CustomerSubscriptionContext): stri
     `</tr>`
   ).join("");
 
-  return `<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong></p>` +
+  // Company-name matches are exact but less specific than a contact match — say
+  // so, in case the ticket was filed under the wrong Freshdesk company.
+  const matchNote = context.matchedBy === "company_name"
+    ? " <em>(matched via the ticket's company)</em>"
+    : "";
+  return `<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong>${matchNote}</p>` +
     `<table style="border-collapse:collapse">` +
     `<thead><tr>` +
     `<th style="border:1px solid #ddd;padding:4px 8px;text-align:left">Product name</th>` +

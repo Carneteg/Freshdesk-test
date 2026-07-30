@@ -70,6 +70,7 @@ Deno.test("FreshworksCRM matches the requester exactly and returns only approved
     const result = await client().subscriptionsForRequester("customer@example.com");
     assertEquals(result, {
       status: "found",
+      matchedBy: "contact_email",
       subscriptions: [{
         productName: "Simployer One Complete",
         renewalStatus: "Active",
@@ -136,6 +137,7 @@ Deno.test("FreshworksCRM reads approved fields from custom-field response shapes
       await client().subscriptionsForRequester("customer@example.com"),
       {
         status: "found",
+        matchedBy: "contact_email",
         subscriptions: [{
           productName: "Compensation",
           renewalStatus: "Pending",
@@ -169,6 +171,127 @@ Deno.test("FreshworksCRM does not guess when requester-to-account match is ambig
       subscriptions: [],
     });
     assertEquals(calls, 1);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM falls back to the ticket's company when the email has no CRM contact", async () => {
+  const original = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.includes("entities=contact")) {
+      // The requester email is unknown in the CRM.
+      return Promise.resolve(json({ contacts: { contacts: [] } }));
+    }
+    if (url.includes("entities=sales_account")) {
+      return Promise.resolve(json({
+        sales_accounts: {
+          sales_accounts: [
+            // Exact match must be case/whitespace-insensitive; the lookalike
+            // ("Acme AB Holding") must be ignored, not treated as ambiguity.
+            { id: 555, name: "  ACME ab " },
+            { id: 777, name: "Acme AB Holding" },
+          ],
+        },
+      }));
+    }
+    return Promise.resolve(json({
+      cm_subscription: [{
+        custom_field: {
+          cf_account_number: 555,
+          cf_product_name: "Simployer HR",
+          cf_renewal_status: "Active",
+          cf_end_date: "2027-01-31",
+        },
+      }],
+    }));
+  }) as typeof fetch;
+
+  try {
+    const result = await client().subscriptionsForCustomer({
+      requesterEmail: "unknown@example.com",
+      companyName: "Acme AB",
+    });
+    assertEquals(result, {
+      status: "found",
+      matchedBy: "company_name",
+      subscriptions: [{
+        productName: "Simployer HR",
+        renewalStatus: "Active",
+        endDate: "2027-01-31",
+      }],
+    });
+    assertEquals(urls.length, 3);
+    const lookup = new URL(urls[1]);
+    assertEquals(lookup.searchParams.get("q"), "Acme AB");
+    assertEquals(lookup.searchParams.get("f"), "name");
+    assertEquals(lookup.searchParams.get("entities"), "sales_account");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM does not guess between duplicate company names", async () => {
+  const original = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (() => {
+    calls++;
+    return Promise.resolve(json({
+      sales_accounts: {
+        sales_accounts: [
+          { id: 1, name: "Acme AB" },
+          { id: 2, name: "acme ab" },
+        ],
+      },
+    }));
+  }) as typeof fetch;
+
+  try {
+    assertEquals(await client().subscriptionsForCustomer({ companyName: "Acme AB" }), {
+      status: "no_match",
+      subscriptions: [],
+    });
+    assertEquals(calls, 1);
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+Deno.test("FreshworksCRM prefers the contact-email match over the company name", async () => {
+  const original = globalThis.fetch;
+  const urls: string[] = [];
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.includes("entities=contact")) {
+      return Promise.resolve(json({
+        contacts: { contacts: [{ email: "customer@example.com", company: { id: 123 } }] },
+      }));
+    }
+    return Promise.resolve(json({
+      cm_subscription: [{
+        custom_field: {
+          cf_account_number: 123,
+          cf_product_name: "Simployer One",
+          cf_renewal_status: "Active",
+          cf_end_date: "2026-12-31",
+        },
+      }],
+    }));
+  }) as typeof fetch;
+
+  try {
+    const result = await client().subscriptionsForCustomer({
+      requesterEmail: "customer@example.com",
+      companyName: "Acme AB",
+    });
+    assertEquals(result.status, "found");
+    assertEquals(result.matchedBy, "contact_email");
+    // The company lookup must never have been called.
+    assertEquals(urls.some((u) => u.includes("entities=sales_account")), false);
   } finally {
     globalThis.fetch = original;
   }

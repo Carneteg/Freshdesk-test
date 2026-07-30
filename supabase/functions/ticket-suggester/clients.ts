@@ -92,6 +92,15 @@ export interface Ticket extends TicketSummary {
   // so the model never asks the customer for an email/identity we already hold.
   email?: string | null;
   requester?: { name?: string; email?: string } | null;
+  // Freshdesk company the ticket is filed under. Used only to resolve the CRM
+  // account when the requester email has no CRM contact (subscriptions live per
+  // account/company, not per contact).
+  company_id?: number | null;
+}
+
+export interface Company {
+  id: number;
+  name?: string | null;
 }
 
 export interface Solution {
@@ -194,6 +203,13 @@ export class Freshdesk {
 
   ticketWithConversations(id: number): Promise<Ticket> {
     return this.get<Ticket>(`/tickets/${id}?include=conversations,requester`);
+  }
+
+  // Read-only company lookup (id -> name), used to match the CRM account by
+  // company name when the requester email has no CRM contact. Callers treat a
+  // failure as "no company", never fatal.
+  company(id: number): Promise<Company> {
+    return this.get<Company>(`/companies/${id}`);
   }
 
   // VERIFIED 2026-07-22 against the live instance: returns solution articles with

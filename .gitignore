@@ -12,3 +12,6 @@ node_modules/
 # Editor / OS
 .DS_Store
 *.swp
+
+# Deno lockfile — deliberately untracked: sandbox/CI resolve different registries
+deno.lock

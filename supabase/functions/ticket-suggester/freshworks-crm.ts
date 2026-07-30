@@ -33,6 +33,11 @@ interface CrmContact {
   sales_account_id?: number | string | null;
 }
 
+interface CrmSalesAccount {
+  id?: number | string | null;
+  name?: string | null;
+}
+
 type JsonObject = Record<string, unknown>;
 
 function isObject(value: unknown): value is JsonObject {
@@ -83,18 +88,33 @@ function accountId(value: unknown): number | null {
   return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
-function exactContacts(payload: unknown, email: string): CrmContact[] {
+// The lookup endpoint nests its rows per entity: { contacts: [...] } or
+// { contacts: { contacts: [...] } } — same shape for sales_accounts.
+function lookupRows(payload: unknown, entityKey: string): JsonObject[] {
   if (!isObject(payload)) return [];
-  const outer = payload.contacts;
+  const outer = payload[entityKey];
   const rows = Array.isArray(outer)
     ? outer
-    : isObject(outer) && Array.isArray(outer.contacts)
-    ? outer.contacts
+    : isObject(outer) && Array.isArray(outer[entityKey])
+    ? outer[entityKey]
     : [];
+  return rows.filter(isObject);
+}
+
+function exactContacts(payload: unknown, email: string): CrmContact[] {
   const target = email.trim().toLowerCase();
-  return rows.filter((row): row is CrmContact => {
-    return isObject(row) && String(row.email ?? "").trim().toLowerCase() === target;
-  });
+  return (lookupRows(payload, "contacts") as CrmContact[]).filter((row) =>
+    String(row.email ?? "").trim().toLowerCase() === target
+  );
+}
+
+// Exact, case-insensitive company-name equality. Substring/fuzzy hits from the
+// lookup endpoint are dropped: subscriptions must never surface for a lookalike.
+function exactAccounts(payload: unknown, name: string): CrmSalesAccount[] {
+  const target = name.trim().toLowerCase();
+  return (lookupRows(payload, "sales_accounts") as CrmSalesAccount[]).filter(
+    (row) => String(row.name ?? "").trim().toLowerCase() === target,
+  );
 }
 
 function contactAccountIds(contact: CrmContact): number[] {
@@ -219,24 +239,36 @@ export class FreshworksCRM {
     return ids.length === 1 ? ids[0] : null;
   }
 
-  async subscriptionsForRequester(
-    requesterEmail: string | null | undefined,
-  ): Promise<CustomerSubscriptionContext> {
-    const email = requesterEmail?.trim() ?? "";
-    if (!email) return { status: "no_match", subscriptions: [] };
+  // Subscriptions live on the CRM *account* (company), and many requester emails
+  // have no CRM contact at all — so the ticket's Freshdesk company name is a
+  // legitimate second key. Exact-name equality only, and never when the same name
+  // matches more than one account.
+  private async accountForCompanyName(name: string): Promise<number | null> {
+    const query = new URLSearchParams({
+      q: name.trim(),
+      f: "name",
+      entities: "sales_account",
+    });
+    const payload = await this.get(`/lookup?${query}`);
+    const ids = Array.from(
+      new Set(
+        exactAccounts(payload, name)
+          .map((row) => accountId(row.id))
+          .filter((id): id is number => id !== null),
+      ),
+    );
+    return ids.length === 1 ? ids[0] : null;
+  }
 
-    const matchedAccountId = await this.accountForRequester(email);
-    if (!matchedAccountId) return { status: "no_match", subscriptions: [] };
-
+  private async subscriptionsForAccount(
+    matchedAccountId: number,
+  ): Promise<CustomerSubscription[]> {
     const path = this.config.subscriptionsPathTemplate.replace(
       "{account_id}",
       encodeURIComponent(String(matchedAccountId)),
     );
     const payload = await this.get(path);
-    const subscriptions: CustomerSubscription[] = recordRows(
-      payload,
-      this.config.subscriptionsCollection,
-    )
+    return recordRows(payload, this.config.subscriptionsCollection)
       // Never trust only the server-side URL filter. A returned record must also
       // carry the exact matched account id before any product data is surfaced.
       .filter((record) =>
@@ -247,7 +279,42 @@ export class FreshworksCRM {
         renewalStatus: fieldValue(record, this.config.renewalStatusField),
         endDate: endDateValue(record, this.config.endDateField),
       }));
+  }
 
-    return { status: "found", subscriptions };
+  // Requester email first (most specific), then the ticket's company name as a
+  // fallback. Both paths abstain (`no_match`) rather than guess on ambiguity.
+  async subscriptionsForCustomer(customer: {
+    requesterEmail?: string | null;
+    companyName?: string | null;
+  }): Promise<CustomerSubscriptionContext> {
+    const email = customer.requesterEmail?.trim() ?? "";
+    if (email) {
+      const byEmail = await this.accountForRequester(email);
+      if (byEmail) {
+        return {
+          status: "found",
+          matchedBy: "contact_email",
+          subscriptions: await this.subscriptionsForAccount(byEmail),
+        };
+      }
+    }
+    const company = customer.companyName?.trim() ?? "";
+    if (company) {
+      const byCompany = await this.accountForCompanyName(company);
+      if (byCompany) {
+        return {
+          status: "found",
+          matchedBy: "company_name",
+          subscriptions: await this.subscriptionsForAccount(byCompany),
+        };
+      }
+    }
+    return { status: "no_match", subscriptions: [] };
+  }
+
+  async subscriptionsForRequester(
+    requesterEmail: string | null | undefined,
+  ): Promise<CustomerSubscriptionContext> {
+    return await this.subscriptionsForCustomer({ requesterEmail });
   }
 }
