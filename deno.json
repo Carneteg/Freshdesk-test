@@ -1,7 +1,7 @@
 {
   "tasks": {
     "check": "deno check supabase/functions/ticket-suggester/index.ts supabase/functions/feedback/index.ts supabase/functions/review-ui/index.ts scripts/replay.ts scripts/sync_tickets.ts scripts/suggest_once.ts scripts/score_history.ts scripts/assign_cohorts.ts scripts/knowledge_gaps.ts",
-    "test": "deno test supabase/functions/ticket-suggester/render_test.ts supabase/functions/ticket-suggester/qa_test.ts supabase/functions/ticket-suggester/clients_test.ts",
+    "test": "deno test supabase/functions/ticket-suggester/render_test.ts supabase/functions/ticket-suggester/qa_test.ts supabase/functions/ticket-suggester/clients_test.ts supabase/functions/ticket-suggester/freshworks-crm_test.ts",
     "verify-api": "deno run --env-file=.env --allow-env --allow-net scripts/verify_api.ts",
     "replay": "deno run --env-file=.env --allow-env --allow-net scripts/replay.ts",
     "score-history": "deno run --env-file=.env --allow-env --allow-net scripts/score_history.ts",

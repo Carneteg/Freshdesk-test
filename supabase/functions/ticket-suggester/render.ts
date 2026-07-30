@@ -510,6 +510,9 @@ export interface NoteData {
   qaAnswered: number;
   qaTotal: number;
   unsupportedNote?: string;
+  // Read-only Freshworks CRM context. This is rendered directly into the
+  // private note and is deliberately NOT part of the LLM prompt.
+  customerSubscriptions?: CustomerSubscriptionContext;
   // Preferred feedback path: the authenticated, RLS-gated review app. A generation
   // deep-link is safe to expose; no write token or verdict lives in the URL.
   reviewUrl?: string;
@@ -517,6 +520,17 @@ export interface NoteData {
   // on legacy posted notes. New notes use reviewUrl instead.
   feedbackUrl?: string;
   feedbackToken?: string;
+}
+
+export interface CustomerSubscription {
+  productName: string | null;
+  renewalStatus: string | null;
+  endDate: string | null;
+}
+
+export interface CustomerSubscriptionContext {
+  status: "found" | "no_match" | "unavailable";
+  subscriptions: CustomerSubscription[];
 }
 
 const BADGE: Record<Confidence, string> = {
@@ -585,6 +599,48 @@ function renderList(items: string[], ordered: boolean): string {
   return `<${tag}>${items.map((i) => `<li>${esc(i)}</li>`).join("")}</${tag}>`;
 }
 
+function subscriptionCell(value: string | null): string {
+  const text = value?.trim() ?? "";
+  return text ? esc(text) : "—";
+}
+
+function renderCustomerSubscriptions(context: CustomerSubscriptionContext): string {
+  if (context.status === "unavailable") {
+    return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
+      "<em>temporarily unavailable — verify manually.</em></p>";
+  }
+  if (context.status === "no_match") {
+    return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
+      "<em>no CRM account could be matched from the requester email.</em></p>";
+  }
+  if (!context.subscriptions.length) {
+    return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
+      "<em>no subscriptions found for the matched account.</em></p>";
+  }
+
+  const rows = context.subscriptions.map((subscription) =>
+    `<tr>` +
+    `<td style="border:1px solid #ddd;padding:4px 8px">${
+      subscriptionCell(subscription.productName)
+    }</td>` +
+    `<td style="border:1px solid #ddd;padding:4px 8px">${
+      subscriptionCell(subscription.renewalStatus)
+    }</td>` +
+    `<td style="border:1px solid #ddd;padding:4px 8px">${
+      subscriptionCell(subscription.endDate)
+    }</td>` +
+    `</tr>`
+  ).join("");
+
+  return `<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong></p>` +
+    `<table style="border-collapse:collapse">` +
+    `<thead><tr>` +
+    `<th style="border:1px solid #ddd;padding:4px 8px;text-align:left">Product name</th>` +
+    `<th style="border:1px solid #ddd;padding:4px 8px;text-align:left">Renewal status</th>` +
+    `<th style="border:1px solid #ddd;padding:4px 8px;text-align:left">End date</th>` +
+    `</tr></thead><tbody>${rows}</tbody></table>`;
+}
+
 // Render the private note. Always posted, including at confidence "none" —
 // silence is ambiguous (CLAUDE.md §2). The header carries the ticket type,
 // Confidence, and Q/A score; low/none notes state what was searched and what was
@@ -616,6 +672,12 @@ export function renderNote(r: NoteData): string {
       `<p><strong>🔴 Agent action required before replying</strong> — verify / check / route as below; ` +
         `do not send a customer reply until it is done.</p>`,
     );
+  }
+
+  // Verified account context is shown before any AI interpretation. Only the
+  // three approved fields are accepted by the renderer.
+  if (r.customerSubscriptions) {
+    out.push(renderCustomerSubscriptions(r.customerSubscriptions));
   }
 
   // What the AI decided to do, and (briefly) why — so the agent can sanity-check

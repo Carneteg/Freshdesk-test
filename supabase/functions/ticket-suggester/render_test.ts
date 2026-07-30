@@ -310,6 +310,64 @@ Deno.test("renderNote: high-confidence shows scores, draft, and a linked source"
   assertStringIncludes(html, "KB article #5");
 });
 
+Deno.test("renderNote: shows only the three approved CRM subscription fields", () => {
+  const html = renderNote({
+    confidence: "none",
+    draft: "",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+    customerSubscriptions: {
+      status: "found",
+      subscriptions: [{
+        productName: "Simployer One <Complete>",
+        renewalStatus: "Renewal pending",
+        endDate: "2026-12-31",
+      }],
+    },
+  });
+
+  assertStringIncludes(html, "Customer subscriptions (Freshworks CRM)");
+  assertStringIncludes(html, "Product name");
+  assertStringIncludes(html, "Renewal status");
+  assertStringIncludes(html, "End date");
+  assertStringIncludes(html, "Simployer One &lt;Complete&gt;");
+  assertStringIncludes(html, "Renewal pending");
+  assertStringIncludes(html, "2026-12-31");
+  assertEquals(html.includes("Contract reference"), false);
+  assertEquals(html.includes("Sales owner"), false);
+  assertEquals(html.includes("Created by"), false);
+});
+
+Deno.test("renderNote: CRM lookup failures stay explicit and non-fatal", () => {
+  const noMatch = renderNote({
+    confidence: "none",
+    draft: "",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+    customerSubscriptions: { status: "no_match", subscriptions: [] },
+  });
+  assertStringIncludes(noMatch, "no CRM account could be matched");
+
+  const unavailable = renderNote({
+    confidence: "none",
+    draft: "",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+    customerSubscriptions: { status: "unavailable", subscriptions: [] },
+  });
+  assertStringIncludes(unavailable, "temporarily unavailable");
+  assertStringIncludes(unavailable, "verify manually");
+});
+
 Deno.test("renderNote: a past-ticket source links to the ticket", () => {
   const html = renderNote({
     confidence: "low",
