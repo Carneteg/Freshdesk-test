@@ -177,7 +177,7 @@ const FREEMAIL = new Set([
   "comhem.se", "bredband.net", "spray.se",
 ]);
 
-function emailDomain(email: string): string | null {
+export function emailDomain(email: string): string | null {
   const at = email.lastIndexOf("@");
   const domain = at > 0 ? email.slice(at + 1).trim().toLowerCase() : "";
   if (!domain.includes(".") || FREEMAIL.has(domain)) return null;
@@ -503,6 +503,7 @@ export class FreshworksCRM {
         return {
           status: "found",
           matchedBy: "contact_email",
+          accountId: byEmail.id,
           subscriptions: await this.subscriptionsForAccount(byEmail.id),
         };
       }
@@ -519,6 +520,7 @@ export class FreshworksCRM {
         return {
           status: "found",
           matchedBy: byCompany.matchedBy,
+          accountId: byCompany.id,
           subscriptions: await this.subscriptionsForAccount(byCompany.id),
         };
       }
@@ -530,11 +532,25 @@ export class FreshworksCRM {
         return {
           status: "found",
           matchedBy: "email_domain",
+          accountId: byDomain.id,
           subscriptions: await this.subscriptionsForAccount(byDomain.id),
         };
       }
     }
     return { status: "no_match", subscriptions: [] };
+  }
+
+  // Deterministic path for a mapping-table hit: no lookup, no fuzziness --
+  // fetch subscriptions for an already-verified account id.
+  async subscriptionsForKnownAccount(
+    accountId: number,
+  ): Promise<CustomerSubscriptionContext> {
+    return {
+      status: "found",
+      matchedBy: "account_map",
+      accountId,
+      subscriptions: await this.subscriptionsForAccount(accountId),
+    };
   }
 
   async subscriptionsForRequester(

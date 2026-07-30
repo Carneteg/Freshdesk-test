@@ -71,6 +71,7 @@ Deno.test("FreshworksCRM matches the requester exactly and returns only approved
     assertEquals(result, {
       status: "found",
       matchedBy: "contact_email",
+      accountId: 123,
       subscriptions: [{
         productName: "Simployer One Complete",
         renewalStatus: "Active",
@@ -138,6 +139,7 @@ Deno.test("FreshworksCRM reads approved fields from custom-field response shapes
       {
         status: "found",
         matchedBy: "contact_email",
+        accountId: 321,
         subscriptions: [{
           productName: "Compensation",
           renewalStatus: "Pending",
@@ -219,6 +221,7 @@ Deno.test("FreshworksCRM falls back to the ticket's company when the email has n
     assertEquals(result, {
       status: "found",
       matchedBy: "company_name",
+      accountId: 555,
       subscriptions: [{
         productName: "Simployer HR",
         renewalStatus: "Active",

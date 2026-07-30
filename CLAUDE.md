@@ -577,9 +577,22 @@ still requires exactly ONE account. **Several similar accounts → status
 `ambiguous`**, rendered as an explicit "check the CRM manually" warning for the
 agent (per Tobias: ambiguity must prompt a manual check, never look like "no
 match" and never be guessed away). `matchedBy` records which tier matched; the
-weak tiers (name prefix, email domain) carry a verify nudge in the note. Feature
-is opt-in via `FRESHWORKS_CRM_ENABLED`; the replay harness never constructs the
-CRM client, so evaluation runs are unaffected.
+weak tiers (name prefix, email domain) carry a verify nudge in the note, and an
+`ambiguous` result lists up to three candidate account names. Feature is opt-in
+via `FRESHWORKS_CRM_ENABLED`; the replay harness never constructs the CRM
+client, so evaluation runs are unaffected.
+
+Above the ladder sits **`crm_account_map`** (migration 35) — the deterministic
+"curate once, resolve forever" layer, same philosophy as `known_incidents`: a
+row maps a Freshdesk `company_id` or customer email domain to ONE verified CRM
+account (`matchedBy: account_map`). `human` rows are curated and always win;
+`learned_contact_email` rows are written automatically ONLY from the ladder's
+strongest tier (exact contact-email match), and **conflicting evidence
+deactivates a learned row — never overwrites it** (runtime falls back to the
+ladder; the conflict stays visible). Freemail domains are never a key. RLS
+deny-all (service-role only). Measure the whole thing with `crm_match_scorecard`
+(migration 34: weekly hit-rate per tier + no_match/ambiguous/unavailable) before
+tuning matching any further.
 
 ## 13. Repeatable workflows — Claude skills & `tools/`
 

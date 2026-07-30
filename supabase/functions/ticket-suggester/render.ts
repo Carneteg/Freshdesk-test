@@ -532,10 +532,19 @@ export interface CustomerSubscriptionContext {
   // `ambiguous` = SEVERAL similar CRM accounts matched — the agent must pick
   // manually; guessing between customers is never allowed.
   status: "found" | "no_match" | "ambiguous" | "unavailable";
-  // How the CRM account was resolved, most→least specific: the requester's
-  // contact email; the ticket's company name (stem equality / word-prefix); or
-  // the requester's email domain (subscriptions live per account/company).
-  matchedBy?: "contact_email" | "company_name" | "company_name_prefix" | "email_domain";
+  // How the CRM account was resolved, most→least specific: a verified row in
+  // the crm_account_map table (deterministic — curated or learned from a prior
+  // contact-email match); the requester's contact email; the ticket's company
+  // name (stem equality / word-prefix); or the requester's email domain
+  // (subscriptions live per account/company).
+  matchedBy?:
+    | "account_map"
+    | "contact_email"
+    | "company_name"
+    | "company_name_prefix"
+    | "email_domain";
+  // The resolved CRM account id (audit + the mapping-table learning key).
+  accountId?: number;
   // On `ambiguous`: up to three candidate account names, so the agent sees WHAT
   // to choose between when checking the CRM manually.
   candidates?: string[];
@@ -653,6 +662,7 @@ function renderCustomerSubscriptions(context: CustomerSubscriptionContext): stri
   // tiers (name prefix / email domain) carry an explicit verify nudge, since
   // the ticket could be filed under the wrong company.
   const MATCH_NOTE: Record<string, string> = {
+    account_map: " <em>(via a verified account mapping)</em>",
     company_name: " <em>(matched via the ticket's company)</em>",
     company_name_prefix:
       " <em>(matched via the ticket's company — the name differs slightly, verify it is the right account)</em>",
