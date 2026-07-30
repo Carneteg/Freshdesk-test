@@ -341,6 +341,84 @@ Deno.test("renderNote: shows only the three approved CRM subscription fields", (
   assertEquals(html.includes("Created by"), false);
 });
 
+Deno.test("renderNote: a company-name CRM match says so", () => {
+  const html = renderNote({
+    confidence: "none",
+    draft: "",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+    customerSubscriptions: {
+      status: "found",
+      matchedBy: "company_name",
+      subscriptions: [{
+        productName: "Simployer HR",
+        renewalStatus: "Active",
+        endDate: "2027-01-31",
+      }],
+    },
+  });
+  assertStringIncludes(html, "matched via the ticket's company");
+});
+
+Deno.test("renderNote: ambiguous CRM match tells the agent to check manually", () => {
+  const html = renderNote({
+    confidence: "none",
+    draft: "",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+    customerSubscriptions: {
+      status: "ambiguous",
+      subscriptions: [],
+      candidates: ["Acme Sverige AB", "Acme Norge <AS>"],
+    },
+  });
+  assertStringIncludes(html, "several similar CRM accounts match");
+  assertStringIncludes(html, "check the CRM manually");
+  // Candidate names are shown (escaped) so the agent sees WHAT to choose between.
+  assertStringIncludes(html, "Candidates: Acme Sverige AB · Acme Norge &lt;AS&gt;.");
+});
+
+Deno.test("renderNote: weak CRM matches carry a verify nudge", () => {
+  const base = {
+    confidence: "none" as const,
+    draft: "",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 0,
+    qaTotal: 1,
+  };
+  const subscriptions = [{
+    productName: "Simployer HR",
+    renewalStatus: "Active",
+    endDate: "2027-01-31",
+  }];
+  const viaPrefix = renderNote({
+    ...base,
+    customerSubscriptions: {
+      status: "found",
+      matchedBy: "company_name_prefix",
+      subscriptions,
+    },
+  });
+  assertStringIncludes(viaPrefix, "the name differs slightly, verify");
+  const viaDomain = renderNote({
+    ...base,
+    customerSubscriptions: {
+      status: "found",
+      matchedBy: "email_domain",
+      subscriptions,
+    },
+  });
+  assertStringIncludes(viaDomain, "matched via the requester's email domain");
+});
+
 Deno.test("renderNote: CRM lookup failures stay explicit and non-fatal", () => {
   const noMatch = renderNote({
     confidence: "none",

@@ -529,7 +529,25 @@ export interface CustomerSubscription {
 }
 
 export interface CustomerSubscriptionContext {
-  status: "found" | "no_match" | "unavailable";
+  // `ambiguous` = SEVERAL similar CRM accounts matched — the agent must pick
+  // manually; guessing between customers is never allowed.
+  status: "found" | "no_match" | "ambiguous" | "unavailable";
+  // How the CRM account was resolved, most→least specific: a verified row in
+  // the crm_account_map table (deterministic — curated or learned from a prior
+  // contact-email match); the requester's contact email; the ticket's company
+  // name (stem equality / word-prefix); or the requester's email domain
+  // (subscriptions live per account/company).
+  matchedBy?:
+    | "account_map"
+    | "contact_email"
+    | "company_name"
+    | "company_name_prefix"
+    | "email_domain";
+  // The resolved CRM account id (audit + the mapping-table learning key).
+  accountId?: number;
+  // On `ambiguous`: up to three candidate account names, so the agent sees WHAT
+  // to choose between when checking the CRM manually.
+  candidates?: string[];
   subscriptions: CustomerSubscription[];
 }
 
@@ -611,7 +629,15 @@ function renderCustomerSubscriptions(context: CustomerSubscriptionContext): stri
   }
   if (context.status === "no_match") {
     return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
-      "<em>no CRM account could be matched from the requester email.</em></p>";
+      "<em>no CRM account could be matched from the requester email or the ticket's company.</em></p>";
+  }
+  if (context.status === "ambiguous") {
+    const names = (context.candidates ?? []).map((name) => esc(name)).join(" · ");
+    return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
+      "⚠️ <em>several similar CRM accounts match this customer — " +
+      "check the CRM manually before relying on any subscription data." +
+      (names ? ` Candidates: ${names}.` : "") +
+      "</em></p>";
   }
   if (!context.subscriptions.length) {
     return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
@@ -632,7 +658,19 @@ function renderCustomerSubscriptions(context: CustomerSubscriptionContext): stri
     `</tr>`
   ).join("");
 
-  return `<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong></p>` +
+  // Anything weaker than a contact match says HOW it matched — and the weak
+  // tiers (name prefix / email domain) carry an explicit verify nudge, since
+  // the ticket could be filed under the wrong company.
+  const MATCH_NOTE: Record<string, string> = {
+    account_map: " <em>(via a verified account mapping)</em>",
+    company_name: " <em>(matched via the ticket's company)</em>",
+    company_name_prefix:
+      " <em>(matched via the ticket's company — the name differs slightly, verify it is the right account)</em>",
+    email_domain:
+      " <em>(matched via the requester's email domain — verify it is the right account)</em>",
+  };
+  const matchNote = (context.matchedBy && MATCH_NOTE[context.matchedBy]) || "";
+  return `<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong>${matchNote}</p>` +
     `<table style="border-collapse:collapse">` +
     `<thead><tr>` +
     `<th style="border:1px solid #ddd;padding:4px 8px;text-align:left">Product name</th>` +

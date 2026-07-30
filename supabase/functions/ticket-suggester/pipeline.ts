@@ -4,8 +4,9 @@
 // any caller can import runPipeline WITHOUT pulling in Deno.serve. index.ts is
 // the only place that starts a server.
 
-import { Freshdesk, LLM, type Ticket } from "./clients.ts";
-import { FreshworksCRM } from "./freshworks-crm.ts";
+import { Freshdesk, HttpError, LLM, type Ticket } from "./clients.ts";
+import { emailDomain, FreshworksCRM } from "./freshworks-crm.ts";
+import { learnAccountMap, lookupAccountMap } from "./crm-account-map.ts";
 import {
   analysePrompt,
   ANSWER_STRATEGIES,
@@ -397,11 +398,54 @@ export async function runPipeline(
   const context = buildContext(ticket); // FULL chronological, source-labelled context
   // Independent of generation: start the verified CRM lookup in parallel, but
   // contain every failure so a temporary CRM issue never suppresses the required
-  // Freshdesk private note. Do not log the requester email or API response.
-  const customerSubscriptions = deps.crm
-    ? deps.crm.subscriptionsForRequester(
-      ticket.requester?.email ?? ticket.email,
-    ).catch((error) => {
+  // Freshdesk private note. Do not log the requester email, company name, or API
+  // response. Resolution order:
+  //   0. crm_account_map — deterministic (curated or learned), no fuzziness;
+  //   1-3. the client's matching ladder (contact email → company name stem →
+  //        email domain; ambiguity = "check manually");
+  //   after a contact-email match, the map LEARNS the company/domain keys so the
+  //   next ticket from this customer resolves deterministically.
+  // The Freshdesk company GET is lazy — it only happens when the email tier missed.
+  const companyId = ticket.company_id;
+  const crm = deps.crm;
+  const customerSubscriptions = crm
+    ? (async () => {
+      const requesterEmail = ticket.requester?.email ?? ticket.email;
+      // Freemail domains come back null — they are never a mapping key.
+      const domain = requesterEmail ? emailDomain(requesterEmail) : null;
+      const mapKey = { companyId, domain };
+      // Map failures are contained separately: a broken map must degrade to the
+      // ladder, not to `unavailable`.
+      const mapped = deps.db
+        ? await lookupAccountMap(deps.db, mapKey).catch(() => null)
+        : null;
+      if (mapped) return await crm.subscriptionsForKnownAccount(mapped.accountId);
+
+      const result = await crm.subscriptionsForCustomer({
+        requesterEmail,
+        companyName: companyId
+          ? () =>
+            deps.fd.company(companyId)
+              .then((c) => c.name ?? null)
+              .catch((error) => {
+                // A missing company (404) just skips the tier. Transport errors
+                // (429/5xx/timeouts) must propagate to the outer catch and render
+                // `unavailable` — "no company checked" must never be reported as
+                // the confident "no CRM account could be matched".
+                if (error instanceof HttpError && error.status === 404) return null;
+                throw error;
+              })
+          : null,
+      });
+      if (
+        deps.db && result.status === "found" &&
+        result.matchedBy === "contact_email" && result.accountId
+      ) {
+        // Learning is best-effort — never let a map write fail the lookup.
+        await learnAccountMap(deps.db, mapKey, result.accountId).catch(() => {});
+      }
+      return result;
+    })().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(
         `Freshworks CRM subscription lookup failed for ticket ${ticket.id}: ${
@@ -858,6 +902,25 @@ export async function loadIncidents(
 
 // Load the reviewer-written ideal answers (the "what good looks like" corpus) for
 // the learning loop (§12). A failure or empty corpus just means "no exemplars".
+// Gold answers may carry light HTML from the review app's formatting editor;
+// prompts want prose. Block-ish closers become newlines, list items become
+// dashes, remaining tags drop, core entities decode. Plain text passes through.
+export function stripHtmlForPrompt(text: string): string {
+  if (!/[<&]/.test(text)) return text;
+  return text
+    .replace(/<\s*(?:br|\/p|\/div|\/h[1-6]|\/blockquote|\/li|\/ul|\/ol)\s*\/?>/gi, "\n")
+    .replace(/<\s*li[^>]*>/gi, "- ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#0*39;/g, "'")
+    .replace(/&amp;/gi, "&")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 // Gold answers on HOLDOUT tickets are excluded (scaling plan Fas 2.1 / migration 25):
 // the locked test set must never leak into generation as a few-shot exemplar.
 export async function loadGoldExemplars(
@@ -899,7 +962,7 @@ export async function loadGoldExemplars(
       ticket_id: r.ticket_id,
       subject: r.subject ?? `Ticket #${r.ticket_id}`,
       language: r.language ?? null,
-      gold_answer: r.gold_answer,
+      gold_answer: stripHtmlForPrompt(r.gold_answer),
     }));
 }
 
