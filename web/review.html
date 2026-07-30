@@ -185,14 +185,14 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-07-28-immutable-reviews";
+var APP_VERSION = "v2026-07-29-conversation-context";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
 var rows = [], tab = "todo", token = null, refreshToken = null, meEmail = null;
 
 // Columns fetched for each suggestion (used by loadData AND single-row reloads).
-var COLS = "id,ticket_id,ticket_url,subject,customer_message,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,prompt_version,created_at";
+var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,prompt_version,created_at";
 
 // Why an edited/unusable reply fell short — slug + Swedish label (CLAUDE.md / plan 1.3).
 var REASONS = [
@@ -627,9 +627,20 @@ function cardEl(r) {
     : (Array.isArray(r.questions) && r.questions.length ? r.questions.join("\n") : (r.detected_intent || ""));
   if (custText && custText.trim()) {
     var cq = el("div", "custq");
-    cq.appendChild(set(el("span", "rl"), "Customer's question"));
+    cq.appendChild(set(el("span", "rl"), "Target message · exact customer message answered"));
     cq.appendChild(proseEl(custText));
     card.appendChild(cq);
+  }
+
+  if (r.latest_unresolved_request && r.latest_unresolved_request.trim()) {
+    var ur = el("div", "refbox");
+    ur.appendChild(set(el("span", "rl"), "AI-identified latest unresolved request"));
+    ur.appendChild(proseEl(r.latest_unresolved_request));
+    card.appendChild(ur);
+  }
+
+  if (r.conversation_context && r.conversation_context.trim()) {
+    card.appendChild(detail("Full conversation seen by the AI", r.conversation_context));
   }
 
   if (r.draft && r.draft.trim()) {

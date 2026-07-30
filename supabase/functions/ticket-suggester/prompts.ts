@@ -4,7 +4,7 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-07-24a";
+export const PROMPT_VERSION = "g1-2026-07-29a";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -144,6 +144,7 @@ export function analysePrompt(subject: string, context: string) {
     '  "detected_intent": "short snake_case intent, e.g. grant_admin_access",',
     '  "keywords": ["3-6 short topic tags, ALWAYS IN ENGLISH (translate), lowercase, one concept each"],',
     '  "questions_asked": ["each distinct question the customer needs answered"],',
+    '  "latest_unresolved_request": "the single latest unresolved customer question/request the reply must address, in the ticket language; empty only when nothing remains unresolved",',
     '  "search_queries": ["2-4 short keyword queries IN THE TICKET LANGUAGE for the help centre"],',
     '  "security_sensitive": true,',
     '  "sensitive_action_request": false,',
@@ -169,6 +170,9 @@ export function analysePrompt(subject: string, context: string) {
     "- Source-tag facts by WHO stated them; do not merge them or treat them as your own findings.",
     "- unanswered_agent_question: if an agent already asked e.g. \"is this the right person?\" and the",
     "  customer only sent an auto-reply or nothing, keep that question here — it is still open.",
+    "- latest_unresolved_request: follow the thread chronologically and state what the customer most",
+    "  recently still needs after accounting for agent replies and later clarifications. Do not copy",
+    "  the initial question when a later message changes or resolves it.",
     "- Do not invent questions the customer did not ask.",
   ].join("\n");
 
