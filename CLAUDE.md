@@ -582,6 +582,31 @@ weak tiers (name prefix, email domain) carry a verify nudge in the note, and an
 via `FRESHWORKS_CRM_ENABLED`; the replay harness never constructs the CRM
 client, so evaluation runs are unaffected.
 
+**Freshworks API facts — VERIFIED live 2026-07-31 (they invalidated two
+assumptions).** A cron-secret-guarded probe against known-good records settled
+§7's open question and explained why every early run returned `no_match`:
+- `/lookup?f=email&entities=contact` finds the contact but its row carries **NO
+  account link at all** (no `company`, no `sales_accounts`). The link exists
+  only on `/contacts/{id}?include=sales_accounts` → `contact.sales_accounts[]`
+  with `is_primary`. Tier 1 therefore **chains** lookup → detail, and prefers
+  the primary account (what the CRM UI shows as "Account").
+- `/lookup?f=name&entities=sales_account` matches only (near-)**FULL** names — a
+  brand stem returns zero rows — so it could never feed the name/domain tiers.
+  **`/search?q=<term>&include=sales_account`** does partial matching and is what
+  those tiers now use; it answers with a **flat array** of
+  `{id: "<string>", name, website, type}`. A broad stem returned exactly **10**
+  rows, so the truncation guard (10) is calibrated, not guessed.
+- Real data confirms the ambiguity design: "STUDENTSAMSKIPNADEN I STAVANGER"
+  exists **twice** in the CRM (one with website `minsis.no`, one without), and
+  the fixed client correctly returns `ambiguous` with the candidate name rather
+  than picking one.
+- **Open:** intermittent **HTTP 403** on `/lookup` appeared during probing and
+  persisted for a solo call, while `/search` kept working. Most likely a rate or
+  scope limit; it is contained (a throw becomes `unavailable`, the note still
+  posts) but it means contact-tier coverage may be lower than designed. Worth a
+  look before reading `crm_match_scorecard` as ground truth. The probe endpoint
+  itself was retired after use; `scripts/probe_crm_lookup.ts` can re-run it.
+
 Above the ladder sits **`crm_account_map`** (migration 35) — the deterministic
 "curate once, resolve forever" layer, same philosophy as `known_incidents`: a
 row maps a Freshdesk `company_id` or customer email domain to ONE verified CRM
