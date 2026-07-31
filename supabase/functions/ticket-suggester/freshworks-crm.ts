@@ -27,6 +27,7 @@ interface CrmAccountRef {
 }
 
 interface CrmContact {
+  id?: number | string | null;
   email?: string | null;
   company?: CrmAccountRef | null;
   sales_accounts?: CrmAccountRef[] | null;
@@ -240,11 +241,27 @@ function uniqueAccount(rows: CrmSalesAccount[]): AccountMatch {
   return { ambiguous: candidateNames(rows) };
 }
 
-// The /lookup endpoint is a bounded type-ahead: a "full-looking" response may
-// hide the true duplicate off-page, so a unique NAME-based hit inside such a
-// response is not trusted (CLAUDE.md sect. 7: verify, do not assume -- tighten
-// or drop after a live check of the real cap).
+// /search is a bounded type-ahead: a "full-looking" response may hide the true
+// duplicate off-page, so a unique NAME-based hit inside such a response is not
+// trusted. VERIFIED live 2026-07-31: a broad stem returned exactly 10 rows, so
+// 10 is the observed cap and this guard is calibrated, not guessed.
 const LOOKUP_TRUNCATION_GUARD = 10;
+
+// The /lookup contact row carries NO account link (verified live 2026-07-31);
+// the association only comes back from /contacts/{id}?include=sales_accounts,
+// as contact.sales_accounts[].id. When a contact belongs to several accounts,
+// the primary one is what the CRM UI shows as "Account" — prefer it, and let
+// the uniqueness check catch the (unexpected) multi-primary case.
+function accountIdsFromContactDetail(payload: unknown): number[] {
+  if (!isObject(payload) || !isObject(payload.contact)) return [];
+  const rows = Array.isArray(payload.contact.sales_accounts)
+    ? payload.contact.sales_accounts.filter(isObject)
+    : [];
+  const primary = rows.filter((row) => row.is_primary === true);
+  return (primary.length ? primary : rows)
+    .map((row) => accountId(row.id))
+    .filter((id): id is number => id !== null);
+}
 
 function contactAccountIds(contact: CrmContact): number[] {
   const ids = [
@@ -361,9 +378,17 @@ export class FreshworksCRM {
       entities: "contact",
     });
     const payload = await this.get(`/lookup?${query}`);
-    const ids = Array.from(
-      new Set(exactContacts(payload, email).flatMap(contactAccountIds)),
-    );
+    const contacts = exactContacts(payload, email);
+    const found = new Set<number>();
+    for (const contact of contacts) {
+      // Kept for forward-compatibility if the lookup ever inlines the link.
+      for (const id of contactAccountIds(contact)) found.add(id);
+      const contactId = accountId(contact.id);
+      if (contactId === null) continue;
+      const detail = await this.get(`/contacts/${contactId}?include=sales_accounts`);
+      for (const id of accountIdsFromContactDetail(detail)) found.add(id);
+    }
+    const ids = Array.from(found);
     // One email mapping to SEVERAL CRM accounts is exactly the "similar customer
     // records" case -- surface it for a manual check, never guess. (The contact
     // payload carries no account names, so no candidates to show here.)
@@ -371,14 +396,20 @@ export class FreshworksCRM {
     return ids.length > 1 ? { ambiguous: [] } : null;
   }
 
+  // Candidate accounts for a (partial) name. VERIFIED live 2026-07-31:
+  // /lookup?f=name only matches (near-)FULL names — a brand stem returned
+  // nothing, which is why every name/domain tier missed. /search DOES match
+  // partially and answers with a FLAT array of {id, name, website, type},
+  // ids as strings (accountId() normalises them).
   private async lookupAccounts(term: string): Promise<CrmSalesAccount[]> {
-    const query = new URLSearchParams({
-      q: term,
-      f: "name",
-      entities: "sales_account",
-    });
-    const payload = await this.get(`/lookup?${query}`);
-    return lookupRows(payload, "sales_accounts") as CrmSalesAccount[];
+    const query = new URLSearchParams({ q: term, include: "sales_account" });
+    const payload = await this.get(`/search?${query}`);
+    const rows = Array.isArray(payload)
+      ? payload.filter(isObject)
+      : lookupRows(payload, "sales_accounts");
+    return rows.filter((row) =>
+      row.type === undefined || row.type === "sales_account"
+    ) as CrmSalesAccount[];
   }
 
   // Subscriptions live on the CRM *account* (company), and many requester emails
