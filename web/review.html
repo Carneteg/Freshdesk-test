@@ -122,6 +122,7 @@
   .goldedit:empty::before{content:attr(data-placeholder);color:var(--muted);pointer-events:none}
   .goldedit ul,.goldedit ol{margin:4px 0 4px 22px;white-space:normal}
   .crmverdict{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .crmhint{flex:1 1 240px;min-width:200px;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--ink)}
   .crmverdict .btn.sel{outline:2px solid var(--accent)}
   .goldedit p,.goldedit div{margin:0}
 
@@ -202,14 +203,14 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-07-31-crm-verdict";
+var APP_VERSION = "v2026-07-31b-crm-feedback";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
 var rows = [], tab = "todo", token = null, refreshToken = null, meEmail = null;
 
 // Columns fetched for each suggestion (used by loadData AND single-row reloads).
-var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,prompt_version,created_at";
+var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,prompt_version,created_at";
 
 // Why an edited/unusable reply fell short — slug + Swedish label (CLAUDE.md / plan 1.3).
 var REASONS = [
@@ -1205,10 +1206,12 @@ function subscriptionContextEl(r) {
   }
   if (context.status === "unavailable") {
     box.appendChild(set(el("p", "sstate"), "Temporarily unavailable — verify manually."));
+    box.appendChild(crmVerdictRow(r));
     return box;
   }
   if (context.status === "no_match") {
     box.appendChild(set(el("p", "sstate"), "No CRM account matched the requester email or the ticket's company."));
+    box.appendChild(crmVerdictRow(r));
     return box;
   }
   if (context.status === "ambiguous") {
@@ -1216,6 +1219,7 @@ function subscriptionContextEl(r) {
     var candidates = Array.isArray(context.candidates) ? context.candidates.filter(function (n) { return typeof n === "string" && n.trim(); }) : [];
     if (candidates.length) msg += " Candidates: " + candidates.join(" · ") + ".";
     box.appendChild(set(el("p", "sstate"), msg));
+    box.appendChild(crmVerdictRow(r));
     return box;
   }
 
@@ -1232,6 +1236,7 @@ function subscriptionContextEl(r) {
   var subscriptions = Array.isArray(context.subscriptions) ? context.subscriptions : [];
   if (!subscriptions.length) {
     box.appendChild(set(el("p", "sstate"), "No subscriptions found for the matched account."));
+    box.appendChild(crmVerdictRow(r));
     return box;
   }
 
@@ -1257,45 +1262,74 @@ function subscriptionContextEl(r) {
   return box;
 }
 
-// Micro-verdict on the MATCH itself ("was this the right account?") — the
-// precision half of the CRM scorecard; coverage alone says nothing about
-// correctness. Saved via submit_crm_match_verdict; never bumps the reply-
-// verdict version, but syncs the returned version so the optimistic lock
-// on judging stays correct in this session.
+// Micro-verdict on the MATCH itself — shown on EVERY outcome, because the
+// silent ones carry the information we cannot get anywhere else: when the
+// lookup found nothing, only the agent knows whether the customer actually
+// exists in the CRM. Coverage alone measures nothing without that.
+// Saved via submit_crm_match_verdict; never bumps the reply-verdict version,
+// but syncs the returned version so the judging lock stays correct.
 function crmVerdictRow(r) {
+  var found = r.customer_subscriptions && r.customer_subscriptions.status === "found";
   var row = el("div", "crmverdict");
-  row.appendChild(set(el("span", "sl"), "Right CRM account?"));
+  row.appendChild(set(el("span", "sl"), found ? "Right CRM account?" : "Is this customer in the CRM?"));
+
+  // "wrong" and "missed" are the actionable answers — both mean a human knows
+  // the right account, so we ask which one and feed the curation queue.
+  var opts = found
+    ? [["correct", "Yes"], ["wrong", "No — wrong customer"], ["unsure", "Unsure"]]
+    : [["missed", "Yes — we missed it"], ["not_in_crm", "No"], ["unsure", "Unsure"]];
+
   var st = el("span", "st"); st.setAttribute("aria-live", "polite");
+  var hint = document.createElement("input");
+  hint.type = "text";
+  hint.className = "crmhint";
+  hint.placeholder = "Which account is the right one? (optional)";
+  hint.setAttribute("aria-label", "Correct CRM account for ticket " + r.ticket_id);
+  hint.value = r.crm_account_hint || "";
+  var needsHint = function (v) { return v === "wrong" || v === "missed"; };
+  hint.style.display = needsHint(r.crm_account_correct) ? "" : "none";
+
   var btns = [];
-  [["yes", "Yes"], ["no", "No"], ["unsure", "Unsure"]].forEach(function (opt) {
+  async function save(value) {
+    st.textContent = "Sparar…";
+    try {
+      var res = await api("/rest/v1/rpc/submit_crm_match_verdict", {
+        method: "POST",
+        body: JSON.stringify({
+          p_generation_id: r.id,
+          p_correct: value,
+          p_hint: hint.value.trim() || null,
+        }),
+      });
+      if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
+      var out = await res.json(), saved = out && out[0];
+      r.crm_account_correct = value;
+      if (saved) {
+        r.crm_account_hint = saved.crm_account_hint;
+        r.my_review_version = saved.review_version;
+        r.review_version = Math.max(r.review_version || 0, saved.review_version || 0);
+      }
+      btns.forEach(function (b) { b.className = "btn small" + (b._val === value ? " sel" : ""); });
+      hint.style.display = needsHint(value) ? "" : "none";
+      st.textContent = "sparat";
+    } catch (e) { st.textContent = "kunde inte spara: " + e.message; }
+  }
+
+  opts.forEach(function (opt) {
     var b = document.createElement("button");
     b.type = "button";
     b.className = "btn small" + (r.crm_account_correct === opt[0] ? " sel" : "");
     b.textContent = opt[1];
-    b.setAttribute("aria-label", "Right CRM account: " + opt[1]);
+    b.setAttribute("aria-label", (found ? "Right CRM account: " : "Customer in CRM: ") + opt[1]);
     b._val = opt[0];
-    b.onclick = async function () {
-      st.textContent = "Sparar…";
-      try {
-        var res = await api("/rest/v1/rpc/submit_crm_match_verdict", {
-          method: "POST",
-          body: JSON.stringify({ p_generation_id: r.id, p_correct: opt[0] }),
-        });
-        if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
-        var out = await res.json(), saved = out && out[0];
-        r.crm_account_correct = opt[0];
-        if (saved) {
-          r.my_review_version = saved.review_version;
-          r.review_version = Math.max(r.review_version || 0, saved.review_version || 0);
-        }
-        btns.forEach(function (x) { x.className = "btn small" + (x._val === opt[0] ? " sel" : ""); });
-        st.textContent = "sparat: " + opt[1];
-      } catch (e) { st.textContent = "kunde inte spara: " + e.message; }
-    };
+    b.onclick = function () { save(opt[0]); };
     btns.push(b);
     row.appendChild(b);
   });
+  row.appendChild(hint);
   row.appendChild(st);
+  // Typing the account name is only useful once a verdict exists to attach it to.
+  hint.onblur = function () { if (r.crm_account_correct) save(r.crm_account_correct); };
   if (r.crm_account_correct) st.textContent = "sparat";
   return row;
 }
