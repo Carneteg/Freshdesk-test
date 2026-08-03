@@ -1137,3 +1137,44 @@ Deno.test("renderNote: non-sensitive direct answer omits the manual-verify banne
   assertStringIncludes(html, "Direct answer");
   assertEquals(html.includes("Verify manually"), false);
 });
+
+Deno.test("renderNote: a proposed KB article is surfaced, and only when proposed", () => {
+  const base = {
+    confidence: "high" as const,
+    draft: "Gå til Innstillinger.",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 1,
+    qaTotal: 1,
+  };
+  const shown = renderNote({
+    ...base,
+    articleOpportunity: {
+      worth_writing: true,
+      proposed_title: "Legge til en ny ansatt",
+      reason: "asked by many customers",
+    },
+  });
+  assertEquals(shown.includes("Worth a knowledge-base article?"), true);
+  assertEquals(shown.includes("Legge til en ny ansatt"), true);
+  // the agent decides — the note must not imply the article already exists
+  assertEquals(shown.includes("Your call"), true);
+
+  // not flagged → no nudge at all; the note is for judging the reply first
+  assertEquals(
+    renderNote({ ...base, articleOpportunity: { worth_writing: false, proposed_title: "", reason: "" } })
+      .includes("Worth a knowledge-base article?"),
+    false,
+  );
+  assertEquals(renderNote(base).includes("Worth a knowledge-base article?"), false);
+
+  // worth_writing with no title is not a usable proposal — suppress it
+  assertEquals(
+    renderNote({
+      ...base,
+      articleOpportunity: { worth_writing: true, proposed_title: "", reason: "x" },
+    }).includes("Worth a knowledge-base article?"),
+    false,
+  );
+});

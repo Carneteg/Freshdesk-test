@@ -4,7 +4,13 @@
 // a non-engineer should be able to read exactly what the model is told.
 // Bump PROMPT_VERSION on ANY change, then re-run the golden set (CLAUDE.md §8).
 
-export const PROMPT_VERSION = "g1-2026-08-03a";
+export const PROMPT_VERSION = "g1-2026-08-03b";
+
+// The KB-article writer is versioned separately: it is NOT part of the
+// analyse→draft→verify pipeline (same modular stance as the QA coach), so it must
+// not force a PROMPT_VERSION bump — and a golden-set re-run must not be triggered
+// by editing article wording.
+export const ARTICLE_VERSION = "art-2026-08-03a";
 
 export interface SourceDoc {
   ref: string; // stable reference shown to the agent, e.g. "kb:1042"
@@ -434,8 +440,22 @@ export function draftPrompt(input: {
     '  "rationale": "1-2 sentences: why this fits THIS ticket, noting where each fact comes from",',
     '  "coverage": [ { "question": "one of the customer\'s questions", "answered": true } ],',
     '  "follow_up_questions": ["clarifying question(s) to ask; else []"],',
-    '  "bug_guidance": { "repro_steps": ["for the agent; else []"], "customer_steps": ["safe steps; else []"] }',
+    '  "bug_guidance": { "repro_steps": ["for the agent; else []"], "customer_steps": ["safe steps; else []"] },',
+    '  "article_opportunity": { "worth_writing": false, "proposed_title": "the article title, in the ticket language; empty if worth_writing is false", "reason": "one short sentence: why this generalises beyond this customer" }',
     "}",
+    "",
+    "article_opportunity — would a KNOWLEDGE-BASE ARTICLE have answered this ticket?",
+    "Gate 1's root cause is knowledge nobody wrote down, so spotting the gap is part of the job.",
+    "Set worth_writing = true ONLY when ALL of these hold:",
+    "  • the question is GENERAL — another customer will ask it, it is not about this customer's",
+    "    own data, account, invoice, or a one-off incident;",
+    "  • the answer is a STABLE how-to or explanation, not a fast-moving incident status;",
+    "  • the SOURCES did NOT already cover it (if a fitting article exists, the gap is findability,",
+    "    not coverage — say so in reason and set worth_writing = false).",
+    "Set it false for: account-specific requests, sales/pricing, legal questions (those go to Expert),",
+    "anything you could not ground, and anything already covered. Proposing an article you cannot",
+    "ground is worse than proposing none — a wrong article outlives a wrong reply.",
+    "You are only FLAGGING the opportunity here; you are not writing the article.",
     "",
     "coverage: list EVERY customer question; answered=true only if the reply actually resolves it",
     "from the sources/context (a clarifying question does not count as answering).",
@@ -557,5 +577,94 @@ export function verifyPrompt(
     "TICKET CONTEXT:",
     input.context,
   ].join("\n");
+  return { system, user };
+}
+
+// ── 4. KB ARTICLE (on demand, NOT part of the pipeline) ───────────────────────
+// Turns a RESOLVED ticket into a knowledge-base article draft. Deliberately
+// modular, like the QA coach: the pipeline answers a ticket, this writes down
+// what was learned. It runs only when a human asked for it, and only on a
+// resolution a human already stands behind (the agent's sent reply, or a
+// reviewer's gold answer) — never on the AI's own unverified draft. That is the
+// whole safeguard: an article outlives a reply, so it may only encode knowledge a
+// human has already validated.
+export function articlePrompt(input: {
+  subject: string;
+  language: string;
+  context: string;
+  resolution: string;
+  resolutionSource: "gold_answer" | "agent_reply";
+  sources: SourceDoc[];
+  proposedTitle?: string | null;
+}) {
+  const system = [
+    "You write knowledge-base articles for Simployer, a Nordic HR-tech company (payroll, HR",
+    "administration, compensation). You are given ONE resolved support ticket and the RESOLUTION a",
+    "human support agent actually stood behind. Turn it into a reusable help-centre article.",
+    "",
+    "THE ONE HARD RULE: the article may contain NOTHING that is not established by the RESOLUTION,",
+    "the TICKET, or the SOURCES. You have no system access and no product knowledge of your own. Do",
+    "not add steps that 'usually' work, do not complete a half-described procedure, do not invent",
+    "menu names, screenshots, field labels, version numbers, or links. If the resolution is too thin",
+    "to make a correct article, say so via publishable=false — that is a perfectly good outcome and",
+    "far better than a plausible-looking article that sends customers down a wrong path.",
+    "",
+    "GENERALISE, do not transcribe. The article is for the NEXT customer, so:",
+    "  • remove every customer-specific detail — names, e-mail addresses, company names, employee",
+    "    data, ticket numbers, dates, invoice or personnummer-like identifiers. If you cannot",
+    "    generalise a step without inventing the general version, drop the step and lower publishable.",
+    "  • write it as a standalone answer to a general question, not as a reply to this person;",
+    "  • no greetings, no signature, no 'as we discussed'.",
+    "",
+    "STRUCTURE (keep it short — a help-centre article, not a manual):",
+    "  • title:    the question a customer would actually search for, in the ticket language.",
+    "  • summary:  1-2 sentences — what this article solves and who it is for.",
+    "  • steps:    the procedure, one action per item, in order. [] if the answer is not procedural.",
+    "  • notes:    caveats, prerequisites, or 'if this does not work' — only if grounded. [] otherwise.",
+    "",
+    "TONE — the same contract as our customer replies: friendly, professional, clear and",
+    "solution-oriented. Plain words, short sentences, second person ('you'). No apologies (an",
+    "article has nothing to apologise for) and no corporate filler.",
+    "",
+    "Write the whole article in the LANGUAGE given below — the language of the ticket.",
+    "",
+    "Return ONLY a JSON object with exactly this shape:",
+    "{",
+    '  "publishable": true,',
+    '  "title": "the searchable question, in the ticket language",',
+    '  "summary": "1-2 sentences",',
+    '  "steps": ["one action per item, in order; [] if not procedural"],',
+    '  "notes": ["caveats / prerequisites, grounded only; [] if none"],',
+    '  "audience": "customer | agent",',
+    '  "gap_filled": "one sentence: which question this now answers that the KB did not",',
+    '  "not_publishable_reason": "if publishable is false, what is missing to write it correctly; else empty string",',
+    '  "removed_specifics": ["each customer-specific detail you stripped, e.g. \'customer name\', \'invoice number\'; [] if none"]',
+    "}",
+    "",
+    "audience = 'agent' when the resolution relies on internal tooling, an internal routing rule, or",
+    "anything a customer cannot do themselves; 'customer' when the customer can follow it unaided.",
+    "publishable = false whenever the resolution is a one-off, is customer-specific beyond rescue, is",
+    "an incident status rather than a stable answer, or is too vague to reproduce.",
+  ].join("\n");
+
+  const user = [
+    `Subject: ${input.subject}`,
+    `Language: ${input.language} — write the entire article in this language.`,
+    input.proposedTitle ? `Suggested title (from triage, refine it freely): ${input.proposedTitle}` : "",
+    "",
+    input.resolutionSource === "gold_answer"
+      ? "RESOLUTION — an ideal answer written by a senior agent for this ticket (the gold standard):"
+      : "RESOLUTION — what the support agent actually sent to the customer:",
+    input.resolution,
+    "",
+    "FULL TICKET CONTEXT (chronological — for understanding the question, NOT a source of product facts):",
+    input.context,
+    "",
+    "SOURCES (existing knowledge-base articles found for this ticket — do not duplicate what is already covered):",
+    renderSources(input.sources),
+    "",
+    "Write the article now, or set publishable=false if it cannot be written correctly.",
+  ].filter((l) => l !== "").join("\n");
+
   return { system, user };
 }

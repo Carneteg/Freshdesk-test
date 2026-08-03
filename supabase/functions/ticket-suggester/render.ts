@@ -505,6 +505,13 @@ export interface NoteData {
   followUpQuestions?: string[];
   bugGuidance?: BugGuidance;
   promptVersion: string;
+  // Triage flag: would a KB article have answered this? Shown so the agent can ask
+  // for one — the article itself is written by a separate, human-triggered call.
+  articleOpportunity?: {
+    worth_writing: boolean;
+    proposed_title: string;
+    reason: string;
+  };
   searchQueries: string[];
   sources: SourceDoc[];
   qaAnswered: number;
@@ -834,6 +841,20 @@ export function renderNote(r: NoteData): string {
         "<p><strong>Sources:</strong> none found — possible knowledge-base gap.</p>",
       );
     }
+  }
+
+  // Would a KB article have answered this? Gate 1's root cause was knowledge nobody
+  // wrote down, so the gap is worth surfacing where the agent already is. The agent
+  // decides — the article is only written when a human asks for it in the review app.
+  if (r.articleOpportunity?.worth_writing && r.articleOpportunity.proposed_title) {
+    const why = r.articleOpportunity.reason?.trim()
+      ? ` — ${esc(r.articleOpportunity.reason)}`
+      : "";
+    out.push(
+      `<p><strong>📝 Worth a knowledge-base article?</strong> ` +
+        `Suggested title: “${esc(r.articleOpportunity.proposed_title)}”${why}<br>` +
+        `<em>Your call — ask for a draft in the Coach Review app if you agree.</em></p>`,
+    );
   }
 
   if (r.unsupportedNote) out.push(`<p><em>${esc(r.unsupportedNote)}</em></p>`);

@@ -10,6 +10,8 @@ import { learnAccountMap, lookupAccountMap } from "./crm-account-map.ts";
 import {
   analysePrompt,
   ANSWER_STRATEGIES,
+  ARTICLE_VERSION,
+  articlePrompt,
   draftPrompt,
   type GoldExemplar,
   type Incident,
@@ -91,6 +93,14 @@ interface Draft {
   coverage: Coverage[];
   follow_up_questions: string[];
   bug_guidance: BugGuidance;
+  article_opportunity: ArticleOpportunity;
+}
+
+/** Triage flag: would a KB article have answered this ticket? Flagged only, never written here. */
+export interface ArticleOpportunity {
+  worth_writing: boolean;
+  proposed_title: string;
+  reason: string;
 }
 
 interface VerifyClaim {
@@ -233,6 +243,7 @@ export interface Suggestion {
   grounded_in: string;
   grounding_verified: boolean;
   source_refs: string[];
+  article_opportunity: ArticleOpportunity;
   draft: string | null;
   resolution_steps: string[];
   agent_analysis: string | null;
@@ -410,6 +421,14 @@ async function draftReply(
     bug_guidance: {
       repro_steps: strList(j.bug_guidance?.repro_steps),
       customer_steps: strList(j.bug_guidance?.customer_steps),
+    },
+    // A proposal with no title is not a proposal — drop it rather than surface an
+    // empty "worth writing" flag the agent cannot act on.
+    article_opportunity: {
+      worth_writing: j.article_opportunity?.worth_writing === true &&
+        !!str(j.article_opportunity?.proposed_title).trim(),
+      proposed_title: str(j.article_opportunity?.proposed_title),
+      reason: str(j.article_opportunity?.reason),
     },
   };
 }
@@ -752,6 +771,7 @@ export async function runPipeline(
     followUpQuestions: draft.follow_up_questions,
     bugGuidance: draft.bug_guidance,
     promptVersion: effectiveVersion,
+    articleOpportunity: draft.article_opportunity,
     searchQueries: a.search_queries,
     sources,
     qaAnswered,
@@ -786,6 +806,7 @@ export async function runPipeline(
     grounded_in: draft.grounded_in,
     grounding_verified: groundingVerified,
     source_refs: draft.source_refs,
+    article_opportunity: draft.article_opportunity,
     draft: draft.reply || null,
     resolution_steps: draft.resolution_steps,
     agent_analysis: draft.agent_analysis || null,
@@ -927,6 +948,7 @@ export function toRow(
     grounded_in: s.grounded_in,
     grounding_verified: s.grounding_verified,
     source_refs: s.source_refs,
+    article_opportunity: s.article_opportunity,
     draft: s.draft,
     resolution_steps: s.resolution_steps,
     agent_analysis: s.agent_analysis,
@@ -1090,4 +1112,91 @@ export async function reconcileUsage(
     }
   }
   return scored;
+}
+
+// ── KB ARTICLE WRITER (on demand, NOT part of the pipeline) ────────────────────
+//
+// The pipeline answers a ticket; this writes down what was learned so the next
+// customer never has to ask. It is deliberately modular (same stance as the QA
+// coach) and runs ONLY when a human asked for it.
+//
+// The safeguard that matters: it drafts from a resolution a HUMAN already stood
+// behind — a reviewer's gold answer, or the reply the agent actually sent — never
+// from the AI's own unverified draft. An article outlives a reply; encoding a
+// guess into the knowledge base would reproduce the exact Gate 1 failure at scale.
+
+export interface KbArticle {
+  publishable: boolean;
+  title: string;
+  summary: string;
+  steps: string[];
+  notes: string[];
+  audience: string;
+  gap_filled: string;
+  not_publishable_reason: string;
+  removed_specifics: string[];
+  article_version: string;
+  model: string;
+}
+
+/**
+ * Draft a KB article from a resolved ticket. Returns null when there is no
+ * human-validated resolution to work from, or on any failure — writing an article
+ * is an aid, and must never crash the caller.
+ */
+export async function draftKbArticle(
+  deps: Pick<PipelineDeps, "llm" | "model">,
+  input: {
+    subject: string;
+    language: string;
+    context: string;
+    /** A reviewer's ideal answer (preferred) or the agent's sent reply. */
+    resolution: string;
+    resolutionSource: "gold_answer" | "agent_reply";
+    sources: SourceDoc[];
+    proposedTitle?: string | null;
+  },
+): Promise<KbArticle | null> {
+  // No human-validated resolution → nothing we are allowed to generalise from.
+  if (!input.resolution || !input.resolution.trim()) return null;
+
+  try {
+    const { system, user } = articlePrompt({
+      ...input,
+      // Gold answers are rich text from the review app; the model wants prose.
+      resolution: stripHtmlForPrompt(input.resolution),
+    });
+    const out = await deps.llm.complete(system, [{ role: "user", content: user }], {
+      maxTokens: 1600,
+    });
+    const j = extractJSON<Partial<KbArticle>>(out);
+
+    const title = str(j.title).trim();
+    const steps = strList(j.steps);
+    const summary = str(j.summary).trim();
+    // The model proposes publishable; code holds it to the minimum an article needs.
+    // An "article" with no title and no body is not publishable however it self-reports.
+    const hasBody = !!summary || steps.length > 0;
+    const publishable = j.publishable === true && !!title && hasBody;
+
+    return {
+      publishable,
+      title,
+      summary,
+      steps,
+      notes: strList(j.notes),
+      audience: j.audience === "agent" ? "agent" : "customer",
+      gap_filled: str(j.gap_filled),
+      not_publishable_reason: publishable
+        ? ""
+        : str(j.not_publishable_reason) ||
+          (title ? "the draft came back without usable content" : "the draft came back without a title"),
+      removed_specifics: strList(j.removed_specifics),
+      article_version: ARTICLE_VERSION,
+      model: deps.model,
+    };
+  } catch (_e) {
+    // Deliberately no detail: the message could carry ticket text (CLAUDE.md §5).
+    return null;
+  }
 }

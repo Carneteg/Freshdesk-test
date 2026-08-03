@@ -1,5 +1,6 @@
 import { assertEquals } from "./test_assert.ts";
 import { countApologies, stripHtmlForPrompt, verifyGroundingRefs } from "./pipeline.ts";
+import { articlePrompt } from "./prompts.ts";
 
 Deno.test("stripHtmlForPrompt: plain text passes through untouched", () => {
   const text = "Hei!\n\nGå til Innstillinger > Roller.\n\nMvh";
@@ -84,4 +85,41 @@ Deno.test("countApologies: one apology, one count — overlapping phrasings don'
   // "I'm sorry for …" is a single apology, not "I'm sorry" plus "sorry for"
   assertEquals(countApologies("I'm sorry for the delay."), 1);
   assertEquals(countApologies("We are sorry about this."), 1);
+});
+
+// ── KB article opportunity + writer (2026-08-03) ─────────────────────────────
+// The article writer is the one place the AI's output can become durable
+// knowledge, so the gate on "publishable" is enforced in code, not trusted.
+
+Deno.test("articlePrompt: refuses to invent, and is told to generalise", () => {
+  const { system, user } = articlePrompt({
+    subject: "Hvordan legger jeg til en ny ansatt?",
+    language: "no",
+    context: "Kunde: hvordan legger jeg til en ansatt?",
+    resolution: "Gå til Ansatte > Ny ansatt og fyll ut skjemaet.",
+    resolutionSource: "gold_answer",
+    sources: SRC,
+    proposedTitle: "Legge til en ny ansatt",
+  });
+  // the non-negotiable rule must be in the system prompt, not implied
+  assertEquals(system.includes("NOTHING that is not established"), true);
+  assertEquals(system.includes("publishable=false"), true);
+  // customer-specific detail must be stripped, not transcribed
+  assertEquals(system.includes("remove every customer-specific detail"), true);
+  // the resolution must be labelled as human-validated, so the model knows its status
+  assertEquals(user.includes("written by a senior agent"), true);
+  assertEquals(user.includes("Legge til en ny ansatt"), true);
+});
+
+Deno.test("articlePrompt: an agent's sent reply is labelled differently to a gold answer", () => {
+  const { user } = articlePrompt({
+    subject: "s",
+    language: "sv",
+    context: "c",
+    resolution: "r",
+    resolutionSource: "agent_reply",
+    sources: [],
+  });
+  assertEquals(user.includes("what the support agent actually sent"), true);
+  assertEquals(user.includes("written by a senior agent"), false);
 });

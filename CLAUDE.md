@@ -556,6 +556,47 @@ the KB actually covers** — plus a tone contract.
   against `g1-2026-07-29a`; historical rows have `grounding_verified` NULL and are
   deliberately not back-filled.
 
+**Tickets → KB articles: closing the knowledge loop (2026-08-03, `g1-2026-08-03b`).**
+Per Tobias: the AI should also judge whether a ticket is worth turning into an
+article, and the agent should be able to say "yes, write it" and have it saved.
+This attacks the Gate 1 root cause directly — the gap was never the model, it was
+operational knowledge nobody wrote down (§12 coach pivot). The flow, and who
+decides what:
+
+1. the pipeline **flags** a ticket whose answer would generalise
+   (`article_opportunity` on the draft call → shown in the private note);
+2. a **reviewer** asks for it in the Coach Review app (`request_kb_article`);
+3. `deno task write-articles` **drafts** it (`articlePrompt` / `draftKbArticle`);
+4. the **reviewer** edits and approves it (`review_kb_article`).
+
+Steps 2 and 4 are human. The AI proposes and drafts; it never decides that
+something becomes knowledge.
+
+- **The safeguard that matters:** an article is only ever generalised from a
+  resolution a HUMAN stood behind — a reviewer's `gold_answer`, or the reply the
+  agent actually sent (`agent_sent_reply`) — **never** from the AI's own draft.
+  `article_write_queue` enforces this: a request without such a resolution simply
+  waits. An article outlives a reply, so encoding a guess would reproduce the
+  Gate 1 failure at scale.
+- The writer must **generalise, not transcribe**: every customer-specific detail
+  is stripped and listed in `removed_specifics` (an article that silently kept a
+  customer name is a data-protection problem, not a style one). It may answer
+  `publishable=false` — "this cannot be written correctly" is a good outcome, and
+  code holds it to that (no title / no body ⇒ not publishable, whatever it claims).
+- **Versioned separately** (`ARTICLE_VERSION`) and kept OUT of the
+  analyse→draft→verify pipeline, same modular stance as the QA coach — editing
+  article wording must not force a golden-set re-run.
+- **DELIBERATELY NOT DONE — publishing to Freshdesk.** Approved articles are
+  stored in `approved_articles` for a human to paste into the help centre. Writing
+  to Freshdesk's solutions API would be a **third external write** and would widen
+  the security review that §3 keeps narrow (today: the private note + ≤3 tags).
+  That is a decision to take explicitly, not a side effect. Ask before building it.
+- Measure with `article_funnel` (AI proposals → human requests → approvals). A low
+  approve-rate means the `article_opportunity` rules in `prompts.ts` are too loose —
+  tighten them rather than asking agents to filter. Migration 40.
+- PROMPT_VERSION bumped to `g1-2026-08-03b` (the draft call gained a field). Free
+  at the time: nothing had been replayed on `…03a` yet.
+
 **P0 reliability hardening (2026-07-28).** A technical review found three risks
 that outrank further prompt work: mutable evaluation rows, duplicate Freshdesk
 notes after an uncertain POST/database failure, and missed tickets from the old
