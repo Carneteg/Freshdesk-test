@@ -519,6 +519,43 @@ baseline are untouched. Deferred in §4: richer incident model (4.2) and active 
 detection (4.3, partly blocked by Freshdesk's no-free-text-search); source hierarchy (4.1)
 already largely lives in `prompts.ts`.
 
+**Narrowed to KB-covered how-to + explicit tone rules (2026-08-03, `g1-2026-08-03a`).**
+Per Tobias, after the confidence analysis: broad accuracy is capped (strict usable
+40.7 %, n=54 → 95 % CI ≈ [28 %, 54 %], straddling the 50 % gate; and 4 of the first
+15 judged 🟢 REPLY_READY notes were unusable). Rather than tune prompts against a
+knowledge gap, the target narrows to **the band the AI can own: how-to questions
+the KB actually covers** — plus a tone contract.
+
+- **Grounding is now cross-checked in code.** The draft call reports `grounded_in`
+  (kb | playbook | ticket | none) and `source_refs`; `verifyGroundingRefs`
+  (`pipeline.ts`) requires every cited ref to resolve to a source we actually
+  supplied or to a matched playbook entry by position (`P2`). `deriveCoachMode`
+  then demands that verification before an **asserting** strategy (DIRECT_ANSWER /
+  PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS) can be REPLY_READY. An **asking** strategy
+  (clarify / request a detail) asserts no product fact and stays eligible without a
+  source. Same stance as the QA validator: the model proposes, TypeScript decides —
+  a draft can no longer talk itself into the green band over an empty source list.
+- **Tone contract:** friendly, professional, clear, solution-oriented — and
+  **at most ONE apology per reply** (specific, near the start, only when we
+  genuinely failed; none at all when we did not). `countApologies` flags a repeat
+  offender in the note; it deliberately does **not** lower confidence, because a
+  tone signal must not move the grounding metric this version exists to sharpen.
+- **Measure it with `kb_howto_scorecard`** (usable-% on how-to + verified
+  grounding) **read beside `kb_howto_coverage`** — a usable-% that rose while
+  `grounded_pct` fell means the gate got stricter, not the answers better.
+  `grounding_claim_audit` shows where the model's self-reported grounding failed
+  the cross-check. Migration 39.
+- **Open question the live data raised:** is `howto` the right population? Judged
+  verdicts by type today — question 29 judged / 58.6 % usable, howto 8 judged /
+  25 % usable but **zero unusable**, bug 30 judged / 26.7 % usable. So how-to is the
+  *safe* band, not the strongest strict band, and at 13 generations it is thin;
+  `question` scores better strictly. `grounded_scorecard_by_type` keeps that
+  comparison live so widening to question+howto is decided on the new version's
+  data, not the old mixed baseline. **Do not widen it silently.**
+- PROMPT_VERSION bumped → the golden set must be **re-replayed** before comparing
+  against `g1-2026-07-29a`; historical rows have `grounding_verified` NULL and are
+  deliberately not back-filled.
+
 **P0 reliability hardening (2026-07-28).** A technical review found three risks
 that outrank further prompt work: mutable evaluation rows, duplicate Freshdesk
 notes after an uncertain POST/database failure, and missed tickets from the old

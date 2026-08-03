@@ -36,6 +36,7 @@ Deno.test("deriveCoachMode: three-way classification (Fas 3.1)", () => {
     requiresManualCheck: false,
     sensitiveActionRequest: false,
     resolutionStepCount: 0,
+    groundingVerified: true,
   };
   // 🟢 grounded, high-confidence, send-ready strategies
   assertEquals(deriveCoachMode(base), "REPLY_READY");
@@ -43,8 +44,13 @@ Deno.test("deriveCoachMode: three-way classification (Fas 3.1)", () => {
     deriveCoachMode({ ...base, answerStrategy: "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS" }),
     "REPLY_READY",
   );
+  // an ASKING strategy asserts no product fact, so it needs no source
   assertEquals(
-    deriveCoachMode({ ...base, answerStrategy: "REQUEST_MISSING_INFORMATION" }),
+    deriveCoachMode({
+      ...base,
+      answerStrategy: "REQUEST_MISSING_INFORMATION",
+      groundingVerified: false,
+    }),
     "REPLY_READY",
   );
   // 🔴 agent must act first — beats REPLY_READY even with a reply present
@@ -70,6 +76,20 @@ Deno.test("deriveCoachMode: three-way classification (Fas 3.1)", () => {
   );
   // 🟡 in between: low confidence, routing (agent forwards), or empty abstain
   assertEquals(deriveCoachMode({ ...base, confidence: "low" }), "COACH_AGENT");
+  // 🟡 the 2026-08-03 narrowing: an ASSERTING answer with no verified source is
+  // coaching, not a send-ready reply — however confident the model sounded.
+  assertEquals(
+    deriveCoachMode({ ...base, groundingVerified: false }),
+    "COACH_AGENT",
+  );
+  assertEquals(
+    deriveCoachMode({
+      ...base,
+      answerStrategy: "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS",
+      groundingVerified: undefined,
+    }),
+    "COACH_AGENT",
+  );
   assertEquals(deriveCoachMode({ ...base, answerStrategy: "ROUTE" }), "COACH_AGENT");
   assertEquals(
     deriveCoachMode({

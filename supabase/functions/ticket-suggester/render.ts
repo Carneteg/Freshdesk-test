@@ -573,6 +573,12 @@ export function deriveCoachMode(s: {
   requiresManualCheck: boolean;
   sensitiveActionRequest: boolean;
   resolutionStepCount: number;
+  /**
+   * Did the reply's assertions actually resolve to a source we handed the model
+   * (2026-08-03)? Verified in code (`verifyGroundingRefs`), never taken on the
+   * model's word. Only gates the two ASSERTING strategies — see below.
+   */
+  groundingVerified?: boolean;
 }): CoachMode {
   // 🔴 the agent must DO something before anything can reach the customer: check the
   // system / roles, verify identity for a sensitive action, open an attachment
@@ -586,11 +592,20 @@ export function deriveCoachMode(s: {
   ) return "AGENT_ACTION_REQUIRED";
 
   // 🟢 a grounded, send-ready customer message with no open agent action.
-  const sendReadyStrategy = s.answerStrategy === "DIRECT_ANSWER" ||
-    s.answerStrategy === "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS" ||
-    s.answerStrategy === "REPEAT_CLARIFYING_QUESTION" ||
+  //
+  // Narrowed 2026-08-03: the green band is for KB-COVERED answers. A reply that
+  // ASSERTS how the product works only qualifies when its refs actually resolved to
+  // a retrieved source or a matched playbook incident — 4 of the first 15 judged
+  // REPLY_READY notes were unusable, and the failure was always an assertion the KB
+  // never backed. A reply that merely ASKS (clarify / request a detail) asserts no
+  // product fact, so it stays eligible without a source.
+  const assertingStrategy = s.answerStrategy === "DIRECT_ANSWER" ||
+    s.answerStrategy === "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS";
+  const askingStrategy = s.answerStrategy === "REPEAT_CLARIFYING_QUESTION" ||
     s.answerStrategy === "REQUEST_MISSING_INFORMATION";
-  if (s.hasReply && s.confidence === "high" && sendReadyStrategy) return "REPLY_READY";
+  const sendReady = askingStrategy ||
+    (assertingStrategy && s.groundingVerified === true);
+  if (s.hasReply && s.confidence === "high" && sendReady) return "REPLY_READY";
 
   // 🟡 otherwise: useful coaching / a hedged direction, but not send-ready as-is
   // (e.g. a routing message the agent must forward, or a low-confidence draft).
