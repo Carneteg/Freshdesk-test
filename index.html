@@ -124,6 +124,28 @@
   .crmverdict{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
   .crmhint{flex:1 1 240px;min-width:200px;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--ink)}
   .crmverdict .btn.sel{outline:2px solid var(--accent)}
+  /* KB article panel — the "write this down" loop (2026-08-03) */
+  .arthidden{display:none}
+  .artbox{margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface-2)}
+  .arthead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .artprop{font-size:13.5px;margin:2px 0}
+  .artwhy{font-size:12.5px;color:var(--ink-3);margin:2px 0}
+  .artblocked{font-size:13px;color:var(--crit);margin:4px 0}
+  .arttitle,.artsum,.artsteps{width:100%;box-sizing:border-box;margin-top:6px;font-size:13.5px;
+    padding:6px 8px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--ink)}
+  .artsum,.artsteps{font-family:inherit;resize:vertical}
+  .card.art .arthead{margin-bottom:8px}
+  .artlab{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin-top:10px}
+  .arttrace{margin-top:10px;font-size:12.5px}
+  .arttrace summary{cursor:pointer;color:var(--ink-2)}
+  .tlink{font-family:var(--mono);font-size:12.5px;color:var(--accent);text-decoration:none}
+  .tlink:hover{text-decoration:underline}
+  .artbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .artbox .st{font-size:12px;color:var(--ink-3);margin-left:8px}
+  .tag.a-approved{background:var(--good-soft);color:var(--good)}
+  .tag.a-drafted{background:var(--accent-soft);color:var(--accent)}
+  .tag.a-requested{background:var(--surface-2);color:var(--ink-3)}
+  .tag.a-rejected,.tag.a-failed{background:var(--crit-soft);color:var(--crit)}
   .goldedit p,.goldedit div{margin:0}
 
   .goldbar{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}
@@ -203,14 +225,16 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-07-31b-crm-feedback";
+var APP_VERSION = "v2026-08-03b-article-tab";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
 var rows = [], tab = "todo", token = null, refreshToken = null, meEmail = null;
 
 // Columns fetched for each suggestion (used by loadData AND single-row reloads).
-var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,prompt_version,created_at";
+var articlesByTicket = {};   // ticket_id -> the article row, for the per-card panel
+var articles = [];           // every article, for the Articles tab (article_library)
+var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,article_opportunity,prompt_version,created_at";
 
 // Why an edited/unusable reply fell short — slug + Swedish label (CLAUDE.md / plan 1.3).
 var REASONS = [
@@ -373,6 +397,7 @@ async function loadData() {
     // hide reviewer-flagged spam (is_spam) and any auto-reply noise the ingest missed
     rows = all.filter(function (r) { return !r.is_spam && !isSpam(r.subject); });
     await loadHoldout(); // best-effort; enables the holdout progress + filter
+    await loadArticles(); // best-effort; drives the KB-article panel on each card
     var deep = (window.location.hash || "").match(/^#generation=(\d+)$/);
     if (deep) { search = deep[1]; tab = "all"; }
     render();
@@ -413,6 +438,25 @@ async function loadHoldout() {
     for (var i = 0; i < (data || []).length; i++) holdoutIds[data[i].ticket_id] = 1;
   } catch (e) { /* holdout features simply won't show */ }
 }
+// KB article drafts, keyed by ticket. Best-effort: RLS lets an allowlisted
+// reviewer read them, and a failure here must never stop the review list loading.
+async function loadArticles() {
+  articlesByTicket = {}; articles = [];
+  try {
+    // article_library carries the provenance the tab exists to show: which ticket,
+    // which human-validated resolution, who asked, who signed off.
+    var res = await api("/rest/v1/article_library?select=*&limit=1000");
+    if (!res.ok) return;
+    var data = await res.json();
+    articles = Array.isArray(data) ? data : [];
+    articles.forEach(function (a) {
+      a.steps = a.steps || []; a.notes = a.notes || [];
+      a.removed_specifics = a.removed_specifics || [];
+      articlesByTicket[a.ticket_id] = a;
+    });
+  } catch (_e) { /* best-effort */ }
+}
+
 function hasHoldout() { for (var k in holdoutIds) return true; return false; }
 
 // Which rows belong to the current tab (before search/filter/sort).
@@ -441,14 +485,19 @@ function render() {
   bar.appendChild(tabEl("todo", "To review", tabCount("todo")));
   bar.appendChild(tabEl("done", "Judged", tabCount("done")));
   bar.appendChild(tabEl("rewrite", "Rewrite", tabCount("rewrite")));
+  bar.appendChild(tabEl("articles", "📝 Artiklar", articles.length));
   bar.appendChild(tabEl("all", "All", rows.length));
   var c = el("div", "count"); c.id = "loadcount"; c.textContent = rows.length + " loaded";
   bar.appendChild(c);
   app.appendChild(bar);
   document.getElementById("out").onclick = signOut;
 
-  app.appendChild(controlsEl());
-  app.appendChild(progressEl());
+  if (tab !== "articles") {
+    app.appendChild(controlsEl());
+    app.appendChild(progressEl());
+  } else {
+    app.appendChild(articleControlsEl());
+  }
   var lw = el("div"); lw.id = "listwrap"; app.appendChild(lw);
   renderList();
 }
@@ -523,6 +572,7 @@ function progressEl() {
 // renderList() rebuilds ONLY the card list, applying search + filters + sort on top
 // of the active tab. Called on every keystroke/filter change; leaves controls intact.
 function renderList() {
+  if (tab === "articles") return renderArticleList();
   var base = tabRows();
   var q = search.trim().toLowerCase();
   shown = base.filter(function (r) {
@@ -850,6 +900,7 @@ function cardEl(r) {
   };
   rp.appendChild(other);
   card.appendChild(rp);
+  card.appendChild(articlePanel(r));
   card._reasonsPanel = rp; card._panelVisible = panelVisible;
   if (critical) card.classList.add("critical");
   return card;
@@ -1333,6 +1384,353 @@ function crmVerdictRow(r) {
   if (r.crm_account_correct) st.textContent = "sparat";
   return row;
 }
+// ── Articles tab (2026-08-03) ───────────────────────────────────────────────
+//
+// Approved articles are NOT published to Freshdesk — that would be a third
+// external write and a wider security review (CLAUDE.md §3). Instead they live
+// here, findable and editable, with their whole provenance attached: which ticket
+// they came from, which human-validated resolution they were generalised from,
+// who asked for them and who signed off.
+var fArtStatus = "";
+
+function articleControlsEl() {
+  var box = el("div", "controls");
+  var counts = {};
+  articles.forEach(function (a) { counts[a.status] = (counts[a.status] || 0) + 1; });
+  var opts = ["drafted", "requested", "approved", "rejected", "failed"]
+    .filter(function (st) { return counts[st]; })
+    .map(function (st) { return [st, (ART_LABEL[st] || st) + " (" + counts[st] + ")"]; });
+  box.appendChild(selectEl("Alla statusar", opts, fArtStatus, function (v) {
+    fArtStatus = v; renderList();
+  }));
+
+  var inp = document.createElement("input");
+  inp.type = "search"; inp.className = "search";
+  inp.placeholder = "Sök rubrik, ticket eller ämne…";
+  inp.setAttribute("aria-label", "Search articles");
+  inp.value = search;
+  inp.oninput = function () { search = inp.value; renderList(); };
+  box.appendChild(inp);
+  return box;
+}
+
+function renderArticleList() {
+  var q = search.trim().toLowerCase();
+  var list = articles.filter(function (a) {
+    if (fArtStatus && a.status !== fArtStatus) return false;
+    if (!q) return true;
+    var hay = (String(a.ticket_id) + " " + (a.title || "") + " " + (a.proposed_title || "") +
+      " " + (a.ticket_subject || "") + " " + (a.summary || "")).toLowerCase();
+    return hay.indexOf(q) >= 0;
+  });
+
+  var lw = document.getElementById("listwrap");
+  lw.innerHTML = "";
+  cardEls = []; activeIdx = -1;
+  if (!list.length) {
+    var e = el("div", "empty");
+    e.textContent = articles.length
+      ? "Inga artiklar matchar."
+      : "Inga artiklar än. Be om en från ett ärende i granskningslistan — " +
+        "AI:n föreslår, men det är du som bestämmer att något blir kunskap.";
+    lw.appendChild(e);
+    return;
+  }
+  list.forEach(function (a) {
+    var card = articleCardEl(a);
+    cardEls.push(card); lw.appendChild(card);
+  });
+}
+
+function articleCardEl(a) {
+  var card = el("div", "card art");
+
+  var head = el("div", "arthead");
+  head.appendChild(tag(ART_LABEL[a.status] || a.status, "a-" + a.status));
+  if (a.language) head.appendChild(tag(a.language));
+  if (a.audience) head.appendChild(tag(a.audience === "agent" ? "för agent" : "för kund"));
+  var link = document.createElement("a");
+  link.className = "tlink";
+  link.href = a.ticket_url || "#";
+  link.target = "_blank"; link.rel = "noopener";
+  link.textContent = "#" + a.ticket_id;
+  head.appendChild(link);
+  if (a.ticket_subject) head.appendChild(set(el("span", "artwhy"), a.ticket_subject));
+  card.appendChild(head);
+
+  if (a.status === "requested") {
+    card.appendChild(set(el("div", "artprop"),
+      "Förslag: ”" + (a.proposed_title || "(ingen rubrik)") + "”"));
+    if (a.proposed_reason) card.appendChild(set(el("div", "artwhy"), a.proposed_reason));
+    card.appendChild(set(el("div", "artwhy"),
+      "I kö — artikeln skrivs vid nästa körning av write-articles."));
+    card.appendChild(articleTrace(a));
+    return card;
+  }
+  if (a.publishable === false || a.status === "failed") {
+    card.appendChild(set(el("div", "artblocked"),
+      "Kunde inte skrivas: " + (a.blocked_reason || "okänd orsak")));
+    card.appendChild(set(el("div", "artwhy"),
+      "Det är ett giltigt utfall — hellre ingen artikel än en som gissar."));
+    card.appendChild(articleTrace(a));
+    return card;
+  }
+
+  var titleIn = document.createElement("input");
+  titleIn.type = "text"; titleIn.className = "arttitle";
+  titleIn.setAttribute("aria-label", "Rubrik, artikel " + a.article_id);
+  titleIn.value = a.title || "";
+  card.appendChild(titleIn);
+
+  card.appendChild(set(el("div", "artlab"), "Sammanfattning"));
+  var summaryIn = document.createElement("textarea");
+  summaryIn.className = "artsum"; summaryIn.rows = 2;
+  summaryIn.setAttribute("aria-label", "Sammanfattning, artikel " + a.article_id);
+  summaryIn.value = a.summary || "";
+  card.appendChild(summaryIn);
+
+  card.appendChild(set(el("div", "artlab"), "Steg (ett per rad)"));
+  var stepsIn = document.createElement("textarea");
+  stepsIn.className = "artsteps"; stepsIn.rows = 5;
+  stepsIn.setAttribute("aria-label", "Steg, artikel " + a.article_id);
+  stepsIn.value = (a.steps || []).join("\n");
+  card.appendChild(stepsIn);
+
+  card.appendChild(set(el("div", "artlab"), "Noteringar (ett per rad)"));
+  var notesIn = document.createElement("textarea");
+  notesIn.className = "artsteps"; notesIn.rows = 3;
+  notesIn.setAttribute("aria-label", "Noteringar, artikel " + a.article_id);
+  notesIn.value = (a.notes || []).join("\n");
+  card.appendChild(notesIn);
+
+  var st = el("span", "st"); st.setAttribute("aria-live", "polite");
+  var btns = el("div", "artbtns");
+
+  function lines(ta) {
+    return ta.value.split("\n").map(function (x) { return x.trim(); })
+      .filter(function (x) { return x; });
+  }
+  // status null = "just save my edits" — the RPC then leaves the status and the
+  // approver stamp alone, so fixing a typo on an approved article cannot silently
+  // unapprove it or overwrite who signed off.
+  async function save(status) {
+    st.textContent = "Sparar…";
+    try {
+      var res = await api("/rest/v1/rpc/review_kb_article", {
+        method: "POST",
+        body: JSON.stringify({
+          p_article_id: a.article_id,
+          p_status: status || null,
+          p_title: titleIn.value.trim(),
+          p_summary: summaryIn.value.trim(),
+          p_steps: lines(stepsIn),
+          p_notes: lines(notesIn),
+        }),
+      });
+      if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
+      var out = await res.json(), saved = out && out[0];
+      a.title = titleIn.value.trim(); a.summary = summaryIn.value.trim();
+      a.steps = lines(stepsIn); a.notes = lines(notesIn);
+      if (saved) {
+        a.status = saved.status;
+        a.reviewed_by = saved.reviewed_by; a.reviewed_at = saved.reviewed_at;
+        a.updated_at = saved.updated_at;
+      }
+      st.textContent = status === "approved" ? "godkänd — klar att publiceras för hand"
+        : status === "rejected" ? "avvisad" : "sparat";
+      render();
+    } catch (e) { st.textContent = "kunde inte spara: " + e.message; }
+  }
+
+  function button(label, cls, fn) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "btn small" + (cls ? " " + cls : "");
+    b.textContent = label; b.onclick = fn; btns.appendChild(b);
+  }
+  // "Spara" keeps the article where it is — editing an approved article must not
+  // unapprove it, nor rewrite who approved it (the RPC only stamps on a decision).
+  button("Spara", "", function () { save(null); });
+  if (a.status !== "approved") button("Godkänn", "sel", function () { save("approved"); });
+  if (a.status !== "rejected") button("Avvisa", "", function () { save("rejected"); });
+  card.appendChild(btns);
+  card.appendChild(st);
+  card.appendChild(articleTrace(a));
+  return card;
+}
+
+// The traceability line. An article outlives the ticket it came from, so where it
+// came from has to travel with it.
+function articleTrace(a) {
+  var d = document.createElement("details");
+  d.className = "arttrace";
+  var sum = document.createElement("summary");
+  sum.textContent = "Ursprung och historik";
+  d.appendChild(sum);
+  var body = el("div", "qabody");
+
+  function line(label, value) {
+    if (!value) return;
+    var row = el("div", "qarow");
+    row.appendChild(set(el("span", "qn"), label));
+    row.appendChild(set(el("span", "qr"), String(value)));
+    body.appendChild(row);
+  }
+  line("Ärende", "#" + a.ticket_id + (a.ticket_subject ? " — " + a.ticket_subject : ""));
+  line(
+    "Skriven utifrån",
+    a.resolution_source === "gold_answer"
+      ? "en granskares idealsvar (guldstandard)"
+      : a.resolution_source === "agent_reply"
+      ? "svaret agenten faktiskt skickade"
+      : "",
+  );
+  line("AI:ns förslag", a.proposed_title);
+  line("Varför", a.proposed_reason || a.gap_filled);
+  line("Borttagna kunduppgifter",
+    (a.removed_specifics || []).length ? a.removed_specifics.join(", ") : "");
+  line("Begärd av", a.requested_by + (a.requested_at ? " · " + fmtDate(a.requested_at) : ""));
+  line("Utkast skrivet", a.drafted_at ? fmtDate(a.drafted_at) : "");
+  line("Beslut", a.reviewed_by ? a.reviewed_by + " · " + fmtDate(a.reviewed_at) : "");
+  line("Senast ändrad", a.updated_at ? fmtDate(a.updated_at) : "");
+  line("Version", [a.article_version, a.model].filter(Boolean).join(" · "));
+  d.appendChild(body);
+  return d;
+}
+
+function fmtDate(iso) {
+  try { return new Date(iso).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" }); }
+  catch (_e) { return iso; }
+}
+
+// ── KB article (2026-08-03) ─────────────────────────────────────────────────
+//
+// Gate 1's root cause was knowledge nobody wrote down, so the loop closes here:
+// the AI FLAGS a ticket whose answer would generalise, the reviewer decides, and
+// a separate job drafts the article from a resolution a HUMAN stood behind (an
+// ideal answer, or the reply that was actually sent) — never from the AI's own
+// draft. Nothing is published anywhere; approved articles are exported for a
+// human to paste into the help centre.
+function articlePanel(r) {
+  var opp = r.article_opportunity || {};
+  var proposed = opp.worth_writing === true && opp.proposed_title;
+  var existing = articlesByTicket[r.ticket_id];
+
+  // Nothing to show unless the AI proposed one or somebody already asked — the
+  // reviewer's screen is for judging replies first.
+  if (!proposed && !existing) return el("div", "arthidden");
+
+  var box = el("div", "artbox");
+  var head = el("div", "arthead");
+  head.appendChild(set(el("span", "sl"), "📝 Kunskapsartikel"));
+  if (existing) head.appendChild(tag(ART_LABEL[existing.status] || existing.status, "a-" + existing.status));
+  box.appendChild(head);
+
+  if (proposed && !existing) {
+    box.appendChild(set(el("div", "artprop"), "Förslag: \u201d" + opp.proposed_title + "\u201d"));
+    if (opp.reason) box.appendChild(set(el("div", "artwhy"), opp.reason));
+  }
+
+  var st = el("span", "st"); st.setAttribute("aria-live", "polite");
+
+  // The drafted article, if the writer has run. Editable — the reviewer's words win.
+  var titleIn, summaryIn, stepsIn;
+  if (existing && existing.status !== "requested") {
+    if (existing.publishable === false) {
+      box.appendChild(set(el("div", "artblocked"),
+        "Kunde inte skrivas: " + (existing.blocked_reason || "okänd orsak")));
+    } else {
+      titleIn = document.createElement("input");
+      titleIn.type = "text"; titleIn.className = "arttitle";
+      titleIn.setAttribute("aria-label", "Artikelrubrik för ticket " + r.ticket_id);
+      titleIn.value = existing.title || "";
+      box.appendChild(titleIn);
+
+      summaryIn = document.createElement("textarea");
+      summaryIn.className = "artsum"; summaryIn.rows = 2;
+      summaryIn.setAttribute("aria-label", "Artikelsammanfattning för ticket " + r.ticket_id);
+      summaryIn.value = existing.summary || "";
+      box.appendChild(summaryIn);
+
+      stepsIn = document.createElement("textarea");
+      stepsIn.className = "artsteps"; stepsIn.rows = 4;
+      stepsIn.placeholder = "Ett steg per rad";
+      stepsIn.setAttribute("aria-label", "Artikelsteg för ticket " + r.ticket_id);
+      stepsIn.value = (existing.steps || []).join("\n");
+      box.appendChild(stepsIn);
+
+      // What the writer says it stripped. Shown because an article that silently
+      // kept a customer name is a data-protection problem, not a style one.
+      if ((existing.removed_specifics || []).length) {
+        box.appendChild(set(el("div", "artwhy"),
+          "Borttagna kunduppgifter: " + existing.removed_specifics.join(", ")));
+      }
+    }
+  }
+
+  var btns = el("div", "artbtns");
+  function button(label, cls, fn) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "btn small" + (cls ? " " + cls : "");
+    b.textContent = label; b.onclick = fn; btns.appendChild(b); return b;
+  }
+
+  if (!existing || existing.status === "rejected" || existing.status === "failed") {
+    button("Skriv en artikel av detta", "", async function () {
+      st.textContent = "Sparar…";
+      try {
+        var res = await api("/rest/v1/rpc/request_kb_article", {
+          method: "POST",
+          body: JSON.stringify({ p_ticket_id: r.ticket_id, p_generation_id: r.id }),
+        });
+        if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
+        var out = await res.json(), saved = out && out[0];
+        if (saved) {
+          var row = { article_id: saved.article_id, ticket_id: r.ticket_id, status: saved.status,
+                      steps: [], notes: [], removed_specifics: [] };
+          articlesByTicket[r.ticket_id] = row; articles.unshift(row);
+        }
+        st.textContent = "i kö — artikeln skrivs vid nästa körning";
+        btns.innerHTML = "";
+      } catch (e) { st.textContent = "kunde inte spara: " + e.message; }
+    });
+  } else if (existing.status === "drafted" && existing.publishable !== false) {
+    async function review(status) {
+      st.textContent = "Sparar…";
+      try {
+        var body = { p_article_id: existing.article_id, p_status: status };
+        if (status === "approved") {
+          body.p_title = titleIn ? titleIn.value.trim() : null;
+          body.p_summary = summaryIn ? summaryIn.value.trim() : null;
+          body.p_steps = stepsIn
+            ? stepsIn.value.split("\n").map(function (x) { return x.trim(); })
+                .filter(function (x) { return x; })
+            : null;
+        }
+        var res = await api("/rest/v1/rpc/review_kb_article", {
+          method: "POST", body: JSON.stringify(body),
+        });
+        if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
+        existing.status = status;
+        st.textContent = status === "approved" ? "godkänd — klar att publiceras" : "avvisad";
+        btns.innerHTML = "";
+      } catch (e) { st.textContent = "kunde inte spara: " + e.message; }
+    }
+    button("Godkänn", "sel", function () { review("approved"); });
+    button("Avvisa", "", function () { review("rejected"); });
+  } else if (existing.status === "requested") {
+    box.appendChild(set(el("div", "artwhy"), "I kö — artikeln skrivs vid nästa körning."));
+  }
+
+  box.appendChild(btns);
+  box.appendChild(st);
+  return box;
+}
+
+var ART_LABEL = {
+  requested: "i kö", drafted: "utkast klart", approved: "godkänd",
+  rejected: "avvisad", failed: "misslyckades",
+};
+
 // QA score → colour band: red < 60, amber 60-74, green 75+ (or red if flagged).
 function qaCls(score, needsReview) {
   return (needsReview || score < 60) ? "bad" : score < 75 ? "c-low" : "c-high";
