@@ -31,6 +31,7 @@ See:
 - `docs/SECURITY.md`
 - `docs/EVALUATION.md`
 - `docs/OPERATIONS.md`
+- `docs/kb-articles-guide.md` — for agents: turning solved tickets into KB articles
 
 ## Reliability model
 
