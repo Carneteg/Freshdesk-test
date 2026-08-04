@@ -267,7 +267,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-04a-coaching-tab";
+var APP_VERSION = "v2026-08-04b-freshdesk-baselines";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -1519,13 +1519,15 @@ function renderCoaching() {
   var stamp = coach.baselines.length ? fmtDate(coach.baselines[0].computed_at) : "—";
   wrap.appendChild(sectionEl(
     "Baselines",
-    "Locked from history before the first coaching run, so a later change has something to be " +
-    "compared against. Computed once and stored — a baseline that moves is not a baseline. " +
-    "Computed " + stamp + ".",
+    "Measured on the tickets the AI actually coaches, then locked — so a later change has " +
+    "something fair to be compared against. Computed once and stored; a baseline that moves is " +
+    "not a baseline. Computed " + stamp + ".",
     "measured", "c-meas"));
   var bt = el("div", "ctiles");
   if (!coach.baselines.length) {
-    bt.appendChild(set(el("div", "chint"), "No baselines stored."));
+    bt.appendChild(set(el("div", "chint"),
+      "No baselines stored. Run `deno task measure-baselines` to measure them from the " +
+      "coached tickets and lock them."));
   }
   coach.baselines.forEach(function (b) {
     var v = b.unit === "%" ? b.value + "%" : b.unit === "h" ? b.value + " h" : String(b.value);
@@ -1536,10 +1538,11 @@ function renderCoaching() {
   // ── 2. Delivery timing ────────────────────────────────────────────────────
   wrap.appendChild(sectionEl(
     "Did the note arrive in time?",
-    "A note is only useful if it is there before the agent starts writing. The bar is the " +
-    "historical distribution of time to first agent reply; the counter underneath is measured " +
-    "from our own notes. A late note is a DELIVERY failure, not a bad suggestion — counted " +
-    "apart so the model is not blamed for advice nobody saw."));
+    "A note is only useful if it is there before the agent starts writing. The bar is how long " +
+    "the first agent reply actually takes on coached tickets — it sets the deadline the note " +
+    "has to beat. The counter underneath is measured from our own notes. A late note is a " +
+    "DELIVERY failure, not a bad suggestion — counted apart so the model is not blamed for " +
+    "advice nobody saw."));
   var timing = el("div", "ctiming");
   if (coach.dist.length) {
     var bar = el("div", "cbar");
@@ -1618,7 +1621,8 @@ function renderCoaching() {
 
   var foot = el("p", "cfoot");
   foot.innerHTML =
-    "Baselines are measured from history and locked. Follow-through and delivery are computed " +
+    "Baselines are measured on the coached tickets and locked (<code>deno task " +
+    "measure-baselines</code>). Follow-through and delivery are computed " +
     "by <code>deno task observe-coaching</code>, which reads Freshdesk and writes only to this " +
     "database. Nothing on this tab writes to any connected system, and no scheduler is enabled.";
   wrap.appendChild(foot);
