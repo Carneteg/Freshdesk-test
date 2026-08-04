@@ -632,6 +632,39 @@ should be findable in the code by its own name.
   space on it. Anything measuring "did we document this for customers" must look
   at the Freshdesk help centre, not Confluence.
 
+**Intercom dropped; baselines re-measured on the coached population (2026-08-04).**
+Per Tobias: no Intercom. The four locked baselines had come from it and
+reproduced exactly against the live API (2209 conversations in 2026, 243
+reopened = 11.0 %, 775 slow first replies = 35.1 %, against the spec's 11.1 % /
+35.2 % at n=2198 — the drift being new conversations, which is the argument for
+locking). They were still the **wrong numbers**: Intercom is a different support
+channel. The pipeline watches Freshdesk, those conversations arrive through
+`onesupport.simployer.com`, and no record links the two (`ticket` null and
+`linked_objects` empty on every record probed). Measuring coaching on Freshdesk
+tickets against an Intercom population compares two different things and calls
+the difference a result.
+
+- Baselines are now measured on **the tickets the AI actually coaches**
+  (`scripts/measure_baselines.ts`, `deno task measure-baselines`), from the one
+  `ticketWithConversations` read the observer already makes — so measuring costs
+  no new API surface. Dry-run by default; `BASELINE_APPLY=true` locks them.
+- **Named for what they measure.** Freshdesk exposes no reopen counter, so there
+  is no "reopen rate": the metric is `customer_returned_rate` — a customer wrote
+  again AFTER the first public agent reply, i.e. the answer did not land first
+  time. Likewise `median_ticket_span_h` is creation-to-last-message and is
+  labelled a PROXY, because the true `resolved_at` needs `?include=stats` which
+  this codebase does not fetch.
+- `intercom.ts` was **deleted**, not left dormant — dead code implies a
+  capability we have decided against. The §11 content gate went with it: it
+  existed to guard Intercom conversation text, and a switch guarding nothing is
+  worse than none. Reinstate it (default off, one variable, named for what it
+  asserts) if a new source of customer text is ever added.
+- Dropping Intercom also closes the open DPA item and removes a source of
+  customer PII the project had no need to hold.
+- The live `coaching_baselines` / `coaching_reply_distribution` rows were cleared
+  rather than left beside the new numbers looking equivalent; the tab now says so
+  until the measurement is run.
+
 **P0 reliability hardening (2026-07-28).** A technical review found three risks
 that outrank further prompt work: mutable evaluation rows, duplicate Freshdesk
 notes after an uncertain POST/database failure, and missed tickets from the old

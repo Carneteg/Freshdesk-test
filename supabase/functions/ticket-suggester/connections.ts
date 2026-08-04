@@ -12,13 +12,21 @@
 // Adding a system here does NOT grant it: it declares which env vars would grant
 // it. No secret value is ever read, logged or exported — only whether it is set.
 
+// INTERCOM WAS REMOVED (2026-08-04), deliberately rather than left dormant.
+// Its four baselines reproduced exactly against the live API, but Intercom is a
+// DIFFERENT support channel from the one the AI coaches: our pipeline watches
+// Freshdesk, those conversations arrive through onesupport.simployer.com, and no
+// record links the two. Measuring coaching performance on Freshdesk against an
+// Intercom population was never a fair comparison, so the baselines are now
+// measured on the coached tickets themselves (scripts/measure_baselines.ts).
+// Dropping it also removes a source of customer PII we had no need to hold.
+
 /** Every external system the coaching observer may read from. */
 export const SYSTEMS = [
   "freshdesk",
   "supabase",
   "jira",
   "confluence",
-  "intercom",
   "linear",
   "planhat",
 ] as const;
@@ -42,7 +50,6 @@ export const REQUIRED_ENV: Record<SystemName, string[]> = {
   // account e-mail differ per product install, so each is declared separately.
   jira: ["ATLASSIAN_SITE", "ATLASSIAN_EMAIL", "ATLASSIAN_API_TOKEN"],
   confluence: ["ATLASSIAN_SITE", "ATLASSIAN_EMAIL", "ATLASSIAN_API_TOKEN"],
-  intercom: ["INTERCOM_ACCESS_TOKEN"],
   linear: [],
   planhat: [],
 };
@@ -53,7 +60,6 @@ export const NOT_CONNECTED_REASON: Record<SystemName, string> = {
   supabase: "Supabase credentials are not set",
   jira: "no Atlassian credentials in this environment",
   confluence: "no Atlassian credentials in this environment",
-  intercom: "no Intercom access token in this environment",
   linear: "no Linear client exists in this codebase",
   planhat: "no Planhat client exists in this codebase",
 };
@@ -106,35 +112,21 @@ export function isConnected(system: SystemName, env: EnvLookup = denoEnv): boole
   return systemStatus(system, env).connected;
 }
 
-// ── The content gate (CLAUDE.md §11) ─────────────────────────────────────────
+// ── Why there is no content gate any more ────────────────────────────────────
 //
-// Reading a new source is one decision; STORING its customer content in Supabase
-// is a different and larger one. §11 is a standing rule: the DPA position on any
-// NEW data source must be confirmed by legal before real customer text is sent
-// or stored, and until then the instruction is to flag rather than proceed.
+// A gate lived here guarding the storage of Intercom conversation CONTENT, since
+// §11 forbids putting a NEW source's customer text in Supabase before legal has
+// cleared it. Intercom has since been dropped (see below), so the gate had no
+// subject left to guard and a switch that guards nothing is worse than none — it
+// implies a control exists.
 //
-// Intercom conversations are exactly that. So content storage is opt-in, off by
-// default, and gated on an explicit variable whose name states what it asserts.
-// Signal-only observation (timestamps, ids, booleans) needs no such gate — it
-// stores no personal data and rides on the existing clearance.
-
-export const CONTENT_GATE_ENV = "INTERCOM_CONTENT_DPA_CLEARED";
-
-/**
- * May we store conversation CONTENT (message bodies, customer text) from a new
- * source? False unless someone has explicitly asserted legal clearance.
- *
- * Deliberately not a general "debug" or "verbose" flag: it means one thing, and
- * turning it on is a claim a person is making on the record.
- */
-export function contentStorageAllowed(env: EnvLookup = denoEnv): boolean {
-  return (env(CONTENT_GATE_ENV) ?? "").toLowerCase() === "true";
-}
+// If a new source of customer text is ever added, reinstate it: default off, one
+// variable, named for what it asserts, so switching it on is a claim a person
+// makes on the record.
 
 /** One line for logs/CLI describing what this deployment can see. */
 export function describeConnections(env: EnvLookup = denoEnv): string {
   const on = allStatuses(env).filter((s) => s.connected).map((s) => s.system);
   const off = allStatuses(env).filter((s) => !s.connected).map((s) => s.system);
-  return `connected: ${on.join(", ") || "(none)"} · not connected: ${off.join(", ") || "(none)"}` +
-    ` · content storage: ${contentStorageAllowed(env) ? "ALLOWED" : "blocked (no DPA assertion)"}`;
+  return `connected: ${on.join(", ") || "(none)"} · not connected: ${off.join(", ") || "(none)"}`;
 }

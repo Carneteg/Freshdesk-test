@@ -8,7 +8,10 @@ import {
   INTERNAL_CHECK_BUDGET,
   STEP_SIGNAL,
   stepObservable,
+  median,
+  replyBucket,
   STEP_TYPES,
+  ticketMetrics,
   unobservableShare,
 } from "./coaching.ts";
 import {
@@ -20,13 +23,7 @@ import {
 } from "./readonly-clients.ts";
 import { Freshdesk } from "./clients.ts";
 import { escapeJql, issueLinksTicket, plainText, ReadOnlyAtlassian } from "./atlassian.ts";
-import { buildQuery, ReadOnlyIntercom } from "./intercom.ts";
-import {
-  CONTENT_GATE_ENV,
-  contentStorageAllowed,
-  describeConnections,
-  systemStatus,
-} from "./connections.ts";
+import { describeConnections, systemStatus } from "./connections.ts";
 
 // ── ACCEPTANCE CRITERION 7 ───────────────────────────────────────────────────
 // "A test proves no write method on any external client is reachable from this
@@ -248,9 +245,6 @@ Deno.test("deriveDeliveryStatus: late is a delivery failure, not a bad suggestio
 // ── Connection registry + the content gate (CLAUDE.md §11) ───────────────────
 
 Deno.test("systemStatus: connected only when EVERY credential is present", () => {
-  assertEquals(systemStatus("intercom", NO_CREDS).connected, false);
-  assertEquals(systemStatus("intercom", () => "tok").connected, true);
-
   // Atlassian needs three; two is not "mostly connected", it is not connected.
   const two = (n: string) => (n === "ATLASSIAN_SITE" || n === "ATLASSIAN_EMAIL" ? "x" : undefined);
   const st = systemStatus("jira", two);
@@ -270,27 +264,13 @@ Deno.test("systemStatus: a system with no client can never be connected", () => 
 });
 
 Deno.test("systemStatus: blank and whitespace-only credentials do not count", () => {
-  assertEquals(systemStatus("intercom", () => "").connected, false);
-  assertEquals(systemStatus("intercom", () => "   ").connected, false);
-});
-
-Deno.test("content gate: storing customer content is OFF unless explicitly asserted", () => {
-  // §11 is a standing rule — a NEW data source may not have its customer content
-  // stored until legal has cleared it. Default-off is the whole point.
-  assertEquals(contentStorageAllowed(NO_CREDS), false);
-  assertEquals(contentStorageAllowed(ALL_CREDS), false); // a random truthy env is not consent
-  assertEquals(contentStorageAllowed(() => "false"), false);
-  assertEquals(contentStorageAllowed(() => "yes"), false); // only the exact assertion counts
-  assertEquals(
-    contentStorageAllowed((n) => (n === CONTENT_GATE_ENV ? "true" : undefined)),
-    true,
-  );
+  assertEquals(systemStatus("freshdesk", () => "").connected, false);
+  assertEquals(systemStatus("freshdesk", () => "   ").connected, false);
 });
 
 Deno.test("describeConnections: reports state without leaking a secret", () => {
-  const line = describeConnections((n) => (n === "INTERCOM_ACCESS_TOKEN" ? "super-secret" : undefined));
-  assertStringIncludes(line, "intercom");
-  assertStringIncludes(line, "blocked");
+  const line = describeConnections((n) => (n === "FRESHDESK_API_KEY" ? "super-secret" : undefined));
+  assertStringIncludes(line, "freshdesk");
   assertEquals(line.includes("super-secret"), false);
 });
 
@@ -350,30 +330,9 @@ Deno.test("escapeJql: a value cannot break out of the quoted literal", () => {
   assertEquals(escapeJql("back\\slash"), "back\\\\slash");
 });
 
-// ── Intercom: query shape, verified against the live API ─────────────────────
-
-Deno.test("buildQuery: single filter stays flat, several become AND", () => {
-  assertEquals(buildQuery([["created_at", ">", 100]]), {
-    field: "created_at",
-    operator: ">",
-    value: 100,
-  });
-  assertEquals(
-    buildQuery([["created_at", ">", 100], ["statistics.count_reopens", ">", 0]]),
-    {
-      operator: "AND",
-      value: [
-        { field: "created_at", operator: ">", value: 100 },
-        { field: "statistics.count_reopens", operator: ">", value: 0 },
-      ],
-    },
-  );
-});
-
-Deno.test("read-only guard: the new Atlassian and Intercom clients expose no writes", () => {
+Deno.test("read-only guard: the Atlassian client exposes no writes", () => {
   const clients: Array<[string, object]> = [
     ["ReadOnlyAtlassian", new ReadOnlyAtlassian("example.atlassian.net", "a@b.c", "tok")],
-    ["ReadOnlyIntercom", new ReadOnlyIntercom("tok")],
   ];
   for (const [label, client] of clients) {
     assertEquals(exposesWriteMethod(client), null, `${label} must expose no write method`);
@@ -444,4 +403,89 @@ Deno.test("evaluateObservation: routing reads the Freshdesk group name", () => {
   );
   // No group on the ticket at all → we cannot say it moved.
   assertEquals(evaluateObservation("escalate", { groupName: null }, ALL_CREDS).observed, false);
+});
+
+// ── Baselines measured on the COACHED population ─────────────────────────────
+// These replaced the Intercom baselines. Intercom's numbers were correct but
+// described a different support channel, so they could never be a fair
+// comparison for coaching done on Freshdesk tickets.
+
+const T0 = "2026-08-01T09:00:00Z";
+const conv = (mins: number, incoming: boolean, priv = false) => ({
+  id: mins,
+  body_text: "x",
+  incoming,
+  private: priv,
+  created_at: new Date(Date.parse(T0) + mins * 60_000).toISOString(),
+});
+
+Deno.test("ticketMetrics: first reply, reply count and span", () => {
+  const m = ticketMetrics({
+    created_at: T0,
+    conversations: [
+      conv(5, true), // customer follow-up
+      conv(30, false), // FIRST public agent reply
+      conv(90, false), // second agent reply
+      conv(20, false, true), // our own AI note — private, must not count
+    ],
+  });
+  assertEquals(m.firstReplySeconds, 30 * 60);
+  assertEquals(m.agentReplies, 2); // the private note is excluded
+  assertEquals(m.spanSeconds, 90 * 60);
+});
+
+Deno.test("ticketMetrics: 'customer came back' means AFTER the first agent reply", () => {
+  // A customer message BEFORE any agent reply is just the original conversation.
+  assertEquals(
+    ticketMetrics({ created_at: T0, conversations: [conv(5, true), conv(30, false)] })
+      .customerReturned,
+    false,
+  );
+  // After the first reply, the answer did not land — that is the signal.
+  assertEquals(
+    ticketMetrics({ created_at: T0, conversations: [conv(30, false), conv(60, true)] })
+      .customerReturned,
+    true,
+  );
+  // No agent reply at all: nothing to have come back from.
+  assertEquals(
+    ticketMetrics({ created_at: T0, conversations: [conv(5, true)] }).customerReturned,
+    false,
+  );
+});
+
+Deno.test("ticketMetrics: missing data yields null, never a fabricated zero", () => {
+  const empty = ticketMetrics({ created_at: T0, conversations: [] });
+  assertEquals(empty.firstReplySeconds, null);
+  assertEquals(empty.agentReplies, 0);
+  assertEquals(empty.customerReturned, false);
+  // No created_at → the wait cannot be computed, and must not read as instant.
+  assertEquals(ticketMetrics({ conversations: [conv(30, false)] }).firstReplySeconds, null);
+});
+
+Deno.test("ticketMetrics: clock skew does not produce a negative wait", () => {
+  const m = ticketMetrics({
+    created_at: T0,
+    conversations: [conv(-10, false)], // reply stamped before the ticket
+  });
+  assertEquals(m.firstReplySeconds, 0);
+});
+
+Deno.test("replyBucket: boundaries land in the lower bucket", () => {
+  assertEquals(replyBucket(0), "under_60s");
+  assertEquals(replyBucket(59), "under_60s");
+  assertEquals(replyBucket(60), "1_5min");
+  assertEquals(replyBucket(299), "1_5min");
+  assertEquals(replyBucket(300), "5_15min");
+  assertEquals(replyBucket(900), "over_15min");
+  assertEquals(replyBucket(86_400), "over_15min");
+});
+
+Deno.test("median: odd, even and empty samples", () => {
+  // Median not mean — support response times are long-tailed, and one ticket
+  // left open over a weekend would drag an average somewhere meaningless.
+  assertEquals(median([5, 1, 3]), 3);
+  assertEquals(median([1, 2, 3, 4]), 3); // rounded midpoint of 2 and 3
+  assertEquals(median([]), null);
+  assertEquals(median([42]), 42);
 });
