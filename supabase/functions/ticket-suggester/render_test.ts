@@ -36,6 +36,7 @@ Deno.test("deriveCoachMode: three-way classification (Fas 3.1)", () => {
     requiresManualCheck: false,
     sensitiveActionRequest: false,
     resolutionStepCount: 0,
+    groundingVerified: true,
   };
   // 🟢 grounded, high-confidence, send-ready strategies
   assertEquals(deriveCoachMode(base), "REPLY_READY");
@@ -43,8 +44,13 @@ Deno.test("deriveCoachMode: three-way classification (Fas 3.1)", () => {
     deriveCoachMode({ ...base, answerStrategy: "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS" }),
     "REPLY_READY",
   );
+  // an ASKING strategy asserts no product fact, so it needs no source
   assertEquals(
-    deriveCoachMode({ ...base, answerStrategy: "REQUEST_MISSING_INFORMATION" }),
+    deriveCoachMode({
+      ...base,
+      answerStrategy: "REQUEST_MISSING_INFORMATION",
+      groundingVerified: false,
+    }),
     "REPLY_READY",
   );
   // 🔴 agent must act first — beats REPLY_READY even with a reply present
@@ -70,6 +76,20 @@ Deno.test("deriveCoachMode: three-way classification (Fas 3.1)", () => {
   );
   // 🟡 in between: low confidence, routing (agent forwards), or empty abstain
   assertEquals(deriveCoachMode({ ...base, confidence: "low" }), "COACH_AGENT");
+  // 🟡 the 2026-08-03 narrowing: an ASSERTING answer with no verified source is
+  // coaching, not a send-ready reply — however confident the model sounded.
+  assertEquals(
+    deriveCoachMode({ ...base, groundingVerified: false }),
+    "COACH_AGENT",
+  );
+  assertEquals(
+    deriveCoachMode({
+      ...base,
+      answerStrategy: "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS",
+      groundingVerified: undefined,
+    }),
+    "COACH_AGENT",
+  );
   assertEquals(deriveCoachMode({ ...base, answerStrategy: "ROUTE" }), "COACH_AGENT");
   assertEquals(
     deriveCoachMode({
@@ -1116,4 +1136,45 @@ Deno.test("renderNote: non-sensitive direct answer omits the manual-verify banne
   });
   assertStringIncludes(html, "Direct answer");
   assertEquals(html.includes("Verify manually"), false);
+});
+
+Deno.test("renderNote: a proposed KB article is surfaced, and only when proposed", () => {
+  const base = {
+    confidence: "high" as const,
+    draft: "Gå til Innstillinger.",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 1,
+    qaTotal: 1,
+  };
+  const shown = renderNote({
+    ...base,
+    articleOpportunity: {
+      worth_writing: true,
+      proposed_title: "Legge til en ny ansatt",
+      reason: "asked by many customers",
+    },
+  });
+  assertEquals(shown.includes("Worth a knowledge-base article?"), true);
+  assertEquals(shown.includes("Legge til en ny ansatt"), true);
+  // the agent decides — the note must not imply the article already exists
+  assertEquals(shown.includes("Your call"), true);
+
+  // not flagged → no nudge at all; the note is for judging the reply first
+  assertEquals(
+    renderNote({ ...base, articleOpportunity: { worth_writing: false, proposed_title: "", reason: "" } })
+      .includes("Worth a knowledge-base article?"),
+    false,
+  );
+  assertEquals(renderNote(base).includes("Worth a knowledge-base article?"), false);
+
+  // worth_writing with no title is not a usable proposal — suppress it
+  assertEquals(
+    renderNote({
+      ...base,
+      articleOpportunity: { worth_writing: true, proposed_title: "", reason: "x" },
+    }).includes("Worth a knowledge-base article?"),
+    false,
+  );
 });

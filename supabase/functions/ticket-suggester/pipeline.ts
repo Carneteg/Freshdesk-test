@@ -10,6 +10,8 @@ import { learnAccountMap, lookupAccountMap } from "./crm-account-map.ts";
 import {
   analysePrompt,
   ANSWER_STRATEGIES,
+  ARTICLE_VERSION,
+  articlePrompt,
   draftPrompt,
   type GoldExemplar,
   type Incident,
@@ -77,6 +79,10 @@ interface Draft {
   answer_strategy: string;
   confidence: Confidence;
   confidence_reason: string;
+  // What the reply's ASSERTIONS rest on, as the model reports it, plus the refs it
+  // claims to have used. Both are cross-checked in code before they mean anything.
+  grounded_in: string;
+  source_refs: string[];
   reply: string;
   resolution_steps: string[];
   required_customer_steps: string[];
@@ -87,6 +93,14 @@ interface Draft {
   coverage: Coverage[];
   follow_up_questions: string[];
   bug_guidance: BugGuidance;
+  article_opportunity: ArticleOpportunity;
+}
+
+/** Triage flag: would a KB article have answered this ticket? Flagged only, never written here. */
+export interface ArticleOpportunity {
+  worth_writing: boolean;
+  proposed_title: string;
+  reason: string;
 }
 
 interface VerifyClaim {
@@ -103,6 +117,54 @@ interface VerifyResult {
 }
 
 const TICKET_TYPES = ["question", "howto", "bug", "unclear"];
+const GROUNDING_KINDS = ["kb", "playbook", "ticket", "none"];
+
+/**
+ * Does the reply's own grounding claim actually hold up?
+ *
+ * The model reports `grounded_in` + `source_refs`; this decides whether that claim
+ * is *possible* given what retrieval really returned. A ref must resolve to a
+ * source we actually handed it (`kb:1042`, `ticket:85703`) or to a playbook entry
+ * by position (`P2`). Same stance as the QA validator and `deriveCoachMode`: the
+ * model proposes, TypeScript decides — a draft cannot talk itself into the green
+ * band by asserting "kb" over an empty source list.
+ */
+export function verifyGroundingRefs(
+  groundedIn: string,
+  refs: string[],
+  sources: SourceDoc[],
+  incidentCount: number,
+): boolean {
+  if (groundedIn !== "kb" && groundedIn !== "playbook" && groundedIn !== "ticket") return false;
+  const known = new Set(sources.map((s) => s.ref.toLowerCase()));
+  const resolved = refs
+    .map((r) => r.trim().toLowerCase())
+    .filter((r) => {
+      if (known.has(r)) return true;
+      const p = /^p(\d+)$/.exec(r);
+      return !!p && Number(p[1]) >= 1 && Number(p[1]) <= incidentCount;
+    });
+  return resolved.length > 0;
+}
+
+// Apology phrasings per supported language, as ONE alternation so a single
+// apology is counted once: "I'm sorry for the delay" must not score twice for
+// "I'm sorry" and "sorry for". Longer forms therefore come first — the regex
+// engine takes the first alternative that matches at a position and advances past
+// it. Deliberately narrow: these are the phrasings that actually recur in the
+// drafts, not every possible word of regret.
+const APOLOGY_RE =
+  /\b(?:i(?:'m| am) sorry|we(?:'re| are) sorry|sorry (?:for|about|that|again)|apologi[sz]e|beklager|lei for|unnskyld|ursäkt\w*|ledsen|förlåt)\b/gi;
+
+/**
+ * Count apologies in a reply. One is allowed and often right (a real service
+ * failure); several read as insecure and bury the answer. Tone is flagged for the
+ * agent, never used to lower confidence — mixing a tone signal into the grounding
+ * metric would blur exactly the number this version exists to sharpen.
+ */
+export function countApologies(reply: string): number {
+  return reply.match(APOLOGY_RE)?.length ?? 0;
+}
 
 function strList(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
@@ -178,6 +240,10 @@ export interface Suggestion {
   confidence: Confidence;
   coach_mode: CoachMode;
   confidence_reason: string | null;
+  grounded_in: string;
+  grounding_verified: boolean;
+  source_refs: string[];
+  article_opportunity: ArticleOpportunity;
   draft: string | null;
   resolution_steps: string[];
   agent_analysis: string | null;
@@ -267,6 +333,9 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
         title: s.title ?? "(untitled)",
         text: body.slice(0, 1500),
         url: deps.fd.articleUrl(s.id),
+        // Same article, customer view. The title drives the slug, matching the
+        // confirmed form `{id}-{slug}` — see Freshdesk.portalArticleUrl.
+        publicUrl: deps.fd.portalArticleUrl(s.id, { title: s.title ?? undefined }),
       });
       if (docs.length >= 6) return docs;
     }
@@ -336,6 +405,8 @@ async function draftReply(
     answer_strategy: strategy,
     confidence,
     confidence_reason: str(j.confidence_reason),
+    grounded_in: GROUNDING_KINDS.includes(j.grounded_in ?? "") ? j.grounded_in! : "none",
+    source_refs: strList(j.source_refs),
     reply: str(j.reply),
     resolution_steps: strList(j.resolution_steps),
     required_customer_steps: strList(j.required_customer_steps),
@@ -353,6 +424,14 @@ async function draftReply(
     bug_guidance: {
       repro_steps: strList(j.bug_guidance?.repro_steps),
       customer_steps: strList(j.bug_guidance?.customer_steps),
+    },
+    // A proposal with no title is not a proposal — drop it rather than surface an
+    // empty "worth writing" flag the agent cannot act on.
+    article_opportunity: {
+      worth_writing: j.article_opportunity?.worth_writing === true &&
+        !!str(j.article_opportunity?.proposed_title).trim(),
+      proposed_title: str(j.article_opportunity?.proposed_title),
+      reason: str(j.article_opportunity?.reason),
     },
   };
 }
@@ -632,6 +711,17 @@ export async function runPipeline(
     draft = { ...draft, reply: stripSignaturePlaceholders(draft.reply) };
   }
 
+  // Tone guard: one apology is fine, several bury the answer. Flagged for the agent,
+  // never demoted — tone is not a grounding failure and must not move that metric.
+  const apologies = draft.reply ? countApologies(draft.reply) : 0;
+  if (apologies > 1) {
+    unsupportedNote = [
+      unsupportedNote,
+      `✏️ Tone: the reply apologises ${apologies} times — keep the first, specific apology and ` +
+      `delete the rest before sending.`,
+    ].filter(Boolean).join(" ");
+  }
+
   const qaTotal = draft.coverage.length || a.questions_asked.length;
   // A reply that isn't send-ready (missing a required step) answers nothing yet —
   // this fixes the Q/A=1/1 that hid the missing action (QA feedback #85844).
@@ -646,6 +736,15 @@ export async function runPipeline(
     system_messages: a.system_messages,
   };
 
+  // Does the reply's grounding claim survive a cross-check against what retrieval
+  // actually returned? The green band now requires this for asserting strategies.
+  const groundingVerified = verifyGroundingRefs(
+    draft.grounded_in,
+    draft.source_refs,
+    sources,
+    (deps.incidents ?? []).length,
+  );
+
   // Fas 3.1: classify into REPLY_READY / COACH_AGENT / AGENT_ACTION_REQUIRED,
   // deterministically from the now-resolved signals (after every verify gate).
   const coachMode: CoachMode = deriveCoachMode({
@@ -655,6 +754,7 @@ export async function runPipeline(
     requiresManualCheck: draft.requires_manual_system_check,
     sensitiveActionRequest: a.sensitive_action_request,
     resolutionStepCount: draft.resolution_steps.length,
+    groundingVerified,
   });
 
   const resolvedCustomerSubscriptions = await customerSubscriptions;
@@ -674,6 +774,7 @@ export async function runPipeline(
     followUpQuestions: draft.follow_up_questions,
     bugGuidance: draft.bug_guidance,
     promptVersion: effectiveVersion,
+    articleOpportunity: draft.article_opportunity,
     searchQueries: a.search_queries,
     sources,
     qaAnswered,
@@ -705,6 +806,10 @@ export async function runPipeline(
     confidence: draft.confidence,
     coach_mode: coachMode,
     confidence_reason: draft.confidence_reason || null,
+    grounded_in: draft.grounded_in,
+    grounding_verified: groundingVerified,
+    source_refs: draft.source_refs,
+    article_opportunity: draft.article_opportunity,
     draft: draft.reply || null,
     resolution_steps: draft.resolution_steps,
     agent_analysis: draft.agent_analysis || null,
@@ -843,6 +948,10 @@ export function toRow(
     confidence: s.confidence,
     coach_mode: s.coach_mode,
     confidence_reason: s.confidence_reason,
+    grounded_in: s.grounded_in,
+    grounding_verified: s.grounding_verified,
+    source_refs: s.source_refs,
+    article_opportunity: s.article_opportunity,
     draft: s.draft,
     resolution_steps: s.resolution_steps,
     agent_analysis: s.agent_analysis,
@@ -1006,4 +1115,91 @@ export async function reconcileUsage(
     }
   }
   return scored;
+}
+
+// ── KB ARTICLE WRITER (on demand, NOT part of the pipeline) ────────────────────
+//
+// The pipeline answers a ticket; this writes down what was learned so the next
+// customer never has to ask. It is deliberately modular (same stance as the QA
+// coach) and runs ONLY when a human asked for it.
+//
+// The safeguard that matters: it drafts from a resolution a HUMAN already stood
+// behind — a reviewer's gold answer, or the reply the agent actually sent — never
+// from the AI's own unverified draft. An article outlives a reply; encoding a
+// guess into the knowledge base would reproduce the exact Gate 1 failure at scale.
+
+export interface KbArticle {
+  publishable: boolean;
+  title: string;
+  summary: string;
+  steps: string[];
+  notes: string[];
+  audience: string;
+  gap_filled: string;
+  not_publishable_reason: string;
+  removed_specifics: string[];
+  article_version: string;
+  model: string;
+}
+
+/**
+ * Draft a KB article from a resolved ticket. Returns null when there is no
+ * human-validated resolution to work from, or on any failure — writing an article
+ * is an aid, and must never crash the caller.
+ */
+export async function draftKbArticle(
+  deps: Pick<PipelineDeps, "llm" | "model">,
+  input: {
+    subject: string;
+    language: string;
+    context: string;
+    /** A reviewer's ideal answer (preferred) or the agent's sent reply. */
+    resolution: string;
+    resolutionSource: "gold_answer" | "agent_reply";
+    sources: SourceDoc[];
+    proposedTitle?: string | null;
+  },
+): Promise<KbArticle | null> {
+  // No human-validated resolution → nothing we are allowed to generalise from.
+  if (!input.resolution || !input.resolution.trim()) return null;
+
+  try {
+    const { system, user } = articlePrompt({
+      ...input,
+      // Gold answers are rich text from the review app; the model wants prose.
+      resolution: stripHtmlForPrompt(input.resolution),
+    });
+    const out = await deps.llm.complete(system, [{ role: "user", content: user }], {
+      maxTokens: 1600,
+    });
+    const j = extractJSON<Partial<KbArticle>>(out);
+
+    const title = str(j.title).trim();
+    const steps = strList(j.steps);
+    const summary = str(j.summary).trim();
+    // The model proposes publishable; code holds it to the minimum an article needs.
+    // An "article" with no title and no body is not publishable however it self-reports.
+    const hasBody = !!summary || steps.length > 0;
+    const publishable = j.publishable === true && !!title && hasBody;
+
+    return {
+      publishable,
+      title,
+      summary,
+      steps,
+      notes: strList(j.notes),
+      audience: j.audience === "agent" ? "agent" : "customer",
+      gap_filled: str(j.gap_filled),
+      not_publishable_reason: publishable
+        ? ""
+        : str(j.not_publishable_reason) ||
+          (title ? "the draft came back without usable content" : "the draft came back without a title"),
+      removed_specifics: strList(j.removed_specifics),
+      article_version: ARTICLE_VERSION,
+      model: deps.model,
+    };
+  } catch (_e) {
+    // Deliberately no detail: the message could carry ticket text (CLAUDE.md §5).
+    return null;
+  }
 }

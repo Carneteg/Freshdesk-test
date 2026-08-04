@@ -519,6 +519,119 @@ baseline are untouched. Deferred in §4: richer incident model (4.2) and active 
 detection (4.3, partly blocked by Freshdesk's no-free-text-search); source hierarchy (4.1)
 already largely lives in `prompts.ts`.
 
+**Narrowed to KB-covered how-to + explicit tone rules (2026-08-03, `g1-2026-08-03a`).**
+Per Tobias, after the confidence analysis: broad accuracy is capped (strict usable
+40.7 %, n=54 → 95 % CI ≈ [28 %, 54 %], straddling the 50 % gate; and 4 of the first
+15 judged 🟢 REPLY_READY notes were unusable). Rather than tune prompts against a
+knowledge gap, the target narrows to **the band the AI can own: how-to questions
+the KB actually covers** — plus a tone contract.
+
+- **Grounding is now cross-checked in code.** The draft call reports `grounded_in`
+  (kb | playbook | ticket | none) and `source_refs`; `verifyGroundingRefs`
+  (`pipeline.ts`) requires every cited ref to resolve to a source we actually
+  supplied or to a matched playbook entry by position (`P2`). `deriveCoachMode`
+  then demands that verification before an **asserting** strategy (DIRECT_ANSWER /
+  PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS) can be REPLY_READY. An **asking** strategy
+  (clarify / request a detail) asserts no product fact and stays eligible without a
+  source. Same stance as the QA validator: the model proposes, TypeScript decides —
+  a draft can no longer talk itself into the green band over an empty source list.
+- **Tone contract:** friendly, professional, clear, solution-oriented — and
+  **at most ONE apology per reply** (specific, near the start, only when we
+  genuinely failed; none at all when we did not). `countApologies` flags a repeat
+  offender in the note; it deliberately does **not** lower confidence, because a
+  tone signal must not move the grounding metric this version exists to sharpen.
+- **Measure it with `kb_howto_scorecard`** (usable-% on how-to + verified
+  grounding) **read beside `kb_howto_coverage`** — a usable-% that rose while
+  `grounded_pct` fell means the gate got stricter, not the answers better.
+  `grounding_claim_audit` shows where the model's self-reported grounding failed
+  the cross-check. Migration 39.
+- **Open question the live data raised:** is `howto` the right population? Judged
+  verdicts by type today — question 29 judged / 58.6 % usable, howto 8 judged /
+  25 % usable but **zero unusable**, bug 30 judged / 26.7 % usable. So how-to is the
+  *safe* band, not the strongest strict band, and at 13 generations it is thin;
+  `question` scores better strictly. `grounded_scorecard_by_type` keeps that
+  comparison live so widening to question+howto is decided on the new version's
+  data, not the old mixed baseline. **Do not widen it silently.**
+- PROMPT_VERSION bumped → the golden set must be **re-replayed** before comparing
+  against `g1-2026-07-29a`; historical rows have `grounding_verified` NULL and are
+  deliberately not back-filled.
+
+**Tickets → KB articles: closing the knowledge loop (2026-08-03, `g1-2026-08-03b`).**
+Per Tobias: the AI should also judge whether a ticket is worth turning into an
+article, and the agent should be able to say "yes, write it" and have it saved.
+This attacks the Gate 1 root cause directly — the gap was never the model, it was
+operational knowledge nobody wrote down (§12 coach pivot). The flow, and who
+decides what:
+
+1. the pipeline **flags** a ticket whose answer would generalise
+   (`article_opportunity` on the draft call → shown in the private note);
+2. a **reviewer** asks for it in the Coach Review app (`request_kb_article`);
+3. `deno task write-articles` **drafts** it (`articlePrompt` / `draftKbArticle`);
+4. the **reviewer** edits and approves it (`review_kb_article`).
+
+Steps 2 and 4 are human. The AI proposes and drafts; it never decides that
+something becomes knowledge.
+
+- **The safeguard that matters:** an article is only ever generalised from a
+  resolution a HUMAN stood behind — a reviewer's `gold_answer`, or the reply the
+  agent actually sent (`agent_sent_reply`) — **never** from the AI's own draft.
+  `article_write_queue` enforces this: a request without such a resolution simply
+  waits. An article outlives a reply, so encoding a guess would reproduce the
+  Gate 1 failure at scale.
+- The writer must **generalise, not transcribe**: every customer-specific detail
+  is stripped and listed in `removed_specifics` (an article that silently kept a
+  customer name is a data-protection problem, not a style one). It may answer
+  `publishable=false` — "this cannot be written correctly" is a good outcome, and
+  code holds it to that (no title / no body ⇒ not publishable, whatever it claims).
+- **Versioned separately** (`ARTICLE_VERSION`) and kept OUT of the
+  analyse→draft→verify pipeline, same modular stance as the QA coach — editing
+  article wording must not force a golden-set re-run.
+- **DELIBERATELY NOT DONE — publishing to Freshdesk.** Approved articles are
+  stored in `approved_articles` for a human to paste into the help centre. Writing
+  to Freshdesk's solutions API would be a **third external write** and would widen
+  the security review that §3 keeps narrow (today: the private note + ≤3 tags).
+  That is a decision to take explicitly, not a side effect. Ask before building it.
+- Measure with `article_funnel` (AI proposals → human requests → approvals). A low
+  approve-rate means the `article_opportunity` rules in `prompts.ts` are too loose —
+  tighten them rather than asking agents to filter. Migration 40.
+- PROMPT_VERSION bumped to `g1-2026-08-03b` (the draft call gained a field). Free
+  at the time: nothing had been replayed on `…03a` yet.
+
+**The customer knowledge base is a named source (2026-08-04).** Per Tobias:
+`https://simployer.freshdesk.com/en/support/home` — Simployer's Freshdesk help
+centre — is **the** knowledge base customers read, and it is the same corpus
+`searchSolutions` (`/search/solutions`) already retrieves from. It was implicit
+inside a search call; it is now named, because a source the pipeline grounds on
+should be findable in the code by its own name.
+
+- **Two URLs per article, not interchangeable.** `Freshdesk.articleUrl()` →
+  `/a/solutions/articles/{id}` is the AGENT view behind the login (right for a
+  private note). `Freshdesk.portalArticleUrl()` → `/{locale}/support/solutions/
+  articles/{id}` is the CUSTOMER view — the link an agent can actually paste into
+  a reply. Notes now carry both ("send to customer"), because converting one into
+  the other by hand is the small friction that stops links being sent at all.
+- **CONFIRMED (2026-08-04)** against a real article supplied by Tobias:
+  `…/en/support/solutions/articles/201000115133-expert-invoice`. So the path
+  carries a **slug after the id** — the bare `/articles/{id}` form assumed before
+  that URL arrived was **wrong**. The slug is derived from the article title
+  (`slugify`, which transliterates æ/ø/å rather than dropping them, since the KB
+  is largely Norwegian and Swedish). Freshdesk resolves an article from the
+  numeric id prefix, so a slug that differs from the stored one should be
+  harmless — that part is *not* verified, and `deno task verify-api` prints a
+  generated link to be opened once against the live portal.
+- **Note on the earlier 403:** attempts to fetch the help centre from the build
+  sandbox fail with `CONNECT tunnel failed, response 403` — that is the agent
+  proxy refusing the host, **not** Freshdesk refusing anonymous access. Do not
+  read it as evidence the portal is private.
+- **It closes the article loop.** `write_kb` follow-through now prefers
+  "published to the customer KB" over "article requested" — requesting an article
+  is an intention, publishing it is the outcome, and a request that never gets
+  published is exactly the failure worth seeing (`coaching.ts`).
+- **Confluence is NOT this.** The Atlassian wiki is an internal engineering space
+  (Deviation, DevOps Chapter, QA Chapter, Sysadmin…); there is no customer-facing
+  space on it. Anything measuring "did we document this for customers" must look
+  at the Freshdesk help centre, not Confluence.
+
 **P0 reliability hardening (2026-07-28).** A technical review found three risks
 that outrank further prompt work: mutable evaluation rows, duplicate Freshdesk
 notes after an uncertain POST/database failure, and missed tickets from the old

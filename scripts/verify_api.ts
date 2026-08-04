@@ -97,6 +97,17 @@ if (!probeId) {
 console.log("\n[4] GET /search/solutions?term=…  (least-certain endpoint)");
 try {
   const sols = await fd.searchSolutions(Deno.env.get("PROBE_TERM") ?? "password");
+  // The CUSTOMER knowledge base (help centre) link form. The portal base is
+  // confirmed; the article path follows Freshdesk convention and an anonymous
+  // fetch returns 403, so it is printed here to be eyeballed against a real
+  // article rather than trusted. A customer-facing link that 404s is worse than
+  // no link at all.
+  if (sols.length) {
+    console.log(`     customer KB home : ${fd.kbHome()}`);
+    console.log(`     agent article    : ${fd.articleUrl(sols[0].id)}`);
+    console.log(`     customer article : ${fd.portalArticleUrl(sols[0].id, { title: sols[0].title })}`);
+    console.log(`     ^ open the customer link — confirms the {id}-{slug} form resolves.`);
+  }
   ok(`endpoint responded; ${sols.length} result(s)`);
   if (sols.length) {
     const keys = Object.keys(sols[0] as object).join(", ");

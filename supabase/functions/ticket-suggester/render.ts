@@ -505,6 +505,13 @@ export interface NoteData {
   followUpQuestions?: string[];
   bugGuidance?: BugGuidance;
   promptVersion: string;
+  // Triage flag: would a KB article have answered this? Shown so the agent can ask
+  // for one — the article itself is written by a separate, human-triggered call.
+  articleOpportunity?: {
+    worth_writing: boolean;
+    proposed_title: string;
+    reason: string;
+  };
   searchQueries: string[];
   sources: SourceDoc[];
   qaAnswered: number;
@@ -573,6 +580,12 @@ export function deriveCoachMode(s: {
   requiresManualCheck: boolean;
   sensitiveActionRequest: boolean;
   resolutionStepCount: number;
+  /**
+   * Did the reply's assertions actually resolve to a source we handed the model
+   * (2026-08-03)? Verified in code (`verifyGroundingRefs`), never taken on the
+   * model's word. Only gates the two ASSERTING strategies — see below.
+   */
+  groundingVerified?: boolean;
 }): CoachMode {
   // 🔴 the agent must DO something before anything can reach the customer: check the
   // system / roles, verify identity for a sensitive action, open an attachment
@@ -586,11 +599,20 @@ export function deriveCoachMode(s: {
   ) return "AGENT_ACTION_REQUIRED";
 
   // 🟢 a grounded, send-ready customer message with no open agent action.
-  const sendReadyStrategy = s.answerStrategy === "DIRECT_ANSWER" ||
-    s.answerStrategy === "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS" ||
-    s.answerStrategy === "REPEAT_CLARIFYING_QUESTION" ||
+  //
+  // Narrowed 2026-08-03: the green band is for KB-COVERED answers. A reply that
+  // ASSERTS how the product works only qualifies when its refs actually resolved to
+  // a retrieved source or a matched playbook incident — 4 of the first 15 judged
+  // REPLY_READY notes were unusable, and the failure was always an assertion the KB
+  // never backed. A reply that merely ASKS (clarify / request a detail) asserts no
+  // product fact, so it stays eligible without a source.
+  const assertingStrategy = s.answerStrategy === "DIRECT_ANSWER" ||
+    s.answerStrategy === "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS";
+  const askingStrategy = s.answerStrategy === "REPEAT_CLARIFYING_QUESTION" ||
     s.answerStrategy === "REQUEST_MISSING_INFORMATION";
-  if (s.hasReply && s.confidence === "high" && sendReadyStrategy) return "REPLY_READY";
+  const sendReady = askingStrategy ||
+    (assertingStrategy && s.groundingVerified === true);
+  if (s.hasReply && s.confidence === "high" && sendReady) return "REPLY_READY";
 
   // 🟡 otherwise: useful coaching / a hedged direction, but not send-ready as-is
   // (e.g. a routing message the agent must forward, or a low-confidence draft).
@@ -609,7 +631,14 @@ export const MODE_BADGE: Record<CoachMode, string> = {
 function renderSource(s: SourceDoc): string {
   const label = s.kind === "kb" ? `KB article #${s.id}` : `Ticket #${s.id}`;
   const name = s.url ? `<a href="${esc(s.url)}">${esc(s.title)}</a>` : esc(s.title);
-  return `<li>${name} — ${esc(label)}</li>`;
+  // The agent link opens the article behind the Freshdesk login; the customer
+  // link is the help-centre page. Both are offered because the agent needs the
+  // first to check the article and the second to send it — converting one into
+  // the other by hand is exactly the small friction that stops links being sent.
+  const share = s.publicUrl
+    ? ` · <a href="${esc(s.publicUrl)}">send to customer</a>`
+    : "";
+  return `<li>${name} — ${esc(label)}${share}</li>`;
 }
 
 function renderList(items: string[], ordered: boolean): string {
@@ -819,6 +848,20 @@ export function renderNote(r: NoteData): string {
         "<p><strong>Sources:</strong> none found — possible knowledge-base gap.</p>",
       );
     }
+  }
+
+  // Would a KB article have answered this? Gate 1's root cause was knowledge nobody
+  // wrote down, so the gap is worth surfacing where the agent already is. The agent
+  // decides — the article is only written when a human asks for it in the review app.
+  if (r.articleOpportunity?.worth_writing && r.articleOpportunity.proposed_title) {
+    const why = r.articleOpportunity.reason?.trim()
+      ? ` — ${esc(r.articleOpportunity.reason)}`
+      : "";
+    out.push(
+      `<p><strong>📝 Worth a knowledge-base article?</strong> ` +
+        `Suggested title: “${esc(r.articleOpportunity.proposed_title)}”${why}<br>` +
+        `<em>Your call — ask for a draft in the Coach Review app if you agree.</em></p>`,
+    );
   }
 
   if (r.unsupportedNote) out.push(`<p><em>${esc(r.unsupportedNote)}</em></p>`);

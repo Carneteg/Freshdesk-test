@@ -96,6 +96,15 @@ export interface Ticket extends TicketSummary {
   // account when the requester email has no CRM contact (subscriptions live per
   // account/company, not per contact).
   company_id?: number | null;
+  // Which Freshdesk group the ticket currently sits in. Read-only, and the
+  // observable signal behind the `route_expert` and `escalate` coaching steps:
+  // routing shows up as the group moving.
+  group_id?: number | null;
+}
+
+export interface Group {
+  id: number;
+  name?: string | null;
 }
 
 export interface Company {
@@ -112,6 +121,28 @@ export interface Solution {
   folder_name?: string;
 }
 
+/**
+ * Article-title -> URL slug, matching the confirmed form
+ * `201000115133-expert-invoice`.
+ *
+ * Nordic characters are transliterated rather than dropped, so "Fravær" becomes
+ * "fravaer" and not "frav-r" — the KB is largely Norwegian and Swedish, so this
+ * is the common case, not an edge case.
+ */
+export function slugify(title: string): string {
+  const map: Record<string, string> = {
+    "æ": "ae", "ø": "o", "å": "a", "ä": "a", "ö": "o", "ü": "u", "é": "e",
+    "è": "e", "ê": "e", "á": "a", "à": "a", "ó": "o", "ò": "o", "í": "i", "ñ": "n",
+  };
+  return (title ?? "")
+    .toLowerCase()
+    .replace(/[æøåäöüéèêáàóòíñ]/g, (c) => map[c] ?? c)
+    // Anything else non-alphanumeric becomes a separator.
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
 export class Freshdesk {
   private readonly origin: string;
   private readonly base: string;
@@ -122,6 +153,41 @@ export class Freshdesk {
     this.origin = `https://${domain}.freshdesk.com`;
     this.base = `${this.origin}/api/v2`;
     this.auth = "Basic " + btoa(`${apiKey}:X`);
+  }
+
+  // ── The customer knowledge base ─────────────────────────────────────────
+  //
+  // https://simployer.freshdesk.com/en/support/home is Simployer's help centre —
+  // the knowledge base CUSTOMERS read, and the same corpus `searchSolutions`
+  // retrieves from. It is the pipeline's primary grounding source, so it is
+  // named here rather than left implicit inside a search call.
+  //
+  // Two URLs exist for one article and they are NOT interchangeable:
+  //   articleUrl()       /a/solutions/articles/{id}  — the AGENT view, behind
+  //                      the Freshdesk login. Right for a private note.
+  //   portalArticleUrl() /{locale}/support/solutions/articles/{id}-{slug} — the
+  //                      CUSTOMER view. The link an agent can paste into a reply.
+  //
+  // CONFIRMED against a real article supplied by the team (2026-08-04):
+  //   .../en/support/solutions/articles/201000115133-expert-invoice
+  // So the path carries a SLUG after the id — which a bare `/articles/{id}`
+  // guess would have got wrong. The slug is derived from the article title.
+  //
+  // Freshdesk resolves the article from the numeric id prefix, so a slug that
+  // differs from the stored one is harmless — but that behaviour is NOT verified
+  // here (this sandbox cannot reach the host; the proxy refuses CONNECT). When a
+  // title is available the slug is built from it, which is the closest match to
+  // the confirmed form. `deno task verify-api` prints a generated link to be
+  // opened once against the live portal.
+  kbHome(locale = "en"): string {
+    return `${this.origin}/${locale}/support/home`;
+  }
+
+  portalArticleUrl(id: number, opts: { title?: string; locale?: string } = {}): string {
+    const locale = opts.locale ?? "en";
+    const slug = opts.title ? slugify(opts.title) : "";
+    const tail = slug ? `${id}-${slug}` : String(id);
+    return `${this.origin}/${locale}/support/solutions/articles/${tail}`;
   }
 
   // Agent-facing links for the private note (agents, not customers, read notes).
@@ -208,6 +274,12 @@ export class Freshdesk {
   // Read-only company lookup (id -> name), used to match the CRM account by
   // company name when the requester email has no CRM contact. Callers treat a
   // failure as "no company", never fatal.
+  // Group id -> name. Read-only; used to turn a ticket's group_id into something
+  // a human (and the route_expert check) can read.
+  groups(): Promise<Group[]> {
+    return this.get<Group[]>("/groups");
+  }
+
   company(id: number): Promise<Company> {
     return this.get<Company>(`/companies/${id}`);
   }

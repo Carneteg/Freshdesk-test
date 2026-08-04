@@ -122,7 +122,72 @@
   .goldedit:empty::before{content:attr(data-placeholder);color:var(--muted);pointer-events:none}
   .goldedit ul,.goldedit ol{margin:4px 0 4px 22px;white-space:normal}
   .crmverdict{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
+  .crmhint{flex:1 1 240px;min-width:200px;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--ink)}
   .crmverdict .btn.sel{outline:2px solid var(--accent)}
+  /* Coaching tab (2026-08-04) — read-only measurement of the coaching half */
+  .cbanner{display:flex;align-items:center;gap:9px;margin:0 0 18px;background:var(--accent-soft);
+    border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:12.5px;color:var(--ink)}
+  .csec{margin:28px 0 10px}
+  .chead{font-size:13px;font-weight:700;letter-spacing:.02em;margin:0 0 4px}
+  .chint{font-size:12.5px;color:var(--ink-3);margin:0 0 12px;line-height:1.55}
+  .chint.bad{color:var(--crit)}
+  .ctiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .ctiles.three{grid-template-columns:repeat(3,1fr)}
+  .ctile{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+  .ctile.pending .cv{color:var(--ink-3)}
+  .ck{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:650;margin-bottom:7px}
+  .cv{font-size:25px;font-weight:700;letter-spacing:-.02em;line-height:1}
+  .cd{font-size:11.5px;color:var(--ink-3);margin-top:7px;line-height:1.4}
+  .ctiming{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 18px}
+  .cbar{display:flex;height:26px;border-radius:4px;overflow:hidden;margin:4px 0 9px}
+  .cbar div{display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:650;color:#fff;min-width:0}
+  .clegend{display:flex;gap:18px;font-size:11.5px;color:var(--ink-2);flex-wrap:wrap;margin-bottom:6px}
+  .clegend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+  .ctable{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);
+    border-radius:8px;overflow:hidden;margin-bottom:8px}
+  .ctable th{text-align:left;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);
+    font-weight:650;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+  .ctable td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:12.5px;vertical-align:top}
+  .ctable tr:last-child td{border-bottom:none}
+  .ctable tr.hold{background:var(--surface-2)}
+  .cstep{color:var(--ink-3);font-size:11.5px;margin-top:2px;line-height:1.45}
+  .cmix{margin-bottom:18px}
+  .cbudget{border:1px solid var(--border);border-left:3px solid var(--good);border-radius:6px;
+    padding:10px 14px;margin-bottom:10px;font-size:12.5px;background:var(--surface);line-height:1.55}
+  .cbudget.over{border-left-color:var(--crit)}
+  .cfail{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--crit);
+    border-radius:6px;padding:12px 14px;margin-bottom:9px}
+  .cfail.late{border-left-color:var(--warn)}
+  .cfail .fh{font-size:12.5px;font-weight:650;margin-bottom:4px}
+  .cfail .fb{font-size:12.5px;color:var(--ink-2);line-height:1.5}
+  .cfail .fm{font-size:11.5px;color:var(--ink-3);margin-top:6px}
+  .cfoot{margin-top:30px;padding-top:14px;border-top:1px solid var(--border);
+    font-size:11.5px;color:var(--ink-3);line-height:1.7}
+  .tag.c-meas{background:var(--accent-soft);color:var(--accent)}
+  .tag.c-wait{background:var(--surface-2);color:var(--ink-3)}
+  @media (max-width:880px){ .ctiles,.ctiles.three{grid-template-columns:repeat(2,1fr)} }
+  /* KB article panel — the "write this down" loop (2026-08-03) */
+  .arthidden{display:none}
+  .artbox{margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface-2)}
+  .arthead{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+  .artprop{font-size:13.5px;margin:2px 0}
+  .artwhy{font-size:12.5px;color:var(--ink-3);margin:2px 0}
+  .artblocked{font-size:13px;color:var(--crit);margin:4px 0}
+  .arttitle,.artsum,.artsteps{width:100%;box-sizing:border-box;margin-top:6px;font-size:13.5px;
+    padding:6px 8px;border:1px solid var(--border);border-radius:5px;background:var(--surface);color:var(--ink)}
+  .artsum,.artsteps{font-family:inherit;resize:vertical}
+  .card.art .arthead{margin-bottom:8px}
+  .artlab{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin-top:10px}
+  .arttrace{margin-top:10px;font-size:12.5px}
+  .arttrace summary{cursor:pointer;color:var(--ink-2)}
+  .tlink{font-family:var(--mono);font-size:12.5px;color:var(--accent);text-decoration:none}
+  .tlink:hover{text-decoration:underline}
+  .artbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .artbox .st{font-size:12px;color:var(--ink-3);margin-left:8px}
+  .tag.a-approved{background:var(--good-soft);color:var(--good)}
+  .tag.a-drafted{background:var(--accent-soft);color:var(--accent)}
+  .tag.a-requested{background:var(--surface-2);color:var(--ink-3)}
+  .tag.a-rejected,.tag.a-failed{background:var(--crit-soft);color:var(--crit)}
   .goldedit p,.goldedit div{margin:0}
 
   .goldbar{display:flex;align-items:center;gap:12px;margin-top:8px;flex-wrap:wrap}
@@ -202,14 +267,18 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-07-31-crm-verdict";
+var APP_VERSION = "v2026-08-04a-coaching-tab";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
 var rows = [], tab = "todo", token = null, refreshToken = null, meEmail = null;
 
 // Columns fetched for each suggestion (used by loadData AND single-row reloads).
-var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,prompt_version,created_at";
+var articlesByTicket = {};   // ticket_id -> the article row, for the per-card panel
+var articles = [];           // every article, for the Articles tab (article_library)
+// Coaching tab state. All read-only: the tab observes, it never writes anywhere.
+var coach = { baselines: [], dist: [], steps: [], delivery: null, mix: [], pairing: [], failed: [], knowledge: null, loaded: false };
+var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,article_opportunity,prompt_version,created_at";
 
 // Why an edited/unusable reply fell short — slug + Swedish label (CLAUDE.md / plan 1.3).
 var REASONS = [
@@ -372,6 +441,7 @@ async function loadData() {
     // hide reviewer-flagged spam (is_spam) and any auto-reply noise the ingest missed
     rows = all.filter(function (r) { return !r.is_spam && !isSpam(r.subject); });
     await loadHoldout(); // best-effort; enables the holdout progress + filter
+    await loadArticles(); // best-effort; drives the KB-article panel on each card
     var deep = (window.location.hash || "").match(/^#generation=(\d+)$/);
     if (deep) { search = deep[1]; tab = "all"; }
     render();
@@ -412,6 +482,25 @@ async function loadHoldout() {
     for (var i = 0; i < (data || []).length; i++) holdoutIds[data[i].ticket_id] = 1;
   } catch (e) { /* holdout features simply won't show */ }
 }
+// KB article drafts, keyed by ticket. Best-effort: RLS lets an allowlisted
+// reviewer read them, and a failure here must never stop the review list loading.
+async function loadArticles() {
+  articlesByTicket = {}; articles = [];
+  try {
+    // article_library carries the provenance the tab exists to show: which ticket,
+    // which human-validated resolution, who asked, who signed off.
+    var res = await api("/rest/v1/article_library?select=*&limit=1000");
+    if (!res.ok) return;
+    var data = await res.json();
+    articles = Array.isArray(data) ? data : [];
+    articles.forEach(function (a) {
+      a.steps = a.steps || []; a.notes = a.notes || [];
+      a.removed_specifics = a.removed_specifics || [];
+      articlesByTicket[a.ticket_id] = a;
+    });
+  } catch (_e) { /* best-effort */ }
+}
+
 function hasHoldout() { for (var k in holdoutIds) return true; return false; }
 
 // Which rows belong to the current tab (before search/filter/sort).
@@ -440,14 +529,22 @@ function render() {
   bar.appendChild(tabEl("todo", "To review", tabCount("todo")));
   bar.appendChild(tabEl("done", "Judged", tabCount("done")));
   bar.appendChild(tabEl("rewrite", "Rewrite", tabCount("rewrite")));
+  bar.appendChild(tabEl("articles", "📝 Artiklar", articles.length));
+  bar.appendChild(tabEl("coaching", "🎯 Coaching", coach.steps.length));
   bar.appendChild(tabEl("all", "All", rows.length));
   var c = el("div", "count"); c.id = "loadcount"; c.textContent = rows.length + " loaded";
   bar.appendChild(c);
   app.appendChild(bar);
   document.getElementById("out").onclick = signOut;
 
-  app.appendChild(controlsEl());
-  app.appendChild(progressEl());
+  if (tab === "articles") {
+    app.appendChild(articleControlsEl());
+  } else if (tab === "coaching") {
+    // No ticket filters here — this tab summarises, it does not triage.
+  } else {
+    app.appendChild(controlsEl());
+    app.appendChild(progressEl());
+  }
   var lw = el("div"); lw.id = "listwrap"; app.appendChild(lw);
   renderList();
 }
@@ -522,6 +619,8 @@ function progressEl() {
 // renderList() rebuilds ONLY the card list, applying search + filters + sort on top
 // of the active tab. Called on every keystroke/filter change; leaves controls intact.
 function renderList() {
+  if (tab === "articles") return renderArticleList();
+  if (tab === "coaching") return renderCoaching();
   var base = tabRows();
   var q = search.trim().toLowerCase();
   shown = base.filter(function (r) {
@@ -849,6 +948,7 @@ function cardEl(r) {
   };
   rp.appendChild(other);
   card.appendChild(rp);
+  card.appendChild(articlePanel(r));
   card._reasonsPanel = rp; card._panelVisible = panelVisible;
   if (critical) card.classList.add("critical");
   return card;
@@ -1205,10 +1305,12 @@ function subscriptionContextEl(r) {
   }
   if (context.status === "unavailable") {
     box.appendChild(set(el("p", "sstate"), "Temporarily unavailable — verify manually."));
+    box.appendChild(crmVerdictRow(r));
     return box;
   }
   if (context.status === "no_match") {
     box.appendChild(set(el("p", "sstate"), "No CRM account matched the requester email or the ticket's company."));
+    box.appendChild(crmVerdictRow(r));
     return box;
   }
   if (context.status === "ambiguous") {
@@ -1216,6 +1318,7 @@ function subscriptionContextEl(r) {
     var candidates = Array.isArray(context.candidates) ? context.candidates.filter(function (n) { return typeof n === "string" && n.trim(); }) : [];
     if (candidates.length) msg += " Candidates: " + candidates.join(" · ") + ".";
     box.appendChild(set(el("p", "sstate"), msg));
+    box.appendChild(crmVerdictRow(r));
     return box;
   }
 
@@ -1232,6 +1335,7 @@ function subscriptionContextEl(r) {
   var subscriptions = Array.isArray(context.subscriptions) ? context.subscriptions : [];
   if (!subscriptions.length) {
     box.appendChild(set(el("p", "sstate"), "No subscriptions found for the matched account."));
+    box.appendChild(crmVerdictRow(r));
     return box;
   }
 
@@ -1257,48 +1361,777 @@ function subscriptionContextEl(r) {
   return box;
 }
 
-// Micro-verdict on the MATCH itself ("was this the right account?") — the
-// precision half of the CRM scorecard; coverage alone says nothing about
-// correctness. Saved via submit_crm_match_verdict; never bumps the reply-
-// verdict version, but syncs the returned version so the optimistic lock
-// on judging stays correct in this session.
+// Micro-verdict on the MATCH itself — shown on EVERY outcome, because the
+// silent ones carry the information we cannot get anywhere else: when the
+// lookup found nothing, only the agent knows whether the customer actually
+// exists in the CRM. Coverage alone measures nothing without that.
+// Saved via submit_crm_match_verdict; never bumps the reply-verdict version,
+// but syncs the returned version so the judging lock stays correct.
 function crmVerdictRow(r) {
+  var found = r.customer_subscriptions && r.customer_subscriptions.status === "found";
   var row = el("div", "crmverdict");
-  row.appendChild(set(el("span", "sl"), "Right CRM account?"));
+  row.appendChild(set(el("span", "sl"), found ? "Right CRM account?" : "Is this customer in the CRM?"));
+
+  // "wrong" and "missed" are the actionable answers — both mean a human knows
+  // the right account, so we ask which one and feed the curation queue.
+  var opts = found
+    ? [["correct", "Yes"], ["wrong", "No — wrong customer"], ["unsure", "Unsure"]]
+    : [["missed", "Yes — we missed it"], ["not_in_crm", "No"], ["unsure", "Unsure"]];
+
   var st = el("span", "st"); st.setAttribute("aria-live", "polite");
+  var hint = document.createElement("input");
+  hint.type = "text";
+  hint.className = "crmhint";
+  hint.placeholder = "Which account is the right one? (optional)";
+  hint.setAttribute("aria-label", "Correct CRM account for ticket " + r.ticket_id);
+  hint.value = r.crm_account_hint || "";
+  var needsHint = function (v) { return v === "wrong" || v === "missed"; };
+  hint.style.display = needsHint(r.crm_account_correct) ? "" : "none";
+
   var btns = [];
-  [["yes", "Yes"], ["no", "No"], ["unsure", "Unsure"]].forEach(function (opt) {
+  async function save(value) {
+    st.textContent = "Sparar…";
+    try {
+      var res = await api("/rest/v1/rpc/submit_crm_match_verdict", {
+        method: "POST",
+        body: JSON.stringify({
+          p_generation_id: r.id,
+          p_correct: value,
+          p_hint: hint.value.trim() || null,
+        }),
+      });
+      if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
+      var out = await res.json(), saved = out && out[0];
+      r.crm_account_correct = value;
+      if (saved) {
+        r.crm_account_hint = saved.crm_account_hint;
+        r.my_review_version = saved.review_version;
+        r.review_version = Math.max(r.review_version || 0, saved.review_version || 0);
+      }
+      btns.forEach(function (b) { b.className = "btn small" + (b._val === value ? " sel" : ""); });
+      hint.style.display = needsHint(value) ? "" : "none";
+      st.textContent = "sparat";
+    } catch (e) { st.textContent = "kunde inte spara: " + e.message; }
+  }
+
+  opts.forEach(function (opt) {
     var b = document.createElement("button");
     b.type = "button";
     b.className = "btn small" + (r.crm_account_correct === opt[0] ? " sel" : "");
     b.textContent = opt[1];
-    b.setAttribute("aria-label", "Right CRM account: " + opt[1]);
+    b.setAttribute("aria-label", (found ? "Right CRM account: " : "Customer in CRM: ") + opt[1]);
     b._val = opt[0];
-    b.onclick = async function () {
-      st.textContent = "Sparar…";
-      try {
-        var res = await api("/rest/v1/rpc/submit_crm_match_verdict", {
-          method: "POST",
-          body: JSON.stringify({ p_generation_id: r.id, p_correct: opt[0] }),
-        });
-        if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
-        var out = await res.json(), saved = out && out[0];
-        r.crm_account_correct = opt[0];
-        if (saved) {
-          r.my_review_version = saved.review_version;
-          r.review_version = Math.max(r.review_version || 0, saved.review_version || 0);
-        }
-        btns.forEach(function (x) { x.className = "btn small" + (x._val === opt[0] ? " sel" : ""); });
-        st.textContent = "sparat: " + opt[1];
-      } catch (e) { st.textContent = "kunde inte spara: " + e.message; }
-    };
+    b.onclick = function () { save(opt[0]); };
     btns.push(b);
     row.appendChild(b);
   });
+  row.appendChild(hint);
   row.appendChild(st);
+  // Typing the account name is only useful once a verdict exists to attach it to.
+  hint.onblur = function () { if (r.crm_account_correct) save(r.crm_account_correct); };
   if (r.crm_account_correct) st.textContent = "sparat";
   return row;
 }
+// ── Coaching tab (2026-08-04) ───────────────────────────────────────────────
+//
+// The pivot said the product is a COACH, but only the drafting half is measured.
+// This tab measures the other half: did the note arrive before the agent started
+// writing, and was the recommended next step actually followed?
+//
+// READ-ONLY, and that is structural, not a promise: every table it reads is
+// granted SELECT only, so there is no path from this browser to a write. There
+// is also deliberately NO control for an agent to declare they followed the
+// advice — follow-through is observed or it is unknown, never self-reported.
+
+async function loadCoaching() {
+  if (coach.loaded) return;
+  async function get(path) {
+    try {
+      var res = await api("/rest/v1/" + path);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (_e) { return null; }
+  }
+  var r = await Promise.all([
+    get("coaching_baselines?select=*"),
+    get("coaching_reply_distribution?select=*&order=bucket_order"),
+    get("coaching_next_steps?select=*&limit=300"),
+    get("coaching_delivery_summary?select=*"),
+    get("coaching_step_mix?select=*"),
+    get("coaching_value_pairing?select=*"),
+    get("coaching_failed_advice?select=*&limit=40"),
+    get("coaching_knowledge_produced?select=*"),
+  ]);
+  coach.baselines = r[0] || [];
+  coach.dist      = r[1] || [];
+  coach.steps     = r[2] || [];
+  coach.delivery  = (r[3] || [])[0] || null;
+  coach.mix       = r[4] || [];
+  coach.pairing   = r[5] || [];
+  coach.failed    = r[6] || [];
+  coach.knowledge = (r[7] || [])[0] || null;
+  coach.loaded = true;
+}
+
+function num(v) { return v == null ? "—" : String(v); }
+
+function tileEl(label, value, detail, pending) {
+  var t = el("div", "ctile" + (pending ? " pending" : ""));
+  t.appendChild(set(el("div", "ck"), label));
+  t.appendChild(set(el("div", "cv"), value));
+  if (detail) t.appendChild(set(el("div", "cd"), detail));
+  return t;
+}
+
+function sectionEl(title, hint, tagText, tagCls) {
+  var h = el("div", "csec");
+  var head = el("h3", "chead");
+  head.appendChild(document.createTextNode(title));
+  if (tagText) head.appendChild(tag(tagText, tagCls));
+  h.appendChild(head);
+  if (hint) h.appendChild(set(el("p", "chint"), hint));
+  return h;
+}
+
+function renderCoaching() {
+  var lw = document.getElementById("listwrap");
+  lw.innerHTML = "";
+  cardEls = []; activeIdx = -1;
+
+  var wrap = el("div", "coaching");
+
+  // Read-only banner. Stated up front because the whole design rests on it.
+  var ro = el("div", "cbanner");
+  ro.appendChild(set(el("span", "clock"), "🔒"));
+  ro.appendChild(set(el("span", ""),
+    "Read-only. This tab observes Freshdesk and this database. It writes nothing back — " +
+    "no private notes, no ticket updates, no status changes, and no scheduler."));
+  wrap.appendChild(ro);
+
+  if (!coach.loaded) {
+    wrap.appendChild(set(el("div", "empty"), "Loading coaching data…"));
+    lw.appendChild(wrap);
+    loadCoaching().then(function () { if (tab === "coaching") renderList(); });
+    return;
+  }
+
+  // ── 1. Baselines ──────────────────────────────────────────────────────────
+  var stamp = coach.baselines.length ? fmtDate(coach.baselines[0].computed_at) : "—";
+  wrap.appendChild(sectionEl(
+    "Baselines",
+    "Locked from history before the first coaching run, so a later change has something to be " +
+    "compared against. Computed once and stored — a baseline that moves is not a baseline. " +
+    "Computed " + stamp + ".",
+    "measured", "c-meas"));
+  var bt = el("div", "ctiles");
+  if (!coach.baselines.length) {
+    bt.appendChild(set(el("div", "chint"), "No baselines stored."));
+  }
+  coach.baselines.forEach(function (b) {
+    var v = b.unit === "%" ? b.value + "%" : b.unit === "h" ? b.value + " h" : String(b.value);
+    bt.appendChild(tileEl(b.label, v, b.detail || b.source_note));
+  });
+  wrap.appendChild(bt);
+
+  // ── 2. Delivery timing ────────────────────────────────────────────────────
+  wrap.appendChild(sectionEl(
+    "Did the note arrive in time?",
+    "A note is only useful if it is there before the agent starts writing. The bar is the " +
+    "historical distribution of time to first agent reply; the counter underneath is measured " +
+    "from our own notes. A late note is a DELIVERY failure, not a bad suggestion — counted " +
+    "apart so the model is not blamed for advice nobody saw."));
+  var timing = el("div", "ctiming");
+  if (coach.dist.length) {
+    var bar = el("div", "cbar");
+    var colours = ["#9E3227", "#B45A09", "#4E9A9B", "#0F7173"];
+    coach.dist.forEach(function (d, i) {
+      var seg = el("div", "");
+      seg.style.flex = String(d.share_pct);
+      seg.style.background = colours[i % colours.length];
+      seg.textContent = d.share_pct + "%";
+      seg.title = d.label + " — " + d.conversations + " conversations";
+      bar.appendChild(seg);
+    });
+    timing.appendChild(bar);
+    var legend = el("div", "clegend");
+    coach.dist.forEach(function (d, i) {
+      var sp = el("span", "");
+      var sw = el("i", ""); sw.style.background = colours[i % colours.length];
+      sp.appendChild(sw);
+      sp.appendChild(document.createTextNode(d.label + " (" + d.conversations + ")"));
+      legend.appendChild(sp);
+    });
+    timing.appendChild(legend);
+  }
+  var dv = coach.delivery;
+  var lateLine = el("p", "chint");
+  if (!dv || !dv.measured) {
+    lateLine.textContent =
+      "No delivery rows yet. Run `deno task observe-coaching` (dry run by default) to measure " +
+      "note timing against the first agent reply.";
+  } else {
+    var pct = dv.late_pct == null ? "—" : dv.late_pct + "%";
+    lateLine.innerHTML =
+      "<b>" + num(dv.late) + " late</b> of " + num(dv.in_time + dv.late) +
+      " judgeable note(s) — " + esc(pct) + " (target under 2%). " +
+      num(dv.no_reply_yet) + " ticket(s) have no agent reply yet, so there is nothing to judge.";
+    if (dv.late_pct != null && Number(dv.late_pct) > 2) lateLine.className = "chint bad";
+  }
+  timing.appendChild(lateLine);
+  wrap.appendChild(timing);
+
+  // ── 3. Next steps ─────────────────────────────────────────────────────────
+  wrap.appendChild(sectionEl(
+    "Next steps",
+    "One row per recommended step. Each type has one signal in a system we already read, so " +
+    "follow-through is observed — there is no button here asking an agent whether they complied.",
+    coach.steps.length ? null : "collecting", "c-wait"));
+  wrap.appendChild(stepMixEl());
+  wrap.appendChild(stepTableEl());
+
+  // ── 4. Value pairing ──────────────────────────────────────────────────────
+  wrap.appendChild(sectionEl(
+    "Where the value shows",
+    "Followed on its own proves nothing — an agent obeying bad advice is a cost. The pairing " +
+    "is the metric: follow-through read against the outcome, with the locked holdout cohort " +
+    "kept separate so the coaching is isolated from the drafting."));
+  wrap.appendChild(pairingEl());
+
+  // ── 5. Advice that failed ─────────────────────────────────────────────────
+  wrap.appendChild(sectionEl(
+    "Advice that failed",
+    "Followed and it still went wrong, or it never reached the agent. The delivery status is " +
+    "on every card so a late note is never misread as bad advice."));
+  wrap.appendChild(failedEl());
+
+  // ── 6. Knowledge produced ─────────────────────────────────────────────────
+  wrap.appendChild(sectionEl(
+    "Knowledge produced",
+    "The three closing states of a note, derived from pipeline output rather than reported by " +
+    "anyone. This is the weekly documentation backlog."));
+  var k = coach.knowledge || {};
+  var kt = el("div", "ctiles three");
+  kt.appendChild(tileEl("📗 Documented", num(k.documented), "answer already existed", k.documented == null));
+  kt.appendChild(tileEl("🔵 Wish to log", num(k.wish), "product limitation", k.wish == null));
+  kt.appendChild(tileEl("📕 Gap to fill", num(k.gap), "nothing written anywhere", k.gap == null));
+  wrap.appendChild(kt);
+
+  var foot = el("p", "cfoot");
+  foot.innerHTML =
+    "Baselines are measured from history and locked. Follow-through and delivery are computed " +
+    "by <code>deno task observe-coaching</code>, which reads Freshdesk and writes only to this " +
+    "database. Nothing on this tab writes to any connected system, and no scheduler is enabled.";
+  wrap.appendChild(foot);
+
+  lw.appendChild(wrap);
+}
+
+// Step-type mix — and the unobservable share, which judges the PROMPT, not the agent.
+function stepMixEl() {
+  var box = el("div", "cmix");
+  if (!coach.mix.length) {
+    box.appendChild(set(el("p", "chint"),
+      "No steps classified yet. Run `deno task observe-coaching` to populate them."));
+    return box;
+  }
+  var total = coach.mix.reduce(function (n, m) { return n + m.steps; }, 0);
+  var blind = coach.mix.reduce(function (n, m) { return n + (m.steps - m.observable); }, 0);
+  var share = total ? Math.round(1000 * blind / total) / 10 : 0;
+
+  var warn = el("div", "cbudget" + (share > 15 ? " over" : ""));
+  warn.innerHTML = "<b>" + share + "%</b> of recommendations have no observable signal " +
+    "(budget 15%). " + (share > 15
+      ? "Over budget — the prompt is producing advice that cannot be evaluated. That is a prompt " +
+        "problem to fix, not an agent problem to chase."
+      : "Within budget.");
+  box.appendChild(warn);
+
+  var t = document.createElement("table");
+  t.className = "ctable";
+  t.innerHTML = "<thead><tr><th>Step type</th><th>Steps</th><th>Observable</th>" +
+    "<th>Followed</th><th>Signal</th></tr></thead>";
+  var tb = document.createElement("tbody");
+  coach.mix.forEach(function (m) {
+    var tr = document.createElement("tr");
+    tr.appendChild(set(document.createElement("td"), m.step_type));
+    tr.appendChild(set(document.createElement("td"), String(m.steps)));
+    tr.appendChild(set(document.createElement("td"), String(m.observable)));
+    tr.appendChild(set(document.createElement("td"),
+      m.observable ? (m.followed + (m.followed_pct != null ? " (" + m.followed_pct + "%)" : "")) : "—"));
+    var sig = document.createElement("td");
+    sig.appendChild(m.observable
+      ? tag("observable", "p-yes")
+      : tag("not connected", "p-na"));
+    tr.appendChild(sig);
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+  return box;
+}
+
+function stepTableEl() {
+  if (!coach.steps.length) {
+    return set(el("p", "chint"), "No recommended steps recorded yet.");
+  }
+  var t = document.createElement("table");
+  t.className = "ctable";
+  t.innerHTML = "<thead><tr><th style='width:26%'>Ticket</th>" +
+    "<th style='width:32%'>Recommended step</th><th style='width:13%'>Observed in</th>" +
+    "<th style='width:13%'>Followed</th><th style='width:16%'>Delivery</th></tr></thead>";
+  var tb = document.createElement("tbody");
+
+  coach.steps.slice(0, 120).forEach(function (r) {
+    var tr = document.createElement("tr");
+
+    var td1 = document.createElement("td");
+    var a = document.createElement("a");
+    a.className = "tk"; a.href = r.ticket_url || "#"; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "#" + r.ticket_id;
+    td1.appendChild(a);
+    td1.appendChild(document.createTextNode(" " + (r.subject || "")));
+    if (r.cohort === "holdout") {
+      // Holdout tickets are the locked eval set — never fed back, never mixed in.
+      td1.appendChild(tag("🔒 holdout", "p-na"));
+    }
+    tr.appendChild(td1);
+
+    var td2 = document.createElement("td");
+    td2.appendChild(set(el("b", ""), r.step_type));
+    td2.appendChild(set(el("div", "cstep"), r.step_text || ""));
+    tr.appendChild(td2);
+
+    tr.appendChild(set(document.createElement("td"), r.observed_via || signalName(r.step_type)));
+
+    var td4 = document.createElement("td");
+    // Three-valued on purpose: "Not visible" means we cannot see it. It must
+    // never be read as "the agent ignored the advice".
+    td4.appendChild(r.observable === true
+      ? (r.observed ? tag("Yes", "p-yes") : tag("No", "p-no"))
+      : tag("Not visible", "p-na"));
+    tr.appendChild(td4);
+
+    var td5 = document.createElement("td");
+    td5.appendChild(r.delivery_status === "late"
+      ? tag("late", "p-no")
+      : r.delivery_status === "in_time"
+      ? tag("in time", "p-yes")
+      : tag(r.delivery_status || "—", "p-na"));
+    tr.appendChild(td5);
+
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  return t;
+}
+
+function signalName(type) {
+  var m = {
+    route_expert: "Freshdesk group", escalate: "Freshdesk group",
+    write_kb: "article_drafts", link_jira: "Jira", link_linear: "Linear",
+    copy_csm: "Planhat", offer_meeting: "Planhat", internal_check: "—",
+  };
+  return m[type] || "—";
+}
+
+function pairingEl() {
+  var box = el("div", "");
+  if (!coach.pairing.length) {
+    box.appendChild(set(el("p", "chint"),
+      "Nothing to pair yet — follow-through has not been observed."));
+    return box;
+  }
+  var t = document.createElement("table");
+  t.className = "ctable";
+  t.innerHTML = "<thead><tr><th>Follow-through</th><th>Cohort</th><th>Suggestions</th>" +
+    "<th>Judged</th><th>Usable</th><th>Unusable</th><th>Usable %</th></tr></thead>";
+  var tb = document.createElement("tbody");
+  coach.pairing.forEach(function (p) {
+    var tr = document.createElement("tr");
+    if (p.cohort === "holdout") tr.className = "hold";
+    [p.follow_through, p.cohort, p.suggestions, p.judged, p.usable, p.unusable,
+     p.usable_pct == null ? "—" : p.usable_pct + "%"].forEach(function (v) {
+      tr.appendChild(set(document.createElement("td"), String(v)));
+    });
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+  box.appendChild(set(el("p", "chint"),
+    "Holdout rows are the locked evaluation cohort and are never mixed into the other numbers. " +
+    "Comparing the same drafts with and without the next-step block is the only construction " +
+    "that shows the coaching does the work rather than the draft."));
+  return box;
+}
+
+function failedEl() {
+  var box = el("div", "");
+  if (!coach.failed.length) {
+    box.appendChild(set(el("p", "chint"), "No failed advice recorded yet."));
+    return box;
+  }
+  coach.failed.slice(0, 12).forEach(function (f) {
+    var c = el("div", "cfail" + (f.delivery_status === "late" ? " late" : ""));
+    c.appendChild(set(el("div", "fh"), "#" + f.ticket_id + " · " + (f.subject || "")));
+    c.appendChild(set(el("div", "fb"), f.step_text || ""));
+    var meta = f.failure_kind;
+    if (f.delivery_status === "late") {
+      // The distinction the spec insists on, said in words on the card itself.
+      meta += " — this is a DELIVERY failure, not bad advice";
+    }
+    c.appendChild(set(el("div", "fm"), meta));
+    box.appendChild(c);
+  });
+  return box;
+}
+
+// ── Articles tab (2026-08-03) ───────────────────────────────────────────────
+//
+// Approved articles are NOT published to Freshdesk — that would be a third
+// external write and a wider security review (CLAUDE.md §3). Instead they live
+// here, findable and editable, with their whole provenance attached: which ticket
+// they came from, which human-validated resolution they were generalised from,
+// who asked for them and who signed off.
+var fArtStatus = "";
+
+function articleControlsEl() {
+  var box = el("div", "controls");
+  var counts = {};
+  articles.forEach(function (a) { counts[a.status] = (counts[a.status] || 0) + 1; });
+  var opts = ["drafted", "requested", "approved", "rejected", "failed"]
+    .filter(function (st) { return counts[st]; })
+    .map(function (st) { return [st, (ART_LABEL[st] || st) + " (" + counts[st] + ")"]; });
+  box.appendChild(selectEl("Alla statusar", opts, fArtStatus, function (v) {
+    fArtStatus = v; renderList();
+  }));
+
+  var inp = document.createElement("input");
+  inp.type = "search"; inp.className = "search";
+  inp.placeholder = "Sök rubrik, ticket eller ämne…";
+  inp.setAttribute("aria-label", "Search articles");
+  inp.value = search;
+  inp.oninput = function () { search = inp.value; renderList(); };
+  box.appendChild(inp);
+  return box;
+}
+
+function renderArticleList() {
+  var q = search.trim().toLowerCase();
+  var list = articles.filter(function (a) {
+    if (fArtStatus && a.status !== fArtStatus) return false;
+    if (!q) return true;
+    var hay = (String(a.ticket_id) + " " + (a.title || "") + " " + (a.proposed_title || "") +
+      " " + (a.ticket_subject || "") + " " + (a.summary || "")).toLowerCase();
+    return hay.indexOf(q) >= 0;
+  });
+
+  var lw = document.getElementById("listwrap");
+  lw.innerHTML = "";
+  cardEls = []; activeIdx = -1;
+  if (!list.length) {
+    var e = el("div", "empty");
+    e.textContent = articles.length
+      ? "Inga artiklar matchar."
+      : "Inga artiklar än. Be om en från ett ärende i granskningslistan — " +
+        "AI:n föreslår, men det är du som bestämmer att något blir kunskap.";
+    lw.appendChild(e);
+    return;
+  }
+  list.forEach(function (a) {
+    var card = articleCardEl(a);
+    cardEls.push(card); lw.appendChild(card);
+  });
+}
+
+function articleCardEl(a) {
+  var card = el("div", "card art");
+
+  var head = el("div", "arthead");
+  head.appendChild(tag(ART_LABEL[a.status] || a.status, "a-" + a.status));
+  if (a.language) head.appendChild(tag(a.language));
+  if (a.audience) head.appendChild(tag(a.audience === "agent" ? "för agent" : "för kund"));
+  var link = document.createElement("a");
+  link.className = "tlink";
+  link.href = a.ticket_url || "#";
+  link.target = "_blank"; link.rel = "noopener";
+  link.textContent = "#" + a.ticket_id;
+  head.appendChild(link);
+  if (a.ticket_subject) head.appendChild(set(el("span", "artwhy"), a.ticket_subject));
+  card.appendChild(head);
+
+  if (a.status === "requested") {
+    card.appendChild(set(el("div", "artprop"),
+      "Förslag: ”" + (a.proposed_title || "(ingen rubrik)") + "”"));
+    if (a.proposed_reason) card.appendChild(set(el("div", "artwhy"), a.proposed_reason));
+    card.appendChild(set(el("div", "artwhy"),
+      "I kö — artikeln skrivs vid nästa körning av write-articles."));
+    card.appendChild(articleTrace(a));
+    return card;
+  }
+  if (a.publishable === false || a.status === "failed") {
+    card.appendChild(set(el("div", "artblocked"),
+      "Kunde inte skrivas: " + (a.blocked_reason || "okänd orsak")));
+    card.appendChild(set(el("div", "artwhy"),
+      "Det är ett giltigt utfall — hellre ingen artikel än en som gissar."));
+    card.appendChild(articleTrace(a));
+    return card;
+  }
+
+  var titleIn = document.createElement("input");
+  titleIn.type = "text"; titleIn.className = "arttitle";
+  titleIn.setAttribute("aria-label", "Rubrik, artikel " + a.article_id);
+  titleIn.value = a.title || "";
+  card.appendChild(titleIn);
+
+  card.appendChild(set(el("div", "artlab"), "Sammanfattning"));
+  var summaryIn = document.createElement("textarea");
+  summaryIn.className = "artsum"; summaryIn.rows = 2;
+  summaryIn.setAttribute("aria-label", "Sammanfattning, artikel " + a.article_id);
+  summaryIn.value = a.summary || "";
+  card.appendChild(summaryIn);
+
+  card.appendChild(set(el("div", "artlab"), "Steg (ett per rad)"));
+  var stepsIn = document.createElement("textarea");
+  stepsIn.className = "artsteps"; stepsIn.rows = 5;
+  stepsIn.setAttribute("aria-label", "Steg, artikel " + a.article_id);
+  stepsIn.value = (a.steps || []).join("\n");
+  card.appendChild(stepsIn);
+
+  card.appendChild(set(el("div", "artlab"), "Noteringar (ett per rad)"));
+  var notesIn = document.createElement("textarea");
+  notesIn.className = "artsteps"; notesIn.rows = 3;
+  notesIn.setAttribute("aria-label", "Noteringar, artikel " + a.article_id);
+  notesIn.value = (a.notes || []).join("\n");
+  card.appendChild(notesIn);
+
+  var st = el("span", "st"); st.setAttribute("aria-live", "polite");
+  var btns = el("div", "artbtns");
+
+  function lines(ta) {
+    return ta.value.split("\n").map(function (x) { return x.trim(); })
+      .filter(function (x) { return x; });
+  }
+  // status null = "just save my edits" — the RPC then leaves the status and the
+  // approver stamp alone, so fixing a typo on an approved article cannot silently
+  // unapprove it or overwrite who signed off.
+  async function save(status) {
+    st.textContent = "Sparar…";
+    try {
+      var res = await api("/rest/v1/rpc/review_kb_article", {
+        method: "POST",
+        body: JSON.stringify({
+          p_article_id: a.article_id,
+          p_status: status || null,
+          p_title: titleIn.value.trim(),
+          p_summary: summaryIn.value.trim(),
+          p_steps: lines(stepsIn),
+          p_notes: lines(notesIn),
+        }),
+      });
+      if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
+      var out = await res.json(), saved = out && out[0];
+      a.title = titleIn.value.trim(); a.summary = summaryIn.value.trim();
+      a.steps = lines(stepsIn); a.notes = lines(notesIn);
+      if (saved) {
+        a.status = saved.status;
+        a.reviewed_by = saved.reviewed_by; a.reviewed_at = saved.reviewed_at;
+        a.updated_at = saved.updated_at;
+      }
+      st.textContent = status === "approved" ? "godkänd — klar att publiceras för hand"
+        : status === "rejected" ? "avvisad" : "sparat";
+      render();
+    } catch (e) { st.textContent = "kunde inte spara: " + e.message; }
+  }
+
+  function button(label, cls, fn) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "btn small" + (cls ? " " + cls : "");
+    b.textContent = label; b.onclick = fn; btns.appendChild(b);
+  }
+  // "Spara" keeps the article where it is — editing an approved article must not
+  // unapprove it, nor rewrite who approved it (the RPC only stamps on a decision).
+  button("Spara", "", function () { save(null); });
+  if (a.status !== "approved") button("Godkänn", "sel", function () { save("approved"); });
+  if (a.status !== "rejected") button("Avvisa", "", function () { save("rejected"); });
+  card.appendChild(btns);
+  card.appendChild(st);
+  card.appendChild(articleTrace(a));
+  return card;
+}
+
+// The traceability line. An article outlives the ticket it came from, so where it
+// came from has to travel with it.
+function articleTrace(a) {
+  var d = document.createElement("details");
+  d.className = "arttrace";
+  var sum = document.createElement("summary");
+  sum.textContent = "Ursprung och historik";
+  d.appendChild(sum);
+  var body = el("div", "qabody");
+
+  function line(label, value) {
+    if (!value) return;
+    var row = el("div", "qarow");
+    row.appendChild(set(el("span", "qn"), label));
+    row.appendChild(set(el("span", "qr"), String(value)));
+    body.appendChild(row);
+  }
+  line("Ärende", "#" + a.ticket_id + (a.ticket_subject ? " — " + a.ticket_subject : ""));
+  line(
+    "Skriven utifrån",
+    a.resolution_source === "gold_answer"
+      ? "en granskares idealsvar (guldstandard)"
+      : a.resolution_source === "agent_reply"
+      ? "svaret agenten faktiskt skickade"
+      : "",
+  );
+  line("AI:ns förslag", a.proposed_title);
+  line("Varför", a.proposed_reason || a.gap_filled);
+  line("Borttagna kunduppgifter",
+    (a.removed_specifics || []).length ? a.removed_specifics.join(", ") : "");
+  line("Begärd av", a.requested_by + (a.requested_at ? " · " + fmtDate(a.requested_at) : ""));
+  line("Utkast skrivet", a.drafted_at ? fmtDate(a.drafted_at) : "");
+  line("Beslut", a.reviewed_by ? a.reviewed_by + " · " + fmtDate(a.reviewed_at) : "");
+  line("Senast ändrad", a.updated_at ? fmtDate(a.updated_at) : "");
+  line("Version", [a.article_version, a.model].filter(Boolean).join(" · "));
+  d.appendChild(body);
+  return d;
+}
+
+function fmtDate(iso) {
+  try { return new Date(iso).toLocaleString("sv-SE", { dateStyle: "short", timeStyle: "short" }); }
+  catch (_e) { return iso; }
+}
+
+// ── KB article (2026-08-03) ─────────────────────────────────────────────────
+//
+// Gate 1's root cause was knowledge nobody wrote down, so the loop closes here:
+// the AI FLAGS a ticket whose answer would generalise, the reviewer decides, and
+// a separate job drafts the article from a resolution a HUMAN stood behind (an
+// ideal answer, or the reply that was actually sent) — never from the AI's own
+// draft. Nothing is published anywhere; approved articles are exported for a
+// human to paste into the help centre.
+function articlePanel(r) {
+  var opp = r.article_opportunity || {};
+  var proposed = opp.worth_writing === true && opp.proposed_title;
+  var existing = articlesByTicket[r.ticket_id];
+
+  // Nothing to show unless the AI proposed one or somebody already asked — the
+  // reviewer's screen is for judging replies first.
+  if (!proposed && !existing) return el("div", "arthidden");
+
+  var box = el("div", "artbox");
+  var head = el("div", "arthead");
+  head.appendChild(set(el("span", "sl"), "📝 Kunskapsartikel"));
+  if (existing) head.appendChild(tag(ART_LABEL[existing.status] || existing.status, "a-" + existing.status));
+  box.appendChild(head);
+
+  if (proposed && !existing) {
+    box.appendChild(set(el("div", "artprop"), "Förslag: \u201d" + opp.proposed_title + "\u201d"));
+    if (opp.reason) box.appendChild(set(el("div", "artwhy"), opp.reason));
+  }
+
+  var st = el("span", "st"); st.setAttribute("aria-live", "polite");
+
+  // The drafted article, if the writer has run. Editable — the reviewer's words win.
+  var titleIn, summaryIn, stepsIn;
+  if (existing && existing.status !== "requested") {
+    if (existing.publishable === false) {
+      box.appendChild(set(el("div", "artblocked"),
+        "Kunde inte skrivas: " + (existing.blocked_reason || "okänd orsak")));
+    } else {
+      titleIn = document.createElement("input");
+      titleIn.type = "text"; titleIn.className = "arttitle";
+      titleIn.setAttribute("aria-label", "Artikelrubrik för ticket " + r.ticket_id);
+      titleIn.value = existing.title || "";
+      box.appendChild(titleIn);
+
+      summaryIn = document.createElement("textarea");
+      summaryIn.className = "artsum"; summaryIn.rows = 2;
+      summaryIn.setAttribute("aria-label", "Artikelsammanfattning för ticket " + r.ticket_id);
+      summaryIn.value = existing.summary || "";
+      box.appendChild(summaryIn);
+
+      stepsIn = document.createElement("textarea");
+      stepsIn.className = "artsteps"; stepsIn.rows = 4;
+      stepsIn.placeholder = "Ett steg per rad";
+      stepsIn.setAttribute("aria-label", "Artikelsteg för ticket " + r.ticket_id);
+      stepsIn.value = (existing.steps || []).join("\n");
+      box.appendChild(stepsIn);
+
+      // What the writer says it stripped. Shown because an article that silently
+      // kept a customer name is a data-protection problem, not a style one.
+      if ((existing.removed_specifics || []).length) {
+        box.appendChild(set(el("div", "artwhy"),
+          "Borttagna kunduppgifter: " + existing.removed_specifics.join(", ")));
+      }
+    }
+  }
+
+  var btns = el("div", "artbtns");
+  function button(label, cls, fn) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "btn small" + (cls ? " " + cls : "");
+    b.textContent = label; b.onclick = fn; btns.appendChild(b); return b;
+  }
+
+  if (!existing || existing.status === "rejected" || existing.status === "failed") {
+    button("Skriv en artikel av detta", "", async function () {
+      st.textContent = "Sparar…";
+      try {
+        var res = await api("/rest/v1/rpc/request_kb_article", {
+          method: "POST",
+          body: JSON.stringify({ p_ticket_id: r.ticket_id, p_generation_id: r.id }),
+        });
+        if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
+        var out = await res.json(), saved = out && out[0];
+        if (saved) {
+          var row = { article_id: saved.article_id, ticket_id: r.ticket_id, status: saved.status,
+                      steps: [], notes: [], removed_specifics: [] };
+          articlesByTicket[r.ticket_id] = row; articles.unshift(row);
+        }
+        st.textContent = "i kö — artikeln skrivs vid nästa körning";
+        btns.innerHTML = "";
+      } catch (e) { st.textContent = "kunde inte spara: " + e.message; }
+    });
+  } else if (existing.status === "drafted" && existing.publishable !== false) {
+    async function review(status) {
+      st.textContent = "Sparar…";
+      try {
+        var body = { p_article_id: existing.article_id, p_status: status };
+        if (status === "approved") {
+          body.p_title = titleIn ? titleIn.value.trim() : null;
+          body.p_summary = summaryIn ? summaryIn.value.trim() : null;
+          body.p_steps = stepsIn
+            ? stepsIn.value.split("\n").map(function (x) { return x.trim(); })
+                .filter(function (x) { return x; })
+            : null;
+        }
+        var res = await api("/rest/v1/rpc/review_kb_article", {
+          method: "POST", body: JSON.stringify(body),
+        });
+        if (!res.ok) { st.textContent = "Kunde inte spara: " + (await res.text()); return; }
+        existing.status = status;
+        st.textContent = status === "approved" ? "godkänd — klar att publiceras" : "avvisad";
+        btns.innerHTML = "";
+      } catch (e) { st.textContent = "kunde inte spara: " + e.message; }
+    }
+    button("Godkänn", "sel", function () { review("approved"); });
+    button("Avvisa", "", function () { review("rejected"); });
+  } else if (existing.status === "requested") {
+    box.appendChild(set(el("div", "artwhy"), "I kö — artikeln skrivs vid nästa körning."));
+  }
+
+  box.appendChild(btns);
+  box.appendChild(st);
+  return box;
+}
+
+var ART_LABEL = {
+  requested: "i kö", drafted: "utkast klart", approved: "godkänd",
+  rejected: "avvisad", failed: "misslyckades",
+};
+
 // QA score → colour band: red < 60, amber 60-74, green 75+ (or red if flagged).
 function qaCls(score, needsReview) {
   return (needsReview || score < 60) ? "bad" : score < 75 ? "c-low" : "c-high";
