@@ -26,6 +26,7 @@ on:
           - sync-tickets    # Refresh the semantic past-ticket precedent index.
           - assign-cohorts  # Lock tickets into learning/development/holdout sets (Supabase only).
           - knowledge-gaps  # Report the top undocumented topics to write KB for (Supabase only).
+          - verify-api      # Probe the Freshdesk API + print the customer KB links. Read-only, no OpenAI.
       ticket_ids:
         description: "Explicit ticket ids (space-separated). Leave empty to auto-pick by agent/count."
         type: string
@@ -97,9 +98,19 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Check required secrets
+        env:
+          IN_JOB: ${{ inputs.job }}
         run: |
+          # verify-api touches Freshdesk only — it calls no LLM and writes no
+          # Supabase rows, so demanding the other secrets would block a probe
+          # that does not need them.
+          if [ "$IN_JOB" = "verify-api" ]; then
+            required="FRESHDESK_DOMAIN FRESHDESK_API_KEY"
+          else
+            required="FRESHDESK_DOMAIN FRESHDESK_API_KEY OPENAI_API_KEY MY_AGENT_ID SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY"
+          fi
           missing=""
-          for v in FRESHDESK_DOMAIN FRESHDESK_API_KEY OPENAI_API_KEY MY_AGENT_ID SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+          for v in $required; do
             if [ -z "${!v}" ]; then missing="$missing $v"; fi
           done
           if [ -n "$missing" ]; then
@@ -152,6 +163,9 @@ jobs:
               sync-tickets)   deno run --allow-env --allow-net scripts/sync_tickets.ts ;;
               assign-cohorts) deno run --allow-env --allow-net scripts/assign_cohorts.ts $IN_IDS ;;
               knowledge-gaps) deno run --allow-env --allow-net scripts/knowledge_gaps.ts ;;
+              # Read-only probe. It only WRITES if POST_TEST_NOTE_TICKET_ID is set,
+              # which this workflow deliberately never sets.
+              verify-api)     deno run --allow-env --allow-net scripts/verify_api.ts ;;
               *)              echo "::error::Unknown job '$IN_JOB'"; exit 1 ;;
             esac
           } 2>&1 | tee /tmp/batch-out.log || rc=$?
@@ -163,8 +177,10 @@ jobs:
             echo "model \`$OPENAI_MODEL\` · agent \`${IN_AGENT:-MY_AGENT_ID}\` · count \`${IN_COUNT:-default}\` · cohort \`${COHORT:-none}\` · ids \`${IN_IDS:-<auto>}\`"
             echo ""
             echo '```text'
-            # the "Done. scored=… / Cohort … / distribution" tail is what matters
-            tail -n 30 /tmp/batch-out.log
+            # the "Done. scored=… / Cohort … / distribution" tail is what matters.
+            # verify-api prints six probes, so 30 lines would cut off the KB links.
+            lines=30; [ "$IN_JOB" = "verify-api" ] && lines=120
+            tail -n "$lines" /tmp/batch-out.log
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
