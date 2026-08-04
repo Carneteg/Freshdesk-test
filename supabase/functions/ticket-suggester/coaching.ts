@@ -281,3 +281,93 @@ export function unobservableShare(types: StepType[], env?: EnvLookup): number {
   const blind = types.filter((t) => !stepObservable(t, env)).length;
   return blind / types.length;
 }
+
+// ── Baselines measured on the COACHED population (2026-08-04) ────────────────
+//
+// The original baselines came from Intercom. They reproduced exactly against
+// that API, but Intercom is a different support channel: our pipeline watches
+// Freshdesk, those conversations arrive through onesupport.simployer.com, and no
+// record links the two. Comparing coaching performance on Freshdesk tickets
+// against Intercom's population was apples to oranges, so the baselines are now
+// computed from the tickets the AI actually coaches.
+//
+// Every metric below is derived from ONE `ticketWithConversations` read — the
+// same call the observer already makes — so measuring costs no new API surface.
+//
+// Naming is deliberately literal. Freshdesk exposes no reopen counter, so this
+// does NOT claim to measure "reopen rate": it measures whether the customer came
+// back after the first agent reply, which is a different thing and the honest
+// name for what the data supports.
+
+export interface TicketMetrics {
+  /** Seconds from ticket creation to the first PUBLIC agent reply. */
+  firstReplySeconds: number | null;
+  /** Public agent replies on the ticket — the "how many turns did this take" figure. */
+  agentReplies: number;
+  /**
+   * Seconds from creation to the last message. A PROXY for time-to-close:
+   * Freshdesk's true resolved_at lives on `?include=stats`, which this codebase
+   * does not fetch, so the last activity is the closest honest stand-in.
+   */
+  spanSeconds: number | null;
+  /**
+   * Did the customer write again AFTER the first agent reply? The answer did not
+   * land first time. This is the coaching-relevant cousin of a reopen, and it is
+   * named for what it measures rather than borrowing Intercom's word.
+   */
+  customerReturned: boolean;
+}
+
+export function ticketMetrics(
+  ticket: Pick<Ticket, "conversations"> & { created_at?: string },
+): TicketMetrics {
+  const convos = (ticket.conversations ?? []).filter((c) => c && c.created_at);
+  const publicAgent = convos
+    .filter((c) => !c.incoming && !c.private)
+    .map((c) => c.created_at)
+    .sort();
+  const incoming = convos
+    .filter((c) => c.incoming && !c.private)
+    .map((c) => c.created_at)
+    .sort();
+
+  const created = ticket.created_at ? Date.parse(ticket.created_at) : NaN;
+  const firstReply = publicAgent[0] ? Date.parse(publicAgent[0]) : NaN;
+
+  const all = convos.map((c) => Date.parse(c.created_at)).filter((n) => !isNaN(n)).sort();
+  const last = all.length ? all[all.length - 1] : NaN;
+
+  return {
+    firstReplySeconds: !isNaN(created) && !isNaN(firstReply)
+      // A reply timestamped before the ticket is clock skew, not a negative wait.
+      ? Math.max(0, Math.round((firstReply - created) / 1000))
+      : null,
+    agentReplies: publicAgent.length,
+    spanSeconds: !isNaN(created) && !isNaN(last) ? Math.max(0, Math.round((last - created) / 1000)) : null,
+    customerReturned: !isNaN(firstReply) &&
+      incoming.some((t) => Date.parse(t) > firstReply),
+  };
+}
+
+/** The reply-time buckets behind the timing bar. Same boundaries as before. */
+export const REPLY_BUCKETS = [
+  { key: "under_60s", label: "under 1 min", maxSeconds: 60 },
+  { key: "1_5min", label: "1–5 min", maxSeconds: 300 },
+  { key: "5_15min", label: "5–15 min", maxSeconds: 900 },
+  { key: "over_15min", label: "over 15 min", maxSeconds: Infinity },
+] as const;
+
+export function replyBucket(seconds: number): string {
+  for (const b of REPLY_BUCKETS) {
+    if (seconds < b.maxSeconds) return b.key;
+  }
+  return "over_15min";
+}
+
+/** Median of a numeric sample. Median, not mean — support times are long-tailed. */
+export function median(values: number[]): number | null {
+  const xs = values.filter((v) => typeof v === "number" && !isNaN(v)).sort((a, b) => a - b);
+  if (!xs.length) return null;
+  const mid = Math.floor(xs.length / 2);
+  return xs.length % 2 ? xs[mid] : Math.round((xs[mid - 1] + xs[mid]) / 2);
+}
