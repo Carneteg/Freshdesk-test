@@ -14,10 +14,13 @@ import {
 import {
   assertReadOnly,
   exposesWriteMethod,
+  EXTERNAL_WRITE_METHODS,
   FRESHDESK_WRITE_METHODS,
   ReadOnlyFreshdesk,
 } from "./readonly-clients.ts";
 import { Freshdesk } from "./clients.ts";
+import { escapeJql, issueLinksTicket, plainText, ReadOnlyAtlassian } from "./atlassian.ts";
+import { buildQuery, ReadOnlyIntercom } from "./intercom.ts";
 import {
   CONTENT_GATE_ENV,
   contentStorageAllowed,
@@ -289,4 +292,100 @@ Deno.test("describeConnections: reports state without leaking a secret", () => {
   assertStringIncludes(line, "intercom");
   assertStringIncludes(line, "blocked");
   assertEquals(line.includes("super-secret"), false);
+});
+
+// ── Atlassian: the false-positive trap ───────────────────────────────────────
+// `text ~ "84162"` is a full-text match on a bare number, so Jira will return
+// issues that merely mention it. These tests pin the confirmation step that
+// stops a coincidence being scored as follow-through.
+
+Deno.test("issueLinksTicket: only a real ticket URL counts", () => {
+  // Verbatim from TIMEPLAN-4147 on the live instance.
+  const real = 'Kunde Jungheinrich får ikke kjørt lønnseksport.   \nFreshdesk sak 84162  \n' +
+    '<custom data-type="smartlink" data-id="id-0">https://simployer.freshdesk.com/a/tickets/84162</custom>';
+  assertEquals(issueLinksTicket(real, "simployer", 84162), true);
+
+  // The trap: the number appears, but not as a ticket link.
+  assertEquals(issueLinksTicket("Invoice total was 84162 NOK", "simployer", 84162), false);
+  assertEquals(issueLinksTicket("Freshdesk sak 84162 (link to follow)", "simployer", 84162), false);
+  assertEquals(issueLinksTicket(null, "simployer", 84162), false);
+  assertEquals(issueLinksTicket("", "simployer", 84162), false);
+});
+
+Deno.test("issueLinksTicket: a prefix id must not match a longer one", () => {
+  const url = "https://simployer.freshdesk.com/a/tickets/84162";
+  assertEquals(issueLinksTicket(url, "simployer", 8416), false); // 8416 is not 84162
+  assertEquals(issueLinksTicket(url, "simployer", 84162), true);
+  // …and another tenant's Freshdesk is not ours.
+  assertEquals(issueLinksTicket(url, "othercorp", 84162), false);
+});
+
+Deno.test("plainText: flattens Atlassian Document Format, including smartlink URLs", () => {
+  // The REST API returns ADF, not the markdown the MCP probe showed. Assuming
+  // one shape would be exactly the mistake this client exists to avoid.
+  const adf = {
+    type: "doc",
+    content: [
+      { type: "paragraph", content: [{ type: "text", text: "Freshdesk sak 84162" }] },
+      {
+        type: "paragraph",
+        content: [{
+          type: "text",
+          text: "link",
+          marks: [{ type: "link", attrs: { href: "https://simployer.freshdesk.com/a/tickets/84162" } }],
+        }],
+      },
+    ],
+  };
+  const flat = plainText(adf);
+  assertStringIncludes(flat, "Freshdesk sak 84162");
+  assertStringIncludes(flat, "/a/tickets/84162");
+  assertEquals(issueLinksTicket(flat, "simployer", 84162), true);
+  assertEquals(plainText(null), "");
+});
+
+Deno.test("escapeJql: a value cannot break out of the quoted literal", () => {
+  assertEquals(escapeJql("84162"), "84162");
+  assertEquals(escapeJql('a" OR key = "X'), 'a\\" OR key = \\"X');
+  assertEquals(escapeJql("back\\slash"), "back\\\\slash");
+});
+
+// ── Intercom: query shape, verified against the live API ─────────────────────
+
+Deno.test("buildQuery: single filter stays flat, several become AND", () => {
+  assertEquals(buildQuery([["created_at", ">", 100]]), {
+    field: "created_at",
+    operator: ">",
+    value: 100,
+  });
+  assertEquals(
+    buildQuery([["created_at", ">", 100], ["statistics.count_reopens", ">", 0]]),
+    {
+      operator: "AND",
+      value: [
+        { field: "created_at", operator: ">", value: 100 },
+        { field: "statistics.count_reopens", operator: ">", value: 0 },
+      ],
+    },
+  );
+});
+
+Deno.test("read-only guard: the new Atlassian and Intercom clients expose no writes", () => {
+  const clients: Array<[string, object]> = [
+    ["ReadOnlyAtlassian", new ReadOnlyAtlassian("example.atlassian.net", "a@b.c", "tok")],
+    ["ReadOnlyIntercom", new ReadOnlyIntercom("tok")],
+  ];
+  for (const [label, client] of clients) {
+    assertEquals(exposesWriteMethod(client), null, `${label} must expose no write method`);
+    assertReadOnly(client, label);
+
+    // Walk the prototype chain too — a write must not arrive via inheritance.
+    const surface = new Set<string>();
+    for (let o: object | null = client; o && o !== Object.prototype; o = Object.getPrototypeOf(o)) {
+      for (const k of Object.getOwnPropertyNames(o)) surface.add(k);
+    }
+    for (const w of EXTERNAL_WRITE_METHODS) {
+      assertEquals(surface.has(w), false, `${label} must not expose ${w}`);
+    }
+  }
 });

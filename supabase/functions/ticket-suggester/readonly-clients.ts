@@ -24,6 +24,29 @@ export interface ReadOnlyTicketSource {
  */
 export const FRESHDESK_WRITE_METHODS = ["postPrivateNote", "setTags"] as const;
 
+/**
+ * Method names that would MUTATE an external system, across every client the
+ * coaching observer might touch. The guard test asserts none of these is
+ * reachable from any class the observer holds.
+ *
+ * The Atlassian and Intercom clients are read-only by construction rather than
+ * by wrapping — ReadOnlyAtlassian's only request method is hard-wired to GET,
+ * and ReadOnlyIntercom exposes nothing but conversation search. This list is the
+ * tripwire for anyone who later adds a write to either.
+ *
+ * Note that "no POST" is NOT the definition of read-only here: Intercom's
+ * conversation search is a POST carrying a query DSL, and it is a read.
+ */
+export const EXTERNAL_WRITE_METHODS = [
+  ...FRESHDESK_WRITE_METHODS,
+  // Jira / Confluence
+  "createIssue", "editIssue", "transitionIssue", "addComment", "createPage",
+  "updatePage", "deletePage", "createIssueLink",
+  // Intercom
+  "reply", "createConversation", "addTag", "assign", "close", "snooze",
+  "createArticle", "updateArticle",
+] as const;
+
 export class ReadOnlyFreshdesk implements ReadOnlyTicketSource {
   // Private: the write methods exist on `fd` but there is no path to them from
   // outside this class, and nothing inside it calls them.
@@ -42,8 +65,11 @@ export class ReadOnlyFreshdesk implements ReadOnlyTicketSource {
  * True when `obj` exposes any known write method. Used by the guard test; also
  * usable as a runtime assertion if someone passes a raw client by mistake.
  */
-export function exposesWriteMethod(obj: object): string | null {
-  for (const name of FRESHDESK_WRITE_METHODS) {
+export function exposesWriteMethod(
+  obj: object,
+  names: readonly string[] = EXTERNAL_WRITE_METHODS,
+): string | null {
+  for (const name of names) {
     // deno-lint-ignore no-explicit-any
     if (typeof (obj as any)[name] === "function") return name;
   }
