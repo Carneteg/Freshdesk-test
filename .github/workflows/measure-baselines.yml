@@ -1,0 +1,87 @@
+name: Measure baselines (coached population)
+
+# Measure the coaching baselines on the population the AI actually coaches.
+# Dry-run by default (prints, writes nothing). Set apply=true to LOCK the
+# baselines into Supabase (coaching_baselines + coaching_reply_distribution).
+#
+# Read-only against Freshdesk (ReadOnlyFreshdesk). The only writes go to
+# Supabase, and only when apply=true.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   FRESHDESK_DOMAIN, FRESHDESK_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: "How many coached tickets to sample (BASELINE_COUNT). Empty = script default (200)."
+        type: string
+        required: false
+        default: ""
+      apply:
+        description: "LOCK the baselines into Supabase. Leave false for a dry-run preview."
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: measure-baselines
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FRESHDESK_DOMAIN: ${{ secrets.FRESHDESK_DOMAIN }}
+      FRESHDESK_API_KEY: ${{ secrets.FRESHDESK_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        run: |
+          missing=""
+          for v in FRESHDESK_DOMAIN FRESHDESK_API_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required repo secret(s):$missing"
+            exit 1
+          fi
+          echo "All required secrets are present."
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.4
+
+      - name: Measure baselines
+        env:
+          IN_COUNT: ${{ inputs.count }}
+          IN_APPLY: ${{ inputs.apply }}
+        run: |
+          set -uo pipefail
+          if [ -n "$IN_COUNT" ]; then export BASELINE_COUNT="$IN_COUNT"; fi
+          if [ "$IN_APPLY" = "true" ]; then
+            export BASELINE_APPLY=true
+            mode="APPLY (writing baselines)"
+          else
+            mode="dry-run (preview only)"
+          fi
+          echo "Running measure-baselines mode=$mode count=${IN_COUNT:-default}"
+          rc=0
+          {
+            deno run --allow-env --allow-net scripts/measure_baselines.ts
+          } 2>&1 | tee /tmp/measure-out.log || rc=$?
+          {
+            echo "### Measure baselines: $mode $( [ "$rc" -eq 0 ] && echo OK || echo \"FAIL (exit $rc)\")"
+            echo ""
+            echo '```text'
+            tail -n 40 /tmp/measure-out.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"
