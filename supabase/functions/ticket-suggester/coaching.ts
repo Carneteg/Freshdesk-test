@@ -59,9 +59,12 @@ export const STEP_SIGNAL: Record<
   },
   // Our own KB-article loop is the signal: an article requested for this ticket.
   write_kb: {
+    // Two signals, both already readable: our own article_drafts table, and the
+    // customer knowledge base itself (Freshdesk solutions — the help centre at
+    // /en/support/home, which the pipeline already retrieves from).
     system: "supabase",
-    label: "article_drafts",
-    note: "a KB article was requested or approved for this ticket",
+    label: "article_drafts / customer KB",
+    note: "a KB article was requested, or published to the customer help centre",
   },
   link_jira: { system: "jira", label: "Jira", note: "issue linked to the ticket" },
   link_linear: { system: "linear", label: "Linear", note: "ticket attached to a Linear request" },
@@ -200,6 +203,13 @@ export interface ObservationEvidence {
   groupChanged?: boolean;
   /** A KB article was requested/approved for this ticket (our own table). */
   kbArticleRequested?: boolean;
+  /**
+   * The article actually reached the CUSTOMER knowledge base — Simployer's
+   * Freshdesk help centre at /en/support/home, the same corpus the pipeline
+   * retrieves from. This is the strong form of "write_kb was followed":
+   * requesting an article is an intention, publishing it is the outcome.
+   */
+  kbArticlePublished?: boolean;
 }
 
 export interface Observation {
@@ -237,6 +247,12 @@ export function evaluateObservation(
       return { observed: hit, observable: true, observedVia: hit ? STEP_SIGNAL[type].label : null };
     }
     case "write_kb": {
+      // Published beats requested: the knowledge only exists for the next
+      // customer once it is in the help centre. A request that never gets
+      // published is the failure mode this distinction exists to expose.
+      if (evidence.kbArticlePublished === true) {
+        return { observed: true, observable: true, observedVia: "customer knowledge base" };
+      }
       const hit = evidence.kbArticleRequested === true;
       return { observed: hit, observable: true, observedVia: hit ? STEP_SIGNAL[type].label : null };
     }

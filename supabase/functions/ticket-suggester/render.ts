@@ -631,7 +631,14 @@ export const MODE_BADGE: Record<CoachMode, string> = {
 function renderSource(s: SourceDoc): string {
   const label = s.kind === "kb" ? `KB article #${s.id}` : `Ticket #${s.id}`;
   const name = s.url ? `<a href="${esc(s.url)}">${esc(s.title)}</a>` : esc(s.title);
-  return `<li>${name} — ${esc(label)}</li>`;
+  // The agent link opens the article behind the Freshdesk login; the customer
+  // link is the help-centre page. Both are offered because the agent needs the
+  // first to check the article and the second to send it — converting one into
+  // the other by hand is exactly the small friction that stops links being sent.
+  const share = s.publicUrl
+    ? ` · <a href="${esc(s.publicUrl)}">send to customer</a>`
+    : "";
+  return `<li>${name} — ${esc(label)}${share}</li>`;
 }
 
 function renderList(items: string[], ordered: boolean): string {

@@ -333,6 +333,8 @@ async function retrieve(deps: PipelineDeps, queries: string[]): Promise<SourceDo
         title: s.title ?? "(untitled)",
         text: body.slice(0, 1500),
         url: deps.fd.articleUrl(s.id),
+        // Same article, customer view — see Freshdesk.portalArticleUrl.
+        publicUrl: deps.fd.portalArticleUrl(s.id),
       });
       if (docs.length >= 6) return docs;
     }

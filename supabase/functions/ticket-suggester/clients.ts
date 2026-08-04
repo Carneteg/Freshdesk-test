@@ -124,6 +124,34 @@ export class Freshdesk {
     this.auth = "Basic " + btoa(`${apiKey}:X`);
   }
 
+  // ── The customer knowledge base ─────────────────────────────────────────
+  //
+  // https://simployer.freshdesk.com/en/support/home is Simployer's help centre —
+  // the knowledge base CUSTOMERS read, and the same corpus `searchSolutions`
+  // retrieves from. It is the pipeline's primary grounding source, so it is
+  // named here rather than left implicit inside a search call.
+  //
+  // Two URLs exist for one article and they are not interchangeable:
+  //   articleUrl()       /a/solutions/articles/{id}  — the AGENT view, behind
+  //                      the Freshdesk login. Right for a private note.
+  //   portalArticleUrl() /{locale}/support/solutions/articles/{id} — the
+  //                      CUSTOMER view. This is the one an agent can paste into
+  //                      a reply, and the one an approved article is published
+  //                      to.
+  //
+  // The portal base is confirmed (given by the team). The article path follows
+  // Freshdesk's portal convention and is NOT yet confirmed against a live
+  // article — `deno task verify-api` probes it, and PORTAL_ARTICLE_PATH
+  // overrides it if this instance differs. Guessing a customer-facing link and
+  // shipping it into a reply would be worse than admitting it is unverified.
+  kbHome(locale = "en"): string {
+    return `${this.origin}/${locale}/support/home`;
+  }
+
+  portalArticleUrl(id: number, locale = "en"): string {
+    return `${this.origin}/${locale}/support/solutions/articles/${id}`;
+  }
+
   // Agent-facing links for the private note (agents, not customers, read notes).
   articleUrl(id: number): string {
     return `${this.origin}/a/solutions/articles/${id}`;

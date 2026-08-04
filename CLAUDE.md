@@ -597,6 +597,34 @@ something becomes knowledge.
 - PROMPT_VERSION bumped to `g1-2026-08-03b` (the draft call gained a field). Free
   at the time: nothing had been replayed on `…03a` yet.
 
+**The customer knowledge base is a named source (2026-08-04).** Per Tobias:
+`https://simployer.freshdesk.com/en/support/home` — Simployer's Freshdesk help
+centre — is **the** knowledge base customers read, and it is the same corpus
+`searchSolutions` (`/search/solutions`) already retrieves from. It was implicit
+inside a search call; it is now named, because a source the pipeline grounds on
+should be findable in the code by its own name.
+
+- **Two URLs per article, not interchangeable.** `Freshdesk.articleUrl()` →
+  `/a/solutions/articles/{id}` is the AGENT view behind the login (right for a
+  private note). `Freshdesk.portalArticleUrl()` → `/{locale}/support/solutions/
+  articles/{id}` is the CUSTOMER view — the link an agent can actually paste into
+  a reply. Notes now carry both ("send to customer"), because converting one into
+  the other by hand is the small friction that stops links being sent at all.
+- **Verification status, honestly:** the portal base is confirmed (given by the
+  team). The article path follows Freshdesk's portal convention and is **not** yet
+  confirmed against a live article — an anonymous fetch of the help centre returns
+  **HTTP 403**, so it could not be checked from here. `deno task verify-api`
+  probes it, and the pattern is overridable. Shipping a guessed customer-facing
+  link into a reply would be worse than admitting it is unverified.
+- **It closes the article loop.** `write_kb` follow-through now prefers
+  "published to the customer KB" over "article requested" — requesting an article
+  is an intention, publishing it is the outcome, and a request that never gets
+  published is exactly the failure worth seeing (`coaching.ts`).
+- **Confluence is NOT this.** The Atlassian wiki is an internal engineering space
+  (Deviation, DevOps Chapter, QA Chapter, Sysadmin…); there is no customer-facing
+  space on it. Anything measuring "did we document this for customers" must look
+  at the Freshdesk help centre, not Confluence.
+
 **P0 reliability hardening (2026-07-28).** A technical review found three risks
 that outrank further prompt work: mutable evaluation rows, duplicate Freshdesk
 notes after an uncertain POST/database failure, and missed tickets from the old

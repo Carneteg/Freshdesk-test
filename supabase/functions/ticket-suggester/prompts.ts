@@ -19,6 +19,10 @@ export interface SourceDoc {
   title: string;
   text: string;
   url?: string; // agent-facing link, filled where the Freshdesk domain is known
+  // Customer-facing help-centre link for a KB article. Distinct from `url`,
+  // which points at the agent view behind the login — this is the one an agent
+  // can paste into a reply to the customer.
+  publicUrl?: string;
 }
 
 // A team-curated known incident / routing rule (knowledge layer stage 1). These

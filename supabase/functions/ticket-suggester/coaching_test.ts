@@ -389,3 +389,30 @@ Deno.test("read-only guard: the new Atlassian and Intercom clients expose no wri
     }
   }
 });
+
+Deno.test("evaluateObservation: publishing to the customer KB outranks requesting", () => {
+  // The customer knowledge base (Freshdesk help centre, /en/support/home) is the
+  // pipeline's grounding source, so an article only helps the NEXT customer once
+  // it is actually there. Requesting one is an intention; publishing is the
+  // outcome — and a request that never gets published is the failure this
+  // distinction exists to expose.
+  const published = evaluateObservation(
+    "write_kb",
+    { kbArticleRequested: false, kbArticlePublished: true },
+    ALL_CREDS,
+  );
+  assertEquals(published, {
+    observed: true,
+    observable: true,
+    observedVia: "customer knowledge base",
+  });
+
+  // Requested but not published still counts as followed, via the weaker signal.
+  const requested = evaluateObservation("write_kb", { kbArticleRequested: true }, ALL_CREDS);
+  assertEquals(requested.observed, true);
+  assertStringIncludes(requested.observedVia ?? "", "article_drafts");
+
+  // Neither: observable, and genuinely not done.
+  const neither = evaluateObservation("write_kb", {}, ALL_CREDS);
+  assertEquals(neither, { observed: false, observable: true, observedVia: null });
+});
