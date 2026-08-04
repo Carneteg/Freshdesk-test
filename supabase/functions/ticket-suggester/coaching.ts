@@ -11,6 +11,7 @@
 // validator: a model may propose, TypeScript decides.
 
 import type { Conversation, Ticket } from "./clients.ts";
+import { type EnvLookup, isConnected, type SystemName } from "./connections.ts";
 
 // ── Step types ────────────────────────────────────────────────────────────────
 //
@@ -31,48 +32,56 @@ export const STEP_TYPES = [
 export type StepType = typeof STEP_TYPES[number];
 
 /**
- * Where a step type's signal lives, and whether that system is actually wired up
- * in this codebase today.
+ * Where a step type's signal lives.
  *
- * `connected: false` is deliberately visible rather than stubbed. The build spec
- * is explicit: if a client does not exist, render "not connected" rather than
- * inventing data. Only Freshdesk, Freshworks CRM and our own Postgres are
- * connected — Jira, Linear, Confluence and Planhat are not, so the steps that
- * depend on them can be counted but never confirmed.
+ * This declares the SIGNAL only. Whether the system is reachable is a separate,
+ * environment-dependent question answered by `connections.ts` — because a
+ * hardcoded `connected: true` is a claim that rots the moment credentials
+ * change, and the build spec is explicit that an unreachable system must render
+ * "not connected" rather than be stubbed.
+ *
+ * `system: null` means there is no signal at all, in any system, ever.
  */
-export const STEP_OBSERVABILITY: Record<
+export const STEP_SIGNAL: Record<
   StepType,
-  { system: string; connected: boolean; note: string }
+  { system: SystemName | null; label: string; note: string }
 > = {
   // Routing shows up as a Freshdesk group change on the ticket we already read.
   route_expert: {
-    system: "Freshdesk group",
-    connected: true,
+    system: "freshdesk",
+    label: "Freshdesk group",
     note: "group changed to Simployer Expert",
   },
   escalate: {
-    system: "Freshdesk group",
-    connected: true,
+    system: "freshdesk",
+    label: "Freshdesk group",
     note: "group changed away from first line",
   },
   // Our own KB-article loop is the signal: an article requested for this ticket.
   write_kb: {
-    system: "article_drafts",
-    connected: true,
+    system: "supabase",
+    label: "article_drafts",
     note: "a KB article was requested or approved for this ticket",
   },
-  link_jira: { system: "Jira", connected: false, note: "no Jira client in this codebase" },
-  link_linear: { system: "Linear", connected: false, note: "no Linear client in this codebase" },
-  copy_csm: { system: "Planhat", connected: false, note: "no Planhat client in this codebase" },
+  link_jira: { system: "jira", label: "Jira", note: "issue linked to the ticket" },
+  link_linear: { system: "linear", label: "Linear", note: "ticket attached to a Linear request" },
+  copy_csm: { system: "planhat", label: "Planhat", note: "CSM copied or activity created" },
   offer_meeting: {
-    system: "Planhat",
-    connected: false,
-    note: "no Planhat or calendar client in this codebase",
+    system: "planhat",
+    label: "Planhat",
+    note: "meeting activity created",
   },
-  // By design unobservable. Tracked as a SHARE, because advice nobody can verify
-  // is the blind spot — if this rises, the prompt is the problem, not the agent.
-  internal_check: { system: "—", connected: false, note: "no system signal by design" },
+  // By design unobservable — no system can confirm an internal check happened.
+  // Tracked as a SHARE, because advice nobody can verify is the blind spot: if
+  // this rises, the prompt is the problem, not the agent.
+  internal_check: { system: null, label: "—", note: "no system signal by design" },
 };
+
+/** Can this deployment actually observe this step type right now? */
+export function stepObservable(type: StepType, env?: EnvLookup): boolean {
+  const sig = STEP_SIGNAL[type];
+  return sig.system !== null && isConnected(sig.system, env);
+}
 
 /** Share of recommendations allowed to be unobservable before the prompt is at fault. */
 export const INTERNAL_CHECK_BUDGET = 0.15;
@@ -213,22 +222,23 @@ const EXPERT_GROUP = /expert/i;
 export function evaluateObservation(
   type: StepType,
   evidence: ObservationEvidence,
+  env?: EnvLookup,
 ): Observation {
-  const meta = STEP_OBSERVABILITY[type];
-  if (!meta.connected) return { observed: false, observable: false, observedVia: null };
+  // Not reachable in this deployment → UNKNOWN, never "the agent did not do it".
+  if (!stepObservable(type, env)) return { observed: false, observable: false, observedVia: null };
 
   switch (type) {
     case "route_expert": {
       const hit = !!evidence.groupName && EXPERT_GROUP.test(evidence.groupName);
-      return { observed: hit, observable: true, observedVia: hit ? "Freshdesk group" : null };
+      return { observed: hit, observable: true, observedVia: hit ? STEP_SIGNAL[type].label : null };
     }
     case "escalate": {
       const hit = evidence.groupChanged === true;
-      return { observed: hit, observable: true, observedVia: hit ? "Freshdesk group" : null };
+      return { observed: hit, observable: true, observedVia: hit ? STEP_SIGNAL[type].label : null };
     }
     case "write_kb": {
       const hit = evidence.kbArticleRequested === true;
-      return { observed: hit, observable: true, observedVia: hit ? "article_drafts" : null };
+      return { observed: hit, observable: true, observedVia: hit ? STEP_SIGNAL[type].label : null };
     }
     default:
       return { observed: false, observable: false, observedVia: null };
@@ -240,8 +250,8 @@ export function evaluateObservation(
  * INTERNAL_CHECK_BUDGET the prompt is producing advice that cannot be evaluated —
  * which is a prompt problem to fix, not an agent problem to chase.
  */
-export function unobservableShare(types: StepType[]): number {
+export function unobservableShare(types: StepType[], env?: EnvLookup): number {
   if (!types.length) return 0;
-  const blind = types.filter((t) => !STEP_OBSERVABILITY[t].connected).length;
+  const blind = types.filter((t) => !stepObservable(t, env)).length;
   return blind / types.length;
 }

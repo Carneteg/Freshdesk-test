@@ -25,6 +25,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 import { Freshdesk, HttpError } from "../supabase/functions/ticket-suggester/clients.ts";
 import { ReadOnlyFreshdesk, assertReadOnly } from "../supabase/functions/ticket-suggester/readonly-clients.ts";
+import { describeConnections, NOT_CONNECTED_REASON } from "../supabase/functions/ticket-suggester/connections.ts";
 import {
   classifyNextStep,
   deriveDeliveryStatus,
@@ -33,7 +34,8 @@ import {
   firstAgentReplyAt,
   INTERNAL_CHECK_BUDGET,
   type ObservationEvidence,
-  STEP_OBSERVABILITY,
+  STEP_SIGNAL,
+  stepObservable,
   type StepType,
   unobservableShare,
 } from "../supabase/functions/ticket-suggester/coaching.ts";
@@ -100,18 +102,25 @@ for (const g of generations) {
   });
 }
 
+function notConnectedReason(type: StepType): string {
+  const sys = STEP_SIGNAL[type].system;
+  return sys ? NOT_CONNECTED_REASON[sys] : STEP_SIGNAL[type].note;
+}
+
 const mix = new Map<StepType, number>();
 for (const r of stepRows) mix.set(r.step_type, (mix.get(r.step_type) ?? 0) + 1);
 const blindShare = unobservableShare(stepRows.map((r) => r.step_type));
 
+console.log(describeConnections() + "\n");
 console.log(`${generations.length} generation(s) scanned · ${stepRows.length} recommended step(s)\n`);
 console.log("Step type mix:");
 for (const [type, n] of [...mix.entries()].sort((a, b) => b[1] - a[1])) {
-  const meta = STEP_OBSERVABILITY[type];
+  const sig = STEP_SIGNAL[type];
+  const on = stepObservable(type);
   const pct = ((n / stepRows.length) * 100).toFixed(1);
   console.log(
     `  ${type.padEnd(15)} ${String(n).padStart(4)}  ${pct.padStart(5)}%  ` +
-      `${meta.connected ? "observable via " + meta.system : "NOT OBSERVABLE — " + meta.note}`,
+      `${on ? "observable via " + sig.label : "NOT OBSERVABLE — " + notConnectedReason(type)}`,
   );
 }
 console.log(
