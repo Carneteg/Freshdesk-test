@@ -105,8 +105,8 @@ try {
   if (sols.length) {
     console.log(`     customer KB home : ${fd.kbHome()}`);
     console.log(`     agent article    : ${fd.articleUrl(sols[0].id)}`);
-    console.log(`     customer article : ${fd.portalArticleUrl(sols[0].id)}`);
-    console.log(`     ^ open the customer link — if it 404s, the portal path differs here.`);
+    console.log(`     customer article : ${fd.portalArticleUrl(sols[0].id, { title: sols[0].title })}`);
+    console.log(`     ^ open the customer link — confirms the {id}-{slug} form resolves.`);
   }
   ok(`endpoint responded; ${sols.length} result(s)`);
   if (sols.length) {

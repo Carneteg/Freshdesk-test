@@ -1,5 +1,5 @@
 import { assertEquals } from "./test_assert.ts";
-import { Freshdesk } from "./clients.ts";
+import { Freshdesk, slugify } from "./clients.ts";
 
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
@@ -88,4 +88,48 @@ Deno.test("Freshdesk delivery recovery finds a private note marker", async () =>
   } finally {
     globalThis.fetch = original;
   }
+});
+
+// ── Customer knowledge-base links ────────────────────────────────────────────
+// The portal path was CONFIRMED against a real article supplied by the team:
+//   https://simployer.freshdesk.com/en/support/solutions/articles/201000115133-expert-invoice
+// which is why these assert the slugged form. A bare `/articles/{id}` guess —
+// the shape assumed before that URL arrived — would have been wrong.
+
+Deno.test("portalArticleUrl: reproduces the confirmed live article URL", () => {
+  const fd = new Freshdesk("simployer", "key");
+  assertEquals(
+    fd.portalArticleUrl(201000115133, { title: "Expert invoice" }),
+    "https://simployer.freshdesk.com/en/support/solutions/articles/201000115133-expert-invoice",
+  );
+});
+
+Deno.test("portalArticleUrl: agent and customer links are different targets", () => {
+  const fd = new Freshdesk("simployer", "key");
+  // The agent link sits behind the Freshdesk login and must never be sent to a
+  // customer; the portal link is the one that can be pasted into a reply.
+  assertEquals(
+    fd.articleUrl(201000115133),
+    "https://simployer.freshdesk.com/a/solutions/articles/201000115133",
+  );
+  assertEquals(fd.kbHome(), "https://simployer.freshdesk.com/en/support/home");
+  assertEquals(fd.kbHome("sv-SE"), "https://simployer.freshdesk.com/sv-SE/support/home");
+});
+
+Deno.test("portalArticleUrl: falls back to the bare id when no title is known", () => {
+  const fd = new Freshdesk("simployer", "key");
+  assertEquals(
+    fd.portalArticleUrl(123),
+    "https://simployer.freshdesk.com/en/support/solutions/articles/123",
+  );
+});
+
+Deno.test("slugify: Nordic titles transliterate rather than lose letters", () => {
+  // The KB is largely Norwegian and Swedish, so this is the common case.
+  assertEquals(slugify("Fravær og sykemelding"), "fravaer-og-sykemelding");
+  assertEquals(slugify("Ansettelse – ny medarbeider"), "ansettelse-ny-medarbeider");
+  assertEquals(slugify("Semesterårsavslut (Sverige)"), "semesterarsavslut-sverige");
+  assertEquals(slugify("Expert invoice"), "expert-invoice");
+  assertEquals(slugify("  Trailing / leading  "), "trailing-leading");
+  assertEquals(slugify(""), "");
 });

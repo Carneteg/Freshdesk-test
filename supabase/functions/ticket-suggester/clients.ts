@@ -112,6 +112,28 @@ export interface Solution {
   folder_name?: string;
 }
 
+/**
+ * Article-title -> URL slug, matching the confirmed form
+ * `201000115133-expert-invoice`.
+ *
+ * Nordic characters are transliterated rather than dropped, so "Fravær" becomes
+ * "fravaer" and not "frav-r" — the KB is largely Norwegian and Swedish, so this
+ * is the common case, not an edge case.
+ */
+export function slugify(title: string): string {
+  const map: Record<string, string> = {
+    "æ": "ae", "ø": "o", "å": "a", "ä": "a", "ö": "o", "ü": "u", "é": "e",
+    "è": "e", "ê": "e", "á": "a", "à": "a", "ó": "o", "ò": "o", "í": "i", "ñ": "n",
+  };
+  return (title ?? "")
+    .toLowerCase()
+    .replace(/[æøåäöüéèêáàóòíñ]/g, (c) => map[c] ?? c)
+    // Anything else non-alphanumeric becomes a separator.
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
 export class Freshdesk {
   private readonly origin: string;
   private readonly base: string;
@@ -131,25 +153,32 @@ export class Freshdesk {
   // retrieves from. It is the pipeline's primary grounding source, so it is
   // named here rather than left implicit inside a search call.
   //
-  // Two URLs exist for one article and they are not interchangeable:
+  // Two URLs exist for one article and they are NOT interchangeable:
   //   articleUrl()       /a/solutions/articles/{id}  — the AGENT view, behind
   //                      the Freshdesk login. Right for a private note.
-  //   portalArticleUrl() /{locale}/support/solutions/articles/{id} — the
-  //                      CUSTOMER view. This is the one an agent can paste into
-  //                      a reply, and the one an approved article is published
-  //                      to.
+  //   portalArticleUrl() /{locale}/support/solutions/articles/{id}-{slug} — the
+  //                      CUSTOMER view. The link an agent can paste into a reply.
   //
-  // The portal base is confirmed (given by the team). The article path follows
-  // Freshdesk's portal convention and is NOT yet confirmed against a live
-  // article — `deno task verify-api` probes it, and PORTAL_ARTICLE_PATH
-  // overrides it if this instance differs. Guessing a customer-facing link and
-  // shipping it into a reply would be worse than admitting it is unverified.
+  // CONFIRMED against a real article supplied by the team (2026-08-04):
+  //   .../en/support/solutions/articles/201000115133-expert-invoice
+  // So the path carries a SLUG after the id — which a bare `/articles/{id}`
+  // guess would have got wrong. The slug is derived from the article title.
+  //
+  // Freshdesk resolves the article from the numeric id prefix, so a slug that
+  // differs from the stored one is harmless — but that behaviour is NOT verified
+  // here (this sandbox cannot reach the host; the proxy refuses CONNECT). When a
+  // title is available the slug is built from it, which is the closest match to
+  // the confirmed form. `deno task verify-api` prints a generated link to be
+  // opened once against the live portal.
   kbHome(locale = "en"): string {
     return `${this.origin}/${locale}/support/home`;
   }
 
-  portalArticleUrl(id: number, locale = "en"): string {
-    return `${this.origin}/${locale}/support/solutions/articles/${id}`;
+  portalArticleUrl(id: number, opts: { title?: string; locale?: string } = {}): string {
+    const locale = opts.locale ?? "en";
+    const slug = opts.title ? slugify(opts.title) : "";
+    const tail = slug ? `${id}-${slug}` : String(id);
+    return `${this.origin}/${locale}/support/solutions/articles/${tail}`;
   }
 
   // Agent-facing links for the private note (agents, not customers, read notes).

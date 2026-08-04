@@ -610,12 +610,19 @@ should be findable in the code by its own name.
   articles/{id}` is the CUSTOMER view — the link an agent can actually paste into
   a reply. Notes now carry both ("send to customer"), because converting one into
   the other by hand is the small friction that stops links being sent at all.
-- **Verification status, honestly:** the portal base is confirmed (given by the
-  team). The article path follows Freshdesk's portal convention and is **not** yet
-  confirmed against a live article — an anonymous fetch of the help centre returns
-  **HTTP 403**, so it could not be checked from here. `deno task verify-api`
-  probes it, and the pattern is overridable. Shipping a guessed customer-facing
-  link into a reply would be worse than admitting it is unverified.
+- **CONFIRMED (2026-08-04)** against a real article supplied by Tobias:
+  `…/en/support/solutions/articles/201000115133-expert-invoice`. So the path
+  carries a **slug after the id** — the bare `/articles/{id}` form assumed before
+  that URL arrived was **wrong**. The slug is derived from the article title
+  (`slugify`, which transliterates æ/ø/å rather than dropping them, since the KB
+  is largely Norwegian and Swedish). Freshdesk resolves an article from the
+  numeric id prefix, so a slug that differs from the stored one should be
+  harmless — that part is *not* verified, and `deno task verify-api` prints a
+  generated link to be opened once against the live portal.
+- **Note on the earlier 403:** attempts to fetch the help centre from the build
+  sandbox fail with `CONNECT tunnel failed, response 403` — that is the agent
+  proxy refusing the host, **not** Freshdesk refusing anonymous access. Do not
+  read it as evidence the portal is private.
 - **It closes the article loop.** `write_kb` follow-through now prefers
   "published to the customer KB" over "article requested" — requesting an article
   is an intention, publishing it is the outcome, and a request that never gets
