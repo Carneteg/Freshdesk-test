@@ -234,6 +234,21 @@
     color:var(--nv-ink-3);font-weight:650;margin:0 0 2px}
   .nv-cust dd{margin:0;font-size:12.5px;font-weight:600;color:var(--nv-ink)}
   .nv-matched{font-size:11.5px;color:var(--nv-ink-3);margin-top:5px}
+  /* Demo cells are drawn DIFFERENTLY from real ones on purpose — dashed, muted,
+     and chipped. A placeholder that looks like data is worse than an empty cell,
+     because an agent can act on it. */
+  .nv-cust div.nv-demo{border-right-style:dashed;background:repeating-linear-gradient(
+    45deg,transparent,transparent 6px,var(--nv-canvas) 6px,var(--nv-canvas) 12px)}
+  .nv-cust div.nv-demo dd{color:var(--nv-ink-2);font-weight:500}
+  .nv-demotag{display:inline-block;margin-left:6px;font-size:8.5px;font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--nv-amber);
+    background:var(--nv-amber-soft);border-radius:2px;padding:1px 4px;vertical-align:1px}
+  .nv-dot{display:inline-block;width:7px;height:7px;border-radius:50%;
+    margin-right:5px;vertical-align:1px;background:var(--nv-ink-3)}
+  .nv-dot.green{background:var(--nv-teal)}
+  .nv-dot.amber{background:var(--nv-amber)}
+  .nv-dot.red{background:var(--nv-red)}
+
   .nv-warn{font-size:12.5px;color:var(--nv-amber);background:var(--nv-amber-soft);
     border-radius:6px;padding:9px 13px;margin-bottom:14px}
   .nv-quiet{font-size:12.5px;color:var(--nv-ink-3);margin-bottom:14px}
@@ -367,7 +382,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-04d-agent-note-tab";
+var APP_VERSION = "v2026-08-04e-planhat-demo";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -2291,16 +2306,76 @@ var NV_MATCH_NOTE = {
   email_domain: "matched via the e-mail domain — verify this is the right account",
 };
 
+// ── Planhat: DEMO DATA ──────────────────────────────────────────────────────
+//
+// Planhat is not connected. These three cells are placeholders so the note reads
+// as designed, and every one of them is visibly marked so nobody acts on them.
+//
+// That marking is not decoration. An agent who believes "Health: Green · CSM A.
+// Beck" may decline to escalate an account that is actually at risk, or name a
+// colleague who has nothing to do with the customer. A placeholder that looks
+// like data is worse than an empty cell — so these are drawn muted and dashed
+// with a DEMO chip, not styled to match the real ones.
+//
+// Flip to false the moment a Planhat client exists; the real values then flow
+// through the same cells.
+var PLANHAT_DEMO = true;
+
+// Derived from the ticket id, so a given ticket always shows the SAME sample.
+// Random-per-render would churn on every repaint and read as a bug.
+function demoPlanhat(ticketId) {
+  var n = Number(ticketId) || 0;
+  var health = ["Green", "Amber", "Green", "Green", "Amber", "Red"][n % 6];
+  var csm = ["A. Beck", "M. Lund", "S. Haugen", "K. Ericsson"][n % 4];
+  return { health: health, csm: csm, alsoOpen: n % 4 };
+}
+
+function demoCell(label, value, dotClass) {
+  var cell = el("div", "nv-demo");
+  var dt = el("dt", "");
+  dt.appendChild(document.createTextNode(label));
+  dt.appendChild(set(el("span", "nv-demotag"), "demo"));
+  cell.appendChild(dt);
+  var dd = el("dd", "");
+  if (dotClass) dd.appendChild(el("span", "nv-dot " + dotClass));
+  dd.appendChild(document.createTextNode(value));
+  cell.appendChild(dd);
+  return cell;
+}
+
+// The Planhat cells, appended to whichever strip is on screen.
+function appendDemoCells(strip, r) {
+  if (!PLANHAT_DEMO) return;
+  var d = demoPlanhat(r.ticket_id);
+  strip.appendChild(demoCell("Health", d.health + " · CSM " + d.csm, d.health.toLowerCase()));
+  strip.appendChild(demoCell(
+    "Also open",
+    d.alsoOpen ? d.alsoOpen + " ticket" + (d.alsoOpen === 1 ? "" : "s") : "none",
+  ));
+}
+
 // Every CRM outcome renders, not only the happy one. "Found nothing" and
 // "several accounts match" are the cases the agent most needs to act on.
 function crmStripEl(r) {
   var c = r.customer_subscriptions;
-  if (!c) return set(el("div", "nv-quiet"), "No CRM lookup for this ticket.");
+
+  // With no real CRM answer we still show the strip, so the layout holds — but
+  // it is then demo cells ONLY, and says so.
+  function demoOnlyStrip(note) {
+    var box = el("div", "nv-crm");
+    var strip = el("div", "nv-cust");
+    appendDemoCells(strip, r);
+    if (strip.children.length) box.appendChild(strip);
+    box.appendChild(set(el("div", "nv-matched"), note));
+    return box;
+  }
+
+  if (!c) return demoOnlyStrip("No CRM lookup for this ticket.");
   if (c.status === "unavailable") {
-    return set(el("div", "nv-warn"), "📦 CRM temporarily unavailable — check it manually.");
+    return demoOnlyStrip("📦 CRM temporarily unavailable — check it manually.");
   }
   if (c.status === "no_match") {
-    return set(el("div", "nv-quiet"),
+    return demoOnlyStrip(
       "📦 No CRM account matched. Not necessarily an error — the customer may not be linked.");
   }
   if (c.status === "ambiguous") {
@@ -2311,18 +2386,20 @@ function crmStripEl(r) {
       "⚠️ Several similar CRM accounts match — check the CRM yourself before relying on this." +
       (cands.length ? " Candidates: " + cands.join(" · ") + "." : ""));
   }
+
   var subs = Array.isArray(c.subscriptions) ? c.subscriptions : [];
-  if (!subs.length) return set(el("div", "nv-quiet"), "📦 Account matched, but it holds no subscriptions.");
+  if (!subs.length) return demoOnlyStrip("📦 Account matched, but it holds no subscriptions.");
 
   var box = el("div", "nv-crm");
   var strip = el("div", "nv-cust");
-  subs.slice(0, 4).forEach(function (sub) {
+  subs.slice(0, 3).forEach(function (sub) {
     var cell = document.createElement("div");
     cell.appendChild(set(el("dt", ""), sub.productName || "Subscription"));
     var bits = [sub.renewalStatus, sub.endDate].filter(Boolean);
     cell.appendChild(set(el("dd", ""), bits.length ? bits.join(" · ") : "—"));
     strip.appendChild(cell);
   });
+  appendDemoCells(strip, r);
   box.appendChild(strip);
   if (c.matchedBy && NV_MATCH_NOTE[c.matchedBy]) {
     box.appendChild(set(el("div", "nv-matched"), "Account " + NV_MATCH_NOTE[c.matchedBy] + "."));
@@ -2482,7 +2559,11 @@ function renderAgentNotes() {
   var intro = el("div", "nv-intro");
   intro.innerHTML = "This is the private note as the <b>agent</b> reads it on the ticket — " +
     "coaching, not evaluation. Judging a draft and writing the ideal answer happen in " +
-    "<b>To review</b>; nothing here records a verdict.";
+    "<b>To review</b>; nothing here records a verdict." +
+    (PLANHAT_DEMO
+      ? " Cells marked <b>demo</b> are placeholder data — Planhat is not connected, so health, " +
+        "CSM and open-ticket counts are illustrative and must not be acted on."
+      : "");
   lw.appendChild(intro);
 
   if (!list.length) {
