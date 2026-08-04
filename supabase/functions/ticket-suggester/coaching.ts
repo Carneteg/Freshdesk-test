@@ -199,6 +199,12 @@ export function deriveDeliveryStatus(
 export interface ObservationEvidence {
   /** Freshdesk group name on the ticket now, if the group could be resolved. */
   groupName?: string | null;
+  /**
+   * A Jira issue genuinely references this ticket — confirmed by the ticket URL
+   * appearing in the issue description, not merely by a full-text hit on the
+   * bare number (see atlassian.ts).
+   */
+  jiraIssueLinked?: boolean;
   /** Group id at generation time, to detect that it moved at all. */
   groupChanged?: boolean;
   /** A KB article was requested/approved for this ticket (our own table). */
@@ -245,6 +251,10 @@ export function evaluateObservation(
     case "escalate": {
       const hit = evidence.groupChanged === true;
       return { observed: hit, observable: true, observedVia: hit ? STEP_SIGNAL[type].label : null };
+    }
+    case "link_jira": {
+      const hit = evidence.jiraIssueLinked === true;
+      return { observed: hit, observable: true, observedVia: hit ? "Jira" : null };
     }
     case "write_kb": {
       // Published beats requested: the knowledge only exists for the next

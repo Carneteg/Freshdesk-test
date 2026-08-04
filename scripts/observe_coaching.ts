@@ -25,7 +25,12 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 import { Freshdesk, HttpError } from "../supabase/functions/ticket-suggester/clients.ts";
 import { ReadOnlyFreshdesk, assertReadOnly } from "../supabase/functions/ticket-suggester/readonly-clients.ts";
-import { describeConnections, NOT_CONNECTED_REASON } from "../supabase/functions/ticket-suggester/connections.ts";
+import {
+  describeConnections,
+  isConnected,
+  NOT_CONNECTED_REASON,
+} from "../supabase/functions/ticket-suggester/connections.ts";
+import { ReadOnlyAtlassian } from "../supabase/functions/ticket-suggester/atlassian.ts";
 import {
   classifyNextStep,
   deriveDeliveryStatus,
@@ -60,6 +65,19 @@ const fd = new ReadOnlyFreshdesk(
 );
 // Belt and braces: if someone swaps in a raw client, fail here rather than run.
 assertReadOnly(fd, "coaching ticket source");
+
+// Jira is optional: constructed only when its credentials are all present, so a
+// deployment without them observes fewer signals rather than crashing. The tab
+// renders those as "not connected", which is the honest reading.
+const jira = isConnected("jira")
+  ? new ReadOnlyAtlassian(
+    Deno.env.get("ATLASSIAN_SITE")!,
+    Deno.env.get("ATLASSIAN_EMAIL")!,
+    Deno.env.get("ATLASSIAN_API_TOKEN")!,
+  )
+  : null;
+if (jira) assertReadOnly(jira, "jira");
+const freshdeskDomain = env("FRESHDESK_DOMAIN");
 
 // ── 1. Classify the recommended steps ────────────────────────────────────────
 
@@ -162,8 +180,41 @@ const { data: stored } = await db
 const storedSteps = stored ?? [];
 
 // Which tickets already had a KB article requested — our own connected signal.
-const { data: articles } = await db.from("article_drafts").select("ticket_id");
+const { data: articles } = await db
+  .from("article_drafts")
+  .select("ticket_id, title, status");
 const kbTickets = new Set((articles ?? []).map((a) => a.ticket_id));
+// Approved articles, so we can ask the CUSTOMER knowledge base whether each one
+// actually got published. Requesting an article is an intention; publishing it
+// is the outcome, and the gap between them is worth seeing.
+const approvedArticles = (articles ?? []).filter((a) => a.status === "approved" && a.title);
+
+// Group id -> name, read once. Turns a ticket's group_id into the route_expert
+// and escalate signals without a lookup per ticket.
+const groupNames = new Map<number, string>();
+try {
+  for (const g of await fd.groups()) {
+    if (g.name) groupNames.set(g.id, g.name);
+  }
+} catch {
+  console.error("  could not read Freshdesk groups — routing signals stay unobserved");
+}
+
+// Did an approved article reach the help centre? One KB search per approved
+// article, matched on title.
+const publishedTickets = new Set<number>();
+for (const a of approvedArticles) {
+  try {
+    const hits = await fd.searchSolutions(String(a.title).slice(0, 60));
+    const norm = (x: string) => x.toLowerCase().replace(/\s+/g, " ").trim();
+    if (hits.some((h) => h.title && norm(h.title) === norm(String(a.title)))) {
+      publishedTickets.add(a.ticket_id);
+    }
+  } catch {
+    // A KB search failure leaves the article "requested but unconfirmed", which
+    // is the correct weaker reading rather than a false negative.
+  }
+}
 
 const byTicket = new Map<number, typeof generations>();
 for (const g of generations) {
@@ -207,11 +258,32 @@ for (const [ticketId, gensForTicket] of byTicket) {
     if (!error) deliveryWrites++;
   }
 
-  // Evidence for this ticket, gathered read-only.
+  // Evidence for this ticket, gathered read-only from the systems that ARE
+  // connected. Anything unreachable stays undefined, which evaluateObservation
+  // reports as "cannot see" — never as "the agent did not do it".
+  let jiraLinked: boolean | undefined;
+  if (jira) {
+    try {
+      const issues = await jira.issuesForTicket(ticketId, freshdeskDomain);
+      jiraLinked = issues.length > 0;
+    } catch {
+      // Leave undefined: unknown, not "no".
+    }
+  }
+
+  const groupName = ticket.group_id != null
+    ? (groupNames.get(ticket.group_id) ?? null)
+    : null;
+
   const evidence: ObservationEvidence = {
-    groupName: null, // Freshdesk group NAME needs a groups read — see the report
-    groupChanged: undefined,
+    groupName,
+    // "Escalated" reads as the ticket having left the first line. Without a
+    // recorded group at generation time this is the closest honest proxy, and it
+    // is deliberately conservative: unknown group => not observed.
+    groupChanged: groupName ? !/first[ -]?line|1st[ -]?line/i.test(groupName) : undefined,
     kbArticleRequested: kbTickets.has(ticketId),
+    kbArticlePublished: publishedTickets.has(ticketId),
+    jiraIssueLinked: jiraLinked,
   };
 
   const stepsHere = storedSteps.filter((s) => s.ticket_id === ticketId);

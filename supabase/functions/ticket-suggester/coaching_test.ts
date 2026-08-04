@@ -416,3 +416,32 @@ Deno.test("evaluateObservation: publishing to the customer KB outranks requestin
   const neither = evaluateObservation("write_kb", {}, ALL_CREDS);
   assertEquals(neither, { observed: false, observable: true, observedVia: null });
 });
+
+Deno.test("evaluateObservation: a Jira link counts only once confirmed", () => {
+  // The evidence flag is set by atlassian.ts AFTER the ticket URL is confirmed
+  // in the issue description — a bare full-text hit never reaches here.
+  assertEquals(
+    evaluateObservation("link_jira", { jiraIssueLinked: true }, ALL_CREDS),
+    { observed: true, observable: true, observedVia: "Jira" },
+  );
+  // Searched, nothing found: observable and genuinely not done.
+  assertEquals(
+    evaluateObservation("link_jira", { jiraIssueLinked: false }, ALL_CREDS),
+    { observed: false, observable: true, observedVia: null },
+  );
+  // Jira unreachable (search errored, or no credentials): UNKNOWN, not "no".
+  assertEquals(evaluateObservation("link_jira", {}, NO_CREDS).observable, false);
+});
+
+Deno.test("evaluateObservation: routing reads the Freshdesk group name", () => {
+  assertEquals(
+    evaluateObservation("route_expert", { groupName: "Simployer Expert SE" }, ALL_CREDS).observed,
+    true,
+  );
+  assertEquals(
+    evaluateObservation("route_expert", { groupName: "Customer Care 1st line" }, ALL_CREDS).observed,
+    false,
+  );
+  // No group on the ticket at all → we cannot say it moved.
+  assertEquals(evaluateObservation("escalate", { groupName: null }, ALL_CREDS).observed, false);
+});

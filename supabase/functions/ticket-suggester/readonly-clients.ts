@@ -9,12 +9,14 @@
 // write is not merely discouraged from the observation job — it is unreachable.
 // The test walks this class's surface and fails if a write name appears.
 
-import type { Freshdesk, Ticket } from "./clients.ts";
+import type { Freshdesk, Group, Solution, Ticket } from "./clients.ts";
 
 /** Every method the observation job is allowed to call. Reads only. */
 export interface ReadOnlyTicketSource {
   ticketWithConversations(id: number): Promise<Ticket>;
   ticketUrl(id: number): string;
+  groups(): Promise<Group[]>;
+  searchSolutions(term: string): Promise<Solution[]>;
 }
 
 /**
@@ -58,6 +60,19 @@ export class ReadOnlyFreshdesk implements ReadOnlyTicketSource {
 
   ticketUrl(id: number): string {
     return this.fd.ticketUrl(id);
+  }
+
+  /** Group id -> name, for the route_expert / escalate signals. */
+  groups(): Promise<Group[]> {
+    return this.fd.groups();
+  }
+
+  /**
+   * The CUSTOMER knowledge base. Used to confirm an article actually reached the
+   * help centre, which is the strong form of "write_kb was followed".
+   */
+  searchSolutions(term: string): Promise<Solution[]> {
+    return this.fd.searchSolutions(term);
   }
 }
 

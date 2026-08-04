@@ -96,6 +96,15 @@ export interface Ticket extends TicketSummary {
   // account when the requester email has no CRM contact (subscriptions live per
   // account/company, not per contact).
   company_id?: number | null;
+  // Which Freshdesk group the ticket currently sits in. Read-only, and the
+  // observable signal behind the `route_expert` and `escalate` coaching steps:
+  // routing shows up as the group moving.
+  group_id?: number | null;
+}
+
+export interface Group {
+  id: number;
+  name?: string | null;
 }
 
 export interface Company {
@@ -265,6 +274,12 @@ export class Freshdesk {
   // Read-only company lookup (id -> name), used to match the CRM account by
   // company name when the requester email has no CRM contact. Callers treat a
   // failure as "no company", never fatal.
+  // Group id -> name. Read-only; used to turn a ticket's group_id into something
+  // a human (and the route_expert check) can read.
+  groups(): Promise<Group[]> {
+    return this.get<Group[]>("/groups");
+  }
+
   company(id: number): Promise<Company> {
     return this.get<Company>(`/companies/${id}`);
   }
