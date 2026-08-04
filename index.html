@@ -124,6 +124,48 @@
   .crmverdict{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
   .crmhint{flex:1 1 240px;min-width:200px;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--ink)}
   .crmverdict .btn.sel{outline:2px solid var(--accent)}
+  /* Coaching tab (2026-08-04) — read-only measurement of the coaching half */
+  .cbanner{display:flex;align-items:center;gap:9px;margin:0 0 18px;background:var(--accent-soft);
+    border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:12.5px;color:var(--ink)}
+  .csec{margin:28px 0 10px}
+  .chead{font-size:13px;font-weight:700;letter-spacing:.02em;margin:0 0 4px}
+  .chint{font-size:12.5px;color:var(--ink-3);margin:0 0 12px;line-height:1.55}
+  .chint.bad{color:var(--crit)}
+  .ctiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+  .ctiles.three{grid-template-columns:repeat(3,1fr)}
+  .ctile{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px 16px}
+  .ctile.pending .cv{color:var(--ink-3)}
+  .ck{font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:650;margin-bottom:7px}
+  .cv{font-size:25px;font-weight:700;letter-spacing:-.02em;line-height:1}
+  .cd{font-size:11.5px;color:var(--ink-3);margin-top:7px;line-height:1.4}
+  .ctiming{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:16px 18px}
+  .cbar{display:flex;height:26px;border-radius:4px;overflow:hidden;margin:4px 0 9px}
+  .cbar div{display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:650;color:#fff;min-width:0}
+  .clegend{display:flex;gap:18px;font-size:11.5px;color:var(--ink-2);flex-wrap:wrap;margin-bottom:6px}
+  .clegend i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:6px}
+  .ctable{width:100%;border-collapse:collapse;background:var(--surface);border:1px solid var(--border);
+    border-radius:8px;overflow:hidden;margin-bottom:8px}
+  .ctable th{text-align:left;font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);
+    font-weight:650;padding:10px 12px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+  .ctable td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:12.5px;vertical-align:top}
+  .ctable tr:last-child td{border-bottom:none}
+  .ctable tr.hold{background:var(--surface-2)}
+  .cstep{color:var(--ink-3);font-size:11.5px;margin-top:2px;line-height:1.45}
+  .cmix{margin-bottom:18px}
+  .cbudget{border:1px solid var(--border);border-left:3px solid var(--good);border-radius:6px;
+    padding:10px 14px;margin-bottom:10px;font-size:12.5px;background:var(--surface);line-height:1.55}
+  .cbudget.over{border-left-color:var(--crit)}
+  .cfail{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--crit);
+    border-radius:6px;padding:12px 14px;margin-bottom:9px}
+  .cfail.late{border-left-color:var(--warn)}
+  .cfail .fh{font-size:12.5px;font-weight:650;margin-bottom:4px}
+  .cfail .fb{font-size:12.5px;color:var(--ink-2);line-height:1.5}
+  .cfail .fm{font-size:11.5px;color:var(--ink-3);margin-top:6px}
+  .cfoot{margin-top:30px;padding-top:14px;border-top:1px solid var(--border);
+    font-size:11.5px;color:var(--ink-3);line-height:1.7}
+  .tag.c-meas{background:var(--accent-soft);color:var(--accent)}
+  .tag.c-wait{background:var(--surface-2);color:var(--ink-3)}
+  @media (max-width:880px){ .ctiles,.ctiles.three{grid-template-columns:repeat(2,1fr)} }
   /* KB article panel — the "write this down" loop (2026-08-03) */
   .arthidden{display:none}
   .artbox{margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:7px;background:var(--surface-2)}
@@ -225,7 +267,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-03b-article-tab";
+var APP_VERSION = "v2026-08-04a-coaching-tab";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -234,6 +276,8 @@ var rows = [], tab = "todo", token = null, refreshToken = null, meEmail = null;
 // Columns fetched for each suggestion (used by loadData AND single-row reloads).
 var articlesByTicket = {};   // ticket_id -> the article row, for the per-card panel
 var articles = [];           // every article, for the Articles tab (article_library)
+// Coaching tab state. All read-only: the tab observes, it never writes anywhere.
+var coach = { baselines: [], dist: [], steps: [], delivery: null, mix: [], pairing: [], failed: [], knowledge: null, loaded: false };
 var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,article_opportunity,prompt_version,created_at";
 
 // Why an edited/unusable reply fell short — slug + Swedish label (CLAUDE.md / plan 1.3).
@@ -486,17 +530,20 @@ function render() {
   bar.appendChild(tabEl("done", "Judged", tabCount("done")));
   bar.appendChild(tabEl("rewrite", "Rewrite", tabCount("rewrite")));
   bar.appendChild(tabEl("articles", "📝 Artiklar", articles.length));
+  bar.appendChild(tabEl("coaching", "🎯 Coaching", coach.steps.length));
   bar.appendChild(tabEl("all", "All", rows.length));
   var c = el("div", "count"); c.id = "loadcount"; c.textContent = rows.length + " loaded";
   bar.appendChild(c);
   app.appendChild(bar);
   document.getElementById("out").onclick = signOut;
 
-  if (tab !== "articles") {
+  if (tab === "articles") {
+    app.appendChild(articleControlsEl());
+  } else if (tab === "coaching") {
+    // No ticket filters here — this tab summarises, it does not triage.
+  } else {
     app.appendChild(controlsEl());
     app.appendChild(progressEl());
-  } else {
-    app.appendChild(articleControlsEl());
   }
   var lw = el("div"); lw.id = "listwrap"; app.appendChild(lw);
   renderList();
@@ -573,6 +620,7 @@ function progressEl() {
 // of the active tab. Called on every keystroke/filter change; leaves controls intact.
 function renderList() {
   if (tab === "articles") return renderArticleList();
+  if (tab === "coaching") return renderCoaching();
   var base = tabRows();
   var q = search.trim().toLowerCase();
   shown = base.filter(function (r) {
@@ -1384,6 +1432,359 @@ function crmVerdictRow(r) {
   if (r.crm_account_correct) st.textContent = "sparat";
   return row;
 }
+// ── Coaching tab (2026-08-04) ───────────────────────────────────────────────
+//
+// The pivot said the product is a COACH, but only the drafting half is measured.
+// This tab measures the other half: did the note arrive before the agent started
+// writing, and was the recommended next step actually followed?
+//
+// READ-ONLY, and that is structural, not a promise: every table it reads is
+// granted SELECT only, so there is no path from this browser to a write. There
+// is also deliberately NO control for an agent to declare they followed the
+// advice — follow-through is observed or it is unknown, never self-reported.
+
+async function loadCoaching() {
+  if (coach.loaded) return;
+  async function get(path) {
+    try {
+      var res = await api("/rest/v1/" + path);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (_e) { return null; }
+  }
+  var r = await Promise.all([
+    get("coaching_baselines?select=*"),
+    get("coaching_reply_distribution?select=*&order=bucket_order"),
+    get("coaching_next_steps?select=*&limit=300"),
+    get("coaching_delivery_summary?select=*"),
+    get("coaching_step_mix?select=*"),
+    get("coaching_value_pairing?select=*"),
+    get("coaching_failed_advice?select=*&limit=40"),
+    get("coaching_knowledge_produced?select=*"),
+  ]);
+  coach.baselines = r[0] || [];
+  coach.dist      = r[1] || [];
+  coach.steps     = r[2] || [];
+  coach.delivery  = (r[3] || [])[0] || null;
+  coach.mix       = r[4] || [];
+  coach.pairing   = r[5] || [];
+  coach.failed    = r[6] || [];
+  coach.knowledge = (r[7] || [])[0] || null;
+  coach.loaded = true;
+}
+
+function num(v) { return v == null ? "—" : String(v); }
+
+function tileEl(label, value, detail, pending) {
+  var t = el("div", "ctile" + (pending ? " pending" : ""));
+  t.appendChild(set(el("div", "ck"), label));
+  t.appendChild(set(el("div", "cv"), value));
+  if (detail) t.appendChild(set(el("div", "cd"), detail));
+  return t;
+}
+
+function sectionEl(title, hint, tagText, tagCls) {
+  var h = el("div", "csec");
+  var head = el("h3", "chead");
+  head.appendChild(document.createTextNode(title));
+  if (tagText) head.appendChild(tag(tagText, tagCls));
+  h.appendChild(head);
+  if (hint) h.appendChild(set(el("p", "chint"), hint));
+  return h;
+}
+
+function renderCoaching() {
+  var lw = document.getElementById("listwrap");
+  lw.innerHTML = "";
+  cardEls = []; activeIdx = -1;
+
+  var wrap = el("div", "coaching");
+
+  // Read-only banner. Stated up front because the whole design rests on it.
+  var ro = el("div", "cbanner");
+  ro.appendChild(set(el("span", "clock"), "🔒"));
+  ro.appendChild(set(el("span", ""),
+    "Read-only. This tab observes Freshdesk and this database. It writes nothing back — " +
+    "no private notes, no ticket updates, no status changes, and no scheduler."));
+  wrap.appendChild(ro);
+
+  if (!coach.loaded) {
+    wrap.appendChild(set(el("div", "empty"), "Loading coaching data…"));
+    lw.appendChild(wrap);
+    loadCoaching().then(function () { if (tab === "coaching") renderList(); });
+    return;
+  }
+
+  // ── 1. Baselines ──────────────────────────────────────────────────────────
+  var stamp = coach.baselines.length ? fmtDate(coach.baselines[0].computed_at) : "—";
+  wrap.appendChild(sectionEl(
+    "Baselines",
+    "Locked from history before the first coaching run, so a later change has something to be " +
+    "compared against. Computed once and stored — a baseline that moves is not a baseline. " +
+    "Computed " + stamp + ".",
+    "measured", "c-meas"));
+  var bt = el("div", "ctiles");
+  if (!coach.baselines.length) {
+    bt.appendChild(set(el("div", "chint"), "No baselines stored."));
+  }
+  coach.baselines.forEach(function (b) {
+    var v = b.unit === "%" ? b.value + "%" : b.unit === "h" ? b.value + " h" : String(b.value);
+    bt.appendChild(tileEl(b.label, v, b.detail || b.source_note));
+  });
+  wrap.appendChild(bt);
+
+  // ── 2. Delivery timing ────────────────────────────────────────────────────
+  wrap.appendChild(sectionEl(
+    "Did the note arrive in time?",
+    "A note is only useful if it is there before the agent starts writing. The bar is the " +
+    "historical distribution of time to first agent reply; the counter underneath is measured " +
+    "from our own notes. A late note is a DELIVERY failure, not a bad suggestion — counted " +
+    "apart so the model is not blamed for advice nobody saw."));
+  var timing = el("div", "ctiming");
+  if (coach.dist.length) {
+    var bar = el("div", "cbar");
+    var colours = ["#9E3227", "#B45A09", "#4E9A9B", "#0F7173"];
+    coach.dist.forEach(function (d, i) {
+      var seg = el("div", "");
+      seg.style.flex = String(d.share_pct);
+      seg.style.background = colours[i % colours.length];
+      seg.textContent = d.share_pct + "%";
+      seg.title = d.label + " — " + d.conversations + " conversations";
+      bar.appendChild(seg);
+    });
+    timing.appendChild(bar);
+    var legend = el("div", "clegend");
+    coach.dist.forEach(function (d, i) {
+      var sp = el("span", "");
+      var sw = el("i", ""); sw.style.background = colours[i % colours.length];
+      sp.appendChild(sw);
+      sp.appendChild(document.createTextNode(d.label + " (" + d.conversations + ")"));
+      legend.appendChild(sp);
+    });
+    timing.appendChild(legend);
+  }
+  var dv = coach.delivery;
+  var lateLine = el("p", "chint");
+  if (!dv || !dv.measured) {
+    lateLine.textContent =
+      "No delivery rows yet. Run `deno task observe-coaching` (dry run by default) to measure " +
+      "note timing against the first agent reply.";
+  } else {
+    var pct = dv.late_pct == null ? "—" : dv.late_pct + "%";
+    lateLine.innerHTML =
+      "<b>" + num(dv.late) + " late</b> of " + num(dv.in_time + dv.late) +
+      " judgeable note(s) — " + esc(pct) + " (target under 2%). " +
+      num(dv.no_reply_yet) + " ticket(s) have no agent reply yet, so there is nothing to judge.";
+    if (dv.late_pct != null && Number(dv.late_pct) > 2) lateLine.className = "chint bad";
+  }
+  timing.appendChild(lateLine);
+  wrap.appendChild(timing);
+
+  // ── 3. Next steps ─────────────────────────────────────────────────────────
+  wrap.appendChild(sectionEl(
+    "Next steps",
+    "One row per recommended step. Each type has one signal in a system we already read, so " +
+    "follow-through is observed — there is no button here asking an agent whether they complied.",
+    coach.steps.length ? null : "collecting", "c-wait"));
+  wrap.appendChild(stepMixEl());
+  wrap.appendChild(stepTableEl());
+
+  // ── 4. Value pairing ──────────────────────────────────────────────────────
+  wrap.appendChild(sectionEl(
+    "Where the value shows",
+    "Followed on its own proves nothing — an agent obeying bad advice is a cost. The pairing " +
+    "is the metric: follow-through read against the outcome, with the locked holdout cohort " +
+    "kept separate so the coaching is isolated from the drafting."));
+  wrap.appendChild(pairingEl());
+
+  // ── 5. Advice that failed ─────────────────────────────────────────────────
+  wrap.appendChild(sectionEl(
+    "Advice that failed",
+    "Followed and it still went wrong, or it never reached the agent. The delivery status is " +
+    "on every card so a late note is never misread as bad advice."));
+  wrap.appendChild(failedEl());
+
+  // ── 6. Knowledge produced ─────────────────────────────────────────────────
+  wrap.appendChild(sectionEl(
+    "Knowledge produced",
+    "The three closing states of a note, derived from pipeline output rather than reported by " +
+    "anyone. This is the weekly documentation backlog."));
+  var k = coach.knowledge || {};
+  var kt = el("div", "ctiles three");
+  kt.appendChild(tileEl("📗 Documented", num(k.documented), "answer already existed", k.documented == null));
+  kt.appendChild(tileEl("🔵 Wish to log", num(k.wish), "product limitation", k.wish == null));
+  kt.appendChild(tileEl("📕 Gap to fill", num(k.gap), "nothing written anywhere", k.gap == null));
+  wrap.appendChild(kt);
+
+  var foot = el("p", "cfoot");
+  foot.innerHTML =
+    "Baselines are measured from history and locked. Follow-through and delivery are computed " +
+    "by <code>deno task observe-coaching</code>, which reads Freshdesk and writes only to this " +
+    "database. Nothing on this tab writes to any connected system, and no scheduler is enabled.";
+  wrap.appendChild(foot);
+
+  lw.appendChild(wrap);
+}
+
+// Step-type mix — and the unobservable share, which judges the PROMPT, not the agent.
+function stepMixEl() {
+  var box = el("div", "cmix");
+  if (!coach.mix.length) {
+    box.appendChild(set(el("p", "chint"),
+      "No steps classified yet. Run `deno task observe-coaching` to populate them."));
+    return box;
+  }
+  var total = coach.mix.reduce(function (n, m) { return n + m.steps; }, 0);
+  var blind = coach.mix.reduce(function (n, m) { return n + (m.steps - m.observable); }, 0);
+  var share = total ? Math.round(1000 * blind / total) / 10 : 0;
+
+  var warn = el("div", "cbudget" + (share > 15 ? " over" : ""));
+  warn.innerHTML = "<b>" + share + "%</b> of recommendations have no observable signal " +
+    "(budget 15%). " + (share > 15
+      ? "Over budget — the prompt is producing advice that cannot be evaluated. That is a prompt " +
+        "problem to fix, not an agent problem to chase."
+      : "Within budget.");
+  box.appendChild(warn);
+
+  var t = document.createElement("table");
+  t.className = "ctable";
+  t.innerHTML = "<thead><tr><th>Step type</th><th>Steps</th><th>Observable</th>" +
+    "<th>Followed</th><th>Signal</th></tr></thead>";
+  var tb = document.createElement("tbody");
+  coach.mix.forEach(function (m) {
+    var tr = document.createElement("tr");
+    tr.appendChild(set(document.createElement("td"), m.step_type));
+    tr.appendChild(set(document.createElement("td"), String(m.steps)));
+    tr.appendChild(set(document.createElement("td"), String(m.observable)));
+    tr.appendChild(set(document.createElement("td"),
+      m.observable ? (m.followed + (m.followed_pct != null ? " (" + m.followed_pct + "%)" : "")) : "—"));
+    var sig = document.createElement("td");
+    sig.appendChild(m.observable
+      ? tag("observable", "p-yes")
+      : tag("not connected", "p-na"));
+    tr.appendChild(sig);
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+  return box;
+}
+
+function stepTableEl() {
+  if (!coach.steps.length) {
+    return set(el("p", "chint"), "No recommended steps recorded yet.");
+  }
+  var t = document.createElement("table");
+  t.className = "ctable";
+  t.innerHTML = "<thead><tr><th style='width:26%'>Ticket</th>" +
+    "<th style='width:32%'>Recommended step</th><th style='width:13%'>Observed in</th>" +
+    "<th style='width:13%'>Followed</th><th style='width:16%'>Delivery</th></tr></thead>";
+  var tb = document.createElement("tbody");
+
+  coach.steps.slice(0, 120).forEach(function (r) {
+    var tr = document.createElement("tr");
+
+    var td1 = document.createElement("td");
+    var a = document.createElement("a");
+    a.className = "tk"; a.href = r.ticket_url || "#"; a.target = "_blank"; a.rel = "noopener";
+    a.textContent = "#" + r.ticket_id;
+    td1.appendChild(a);
+    td1.appendChild(document.createTextNode(" " + (r.subject || "")));
+    if (r.cohort === "holdout") {
+      // Holdout tickets are the locked eval set — never fed back, never mixed in.
+      td1.appendChild(tag("🔒 holdout", "p-na"));
+    }
+    tr.appendChild(td1);
+
+    var td2 = document.createElement("td");
+    td2.appendChild(set(el("b", ""), r.step_type));
+    td2.appendChild(set(el("div", "cstep"), r.step_text || ""));
+    tr.appendChild(td2);
+
+    tr.appendChild(set(document.createElement("td"), r.observed_via || signalName(r.step_type)));
+
+    var td4 = document.createElement("td");
+    // Three-valued on purpose: "Not visible" means we cannot see it. It must
+    // never be read as "the agent ignored the advice".
+    td4.appendChild(r.observable === true
+      ? (r.observed ? tag("Yes", "p-yes") : tag("No", "p-no"))
+      : tag("Not visible", "p-na"));
+    tr.appendChild(td4);
+
+    var td5 = document.createElement("td");
+    td5.appendChild(r.delivery_status === "late"
+      ? tag("late", "p-no")
+      : r.delivery_status === "in_time"
+      ? tag("in time", "p-yes")
+      : tag(r.delivery_status || "—", "p-na"));
+    tr.appendChild(td5);
+
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  return t;
+}
+
+function signalName(type) {
+  var m = {
+    route_expert: "Freshdesk group", escalate: "Freshdesk group",
+    write_kb: "article_drafts", link_jira: "Jira", link_linear: "Linear",
+    copy_csm: "Planhat", offer_meeting: "Planhat", internal_check: "—",
+  };
+  return m[type] || "—";
+}
+
+function pairingEl() {
+  var box = el("div", "");
+  if (!coach.pairing.length) {
+    box.appendChild(set(el("p", "chint"),
+      "Nothing to pair yet — follow-through has not been observed."));
+    return box;
+  }
+  var t = document.createElement("table");
+  t.className = "ctable";
+  t.innerHTML = "<thead><tr><th>Follow-through</th><th>Cohort</th><th>Suggestions</th>" +
+    "<th>Judged</th><th>Usable</th><th>Unusable</th><th>Usable %</th></tr></thead>";
+  var tb = document.createElement("tbody");
+  coach.pairing.forEach(function (p) {
+    var tr = document.createElement("tr");
+    if (p.cohort === "holdout") tr.className = "hold";
+    [p.follow_through, p.cohort, p.suggestions, p.judged, p.usable, p.unusable,
+     p.usable_pct == null ? "—" : p.usable_pct + "%"].forEach(function (v) {
+      tr.appendChild(set(document.createElement("td"), String(v)));
+    });
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  box.appendChild(t);
+  box.appendChild(set(el("p", "chint"),
+    "Holdout rows are the locked evaluation cohort and are never mixed into the other numbers. " +
+    "Comparing the same drafts with and without the next-step block is the only construction " +
+    "that shows the coaching does the work rather than the draft."));
+  return box;
+}
+
+function failedEl() {
+  var box = el("div", "");
+  if (!coach.failed.length) {
+    box.appendChild(set(el("p", "chint"), "No failed advice recorded yet."));
+    return box;
+  }
+  coach.failed.slice(0, 12).forEach(function (f) {
+    var c = el("div", "cfail" + (f.delivery_status === "late" ? " late" : ""));
+    c.appendChild(set(el("div", "fh"), "#" + f.ticket_id + " · " + (f.subject || "")));
+    c.appendChild(set(el("div", "fb"), f.step_text || ""));
+    var meta = f.failure_kind;
+    if (f.delivery_status === "late") {
+      // The distinction the spec insists on, said in words on the card itself.
+      meta += " — this is a DELIVERY failure, not bad advice";
+    }
+    c.appendChild(set(el("div", "fm"), meta));
+    box.appendChild(c);
+  });
+  return box;
+}
+
 // ── Articles tab (2026-08-03) ───────────────────────────────────────────────
 //
 // Approved articles are NOT published to Freshdesk — that would be a third
