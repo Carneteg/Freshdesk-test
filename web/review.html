@@ -124,6 +124,66 @@
   .crmverdict{display:flex;gap:6px;align-items:center;margin-top:8px;flex-wrap:wrap}
   .crmhint{flex:1 1 240px;min-width:200px;font-size:13px;padding:5px 8px;border:1px solid var(--border);border-radius:5px;background:var(--bg);color:var(--ink)}
   .crmverdict .btn.sel{outline:2px solid var(--accent)}
+  /* Note view (2026-08-04) — how the private note reads, in the review app.
+     Freshdesk keeps the plain HTML; its sanitiser strips most of this anyway. */
+  .nv{margin:0 0 14px}
+  .nv-ticket{background:var(--surface);border:1px solid var(--border);border-radius:9px 9px 0 0;
+    border-bottom:none;padding:14px 18px}
+  .nv-who{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .nv-subj{font-size:13.5px;font-weight:650;color:var(--ink)}
+  .nv-meta{font-size:11.5px;color:var(--ink-3);margin-top:3px}
+  .nv-body{font-size:13.5px;color:var(--ink-2);line-height:1.55;margin-top:9px}
+  .nv-body p{margin:0 0 6px}
+  .nv-note{display:flex;background:var(--surface-2);border:1px solid var(--border);
+    border-radius:0 0 9px 9px;overflow:hidden}
+  .nv-rail{width:5px;flex:0 0 5px;background:var(--good)}
+  .nv-rail.amber{background:var(--warn)}
+  .nv-rail.red{background:var(--crit)}
+  .nv-inner{flex:1;min-width:0;padding:15px 18px 14px}
+  .nv-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:13px}
+  .nv-mode{display:inline-flex;align-items:center;background:var(--good);color:#fff;border-radius:4px;
+    font-size:10.5px;font-weight:700;letter-spacing:.08em;padding:4px 9px;text-transform:uppercase}
+  .nv-mode.amber{background:var(--warn)}
+  .nv-mode.red{background:var(--crit)}
+  .nv-conf{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--ink-2)}
+  .nv-bars{display:flex;gap:2px}
+  .nv-bars i{width:12px;height:5px;border-radius:1px;background:var(--border);display:block}
+  .nv-bars i.on{background:var(--good)}
+  .nv-bars.amber i.on{background:var(--warn)}
+  .nv-bars.red i.on{background:var(--crit)}
+  .nv-stamp{margin-left:auto;font-size:11px;color:var(--ink-3)}
+  .nv-cust{display:flex;flex-wrap:wrap;border:1px solid var(--border);background:var(--surface);
+    border-radius:7px;padding:2px 0;margin-bottom:13px}
+  .nv-cust div{padding:8px 15px;border-right:1px solid var(--border);min-width:0}
+  .nv-cust div:last-child{border-right:none}
+  .nv-cust dt{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
+    font-weight:650;margin:0 0 2px}
+  .nv-cust dd{margin:0;font-size:12.5px;font-weight:600;color:var(--ink)}
+  .nv-warn{font-size:12.5px;color:var(--warn);background:var(--warn-soft);border-radius:6px;
+    padding:8px 12px;margin-bottom:13px}
+  .nv-h{font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-3);
+    font-weight:700;margin:0 0 8px}
+  .nv-lang{float:right;font-size:10px;font-weight:700;color:var(--ink-3);letter-spacing:.06em}
+  .nv-facts{list-style:none;margin:0 0 14px;padding:0}
+  .nv-facts li{font-size:13px;line-height:1.5;color:var(--ink);padding:0 0 7px;display:flex;gap:9px}
+  .nv-facts li:last-child{padding-bottom:0}
+  .nv-src{flex:0 0 auto;font-size:10px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--ink-3);border:1px solid var(--border);background:var(--surface);border-radius:3px;
+    padding:2px 6px;margin-top:2px;height:fit-content;min-width:82px;text-align:center}
+  .nv-src.hit{color:var(--accent);border-color:var(--accent-soft);background:var(--accent-soft)}
+  .nv-send{font-size:11px;color:var(--accent);white-space:nowrap}
+  .nv-draft{background:var(--surface);border:1px solid var(--border);border-radius:7px;
+    padding:13px 15px;margin-bottom:13px}
+  .nv-draft p{margin:0 0 8px;font-size:13.4px;line-height:1.6;color:var(--ink)}
+  .nv-draft p:last-child{margin-bottom:0}
+  .nv-crm{margin-bottom:13px}
+  .nv-matched{font-size:11.5px;color:var(--ink-3);margin-top:5px}
+  .nv-nodraft,.nv-nosrc{font-size:12.5px;font-style:italic;color:var(--ink-3);margin-bottom:13px}
+  @media (max-width:640px){
+    .nv-cust div{border-right:none;border-bottom:1px solid var(--border);flex:1 1 100%}
+    .nv-cust div:last-child{border-bottom:none}
+    .nv-stamp{margin-left:0;width:100%}
+  }
   /* Coaching tab (2026-08-04) — read-only measurement of the coaching half */
   .cbanner{display:flex;align-items:center;gap:9px;margin:0 0 18px;background:var(--accent-soft);
     border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:12.5px;color:var(--ink)}
@@ -267,7 +327,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-04b-freshdesk-baselines";
+var APP_VERSION = "v2026-08-04c-note-view";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -278,7 +338,7 @@ var articlesByTicket = {};   // ticket_id -> the article row, for the per-card p
 var articles = [];           // every article, for the Articles tab (article_library)
 // Coaching tab state. All read-only: the tab observes, it never writes anywhere.
 var coach = { baselines: [], dist: [], steps: [], delivery: null, mix: [], pairing: [], failed: [], knowledge: null, loaded: false };
-var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,article_opportunity,prompt_version,created_at";
+var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,resolution_steps,grounding_verified,latency_ms,answer_strategy,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,article_opportunity,prompt_version,created_at";
 
 // Why an edited/unusable reply fell short — slug + Swedish label (CLAUDE.md / plan 1.3).
 var REASONS = [
@@ -709,23 +769,19 @@ document.addEventListener("keydown", function (e) {
 
 function cardEl(r) {
   var card = el("div", "card");
-  var head = el("div", "chead");
-  var idA = document.createElement("a");
-  idA.className = "id";
-  idA.href = r.ticket_url || ("https://simployer.freshdesk.com/a/tickets/" + r.ticket_id);
-  idA.target = "_blank"; idA.rel = "noopener";
-  idA.textContent = "#" + r.ticket_id;
-  head.appendChild(idA);
-  head.appendChild(set(el("span", "subj"), esc(r.subject) || "(no subject)"));
-  card.appendChild(head);
 
+  // The note as it READS — ticket context, mode rail, confidence, sources,
+  // draft, next steps. Replaces the old plain header, customer-question box,
+  // subscription table, draft block and source list, all of which it now
+  // presents. Everything below it — verdicts, reasons, the ideal-answer editor,
+  // the CRM micro-verdict, the article panel, QA breakdowns — is untouched.
+  card.appendChild(noteViewEl(r));
+
+  // The metadata strip stays: it is how the Judged tab is scanned, and it
+  // carries flags (critical, QA, prompt version, gen id) the note view has no
+  // business showing to a customer-facing eye.
   var tags = el("div", "tags");
-  if (r.coach_mode) tags.appendChild(tag(modeLabel(r.coach_mode), modeCls(r.coach_mode)));
   if (r.critical_flag) tags.appendChild(tag("⚠ " + (CRITICAL_LABELS[r.critical_flag] || r.critical_flag), "bad"));
-  if (holdoutIds[r.ticket_id]) tags.appendChild(tag("🔒 holdout"));
-  tags.appendChild(tag(r.ticket_type || "—"));
-  tags.appendChild(tag((r.language || "—").toUpperCase()));
-  tags.appendChild(tag("conf: " + (r.confidence || "—"), "c-" + (r.confidence || "none")));
   if (r.qa_score != null) tags.appendChild(tag("QA " + r.qa_score, qaCls(r.qa_score, r.qa_needs_review)));
   if (r.agent_qa_score != null) tags.appendChild(tag("agent QA " + r.agent_qa_score, qaCls(r.agent_qa_score, r.agent_qa_needs_review)));
   tags.appendChild(tag(r.prompt_version || ""));
@@ -743,16 +799,7 @@ function cardEl(r) {
     card.appendChild(rl);
   }
 
-  // #2 — the customer's actual question, at the top, distinct from the AI draft.
-  var custText = (r.customer_message && r.customer_message.trim())
-    ? r.customer_message
-    : (Array.isArray(r.questions) && r.questions.length ? r.questions.join("\n") : (r.detected_intent || ""));
-  if (custText && custText.trim()) {
-    var cq = el("div", "custq");
-    cq.appendChild(set(el("span", "rl"), "Target message · exact customer message answered"));
-    cq.appendChild(proseEl(custText));
-    card.appendChild(cq);
-  }
+  // (the customer's message is the ticket context inside the note view above)
 
   if (r.latest_unresolved_request && r.latest_unresolved_request.trim()) {
     var ur = el("div", "refbox");
@@ -761,35 +808,21 @@ function cardEl(r) {
     card.appendChild(ur);
   }
 
-  card.appendChild(subscriptionContextEl(r));
+  // The subscription table itself is now the note view's customer strip. The CRM
+  // micro-verdict stays: it is the only instrument measuring whether the match
+  // was RIGHT, and it must be asked on every outcome including "found nothing".
+  card.appendChild(crmVerdictRow(r));
 
   if (r.conversation_context && r.conversation_context.trim()) {
     card.appendChild(detail("Full conversation seen by the AI", r.conversation_context));
   }
 
-  if (r.draft && r.draft.trim()) {
-    var dr = el("div", "draft");
-    dr.appendChild(set(el("span", "draftlab"), "AI draft reply"));
-    dr.appendChild(proseEl(r.draft));
-    card.appendChild(dr);
-  } else {
-    card.appendChild(set(el("div", "noreply"), "No send-ready customer reply (the coach abstained — agent guidance only)."));
-  }
+  // (the draft is rendered inside the note view above)
 
   if (r.agent_analysis) card.appendChild(detail("Agent analysis", r.agent_analysis));
   if (r.rationale) card.appendChild(detail("Why (rationale)", r.rationale));
-  if (Array.isArray(r.sources) && r.sources.length) {
-    var d = document.createElement("details");
-    var sum = document.createElement("summary"); sum.textContent = "Sources · " + r.sources.length; d.appendChild(sum);
-    var box = el("div", "sources");
-    for (var i = 0; i < r.sources.length; i++) {
-      var s = r.sources[i], a = document.createElement("a");
-      a.href = esc(s.url || "#"); a.target = "_blank"; a.rel = "noopener";
-      a.textContent = (s.kind === "ticket" ? "🎫 " : "📄 ") + esc(s.title || s.ref);
-      box.appendChild(a);
-    }
-    d.appendChild(box); card.appendChild(d);
-  }
+  // (sources are listed in the note view above, which shows all of them — the
+  // pipeline caps retrieval at 6, so nothing is hidden by its slice)
 
   // QA-coach breakdown (option 3): per-criterion 1–5 scores so a low QA number is
   // understandable/actionable. Prefer the AI draft's QA; fall back to the agent-reply QA.
@@ -1294,72 +1327,10 @@ function richEditor(placeholder, ariaLabel) {
   };
 }
 
-function subscriptionContextEl(r) {
-  var context = r.customer_subscriptions;
-  var box = el("section", "subs");
-  box.appendChild(set(el("span", "sl"), "Customer subscriptions · verified Freshworks CRM data"));
+// (the subscription table lives in the note view now — see crmStripEl. The CRM
+// micro-verdict stays separate: it is asked on EVERY outcome, including the ones
+// where nothing was found, because only the agent knows if we missed a customer.)
 
-  if (!context) {
-    box.appendChild(set(el("p", "sstate"), "Not collected for this generation. Run a new test after the CRM integration is enabled."));
-    return box;
-  }
-  if (context.status === "unavailable") {
-    box.appendChild(set(el("p", "sstate"), "Temporarily unavailable — verify manually."));
-    box.appendChild(crmVerdictRow(r));
-    return box;
-  }
-  if (context.status === "no_match") {
-    box.appendChild(set(el("p", "sstate"), "No CRM account matched the requester email or the ticket's company."));
-    box.appendChild(crmVerdictRow(r));
-    return box;
-  }
-  if (context.status === "ambiguous") {
-    var msg = "⚠️ Several similar CRM accounts match this customer — check the CRM manually before relying on subscription data.";
-    var candidates = Array.isArray(context.candidates) ? context.candidates.filter(function (n) { return typeof n === "string" && n.trim(); }) : [];
-    if (candidates.length) msg += " Candidates: " + candidates.join(" · ") + ".";
-    box.appendChild(set(el("p", "sstate"), msg));
-    box.appendChild(crmVerdictRow(r));
-    return box;
-  }
-
-  var matchNotes = {
-    account_map: "Via a verified account mapping.",
-    company_name: "Matched via the ticket's company.",
-    company_name_prefix: "Matched via the ticket's company — the name differs slightly, verify it is the right account.",
-    email_domain: "Matched via the requester's email domain — verify it is the right account."
-  };
-  if (context.matchedBy && matchNotes[context.matchedBy]) {
-    box.appendChild(set(el("p", "sstate"), matchNotes[context.matchedBy]));
-  }
-
-  var subscriptions = Array.isArray(context.subscriptions) ? context.subscriptions : [];
-  if (!subscriptions.length) {
-    box.appendChild(set(el("p", "sstate"), "No subscriptions found for the matched account."));
-    box.appendChild(crmVerdictRow(r));
-    return box;
-  }
-
-  var table = document.createElement("table");
-  var head = document.createElement("thead");
-  var hr = document.createElement("tr");
-  ["Product name", "Renewal status", "End date"].forEach(function (label) {
-    hr.appendChild(set(document.createElement("th"), label));
-  });
-  head.appendChild(hr);
-  table.appendChild(head);
-  var body = document.createElement("tbody");
-  subscriptions.forEach(function (subscription) {
-    var row = document.createElement("tr");
-    [subscription.productName, subscription.renewalStatus, subscription.endDate].forEach(function (value) {
-      row.appendChild(set(document.createElement("td"), value == null || String(value).trim() === "" ? "—" : String(value)));
-    });
-    body.appendChild(row);
-  });
-  table.appendChild(body);
-  box.appendChild(table);
-  box.appendChild(crmVerdictRow(r));
-  return box;
-}
 
 // Micro-verdict on the MATCH itself — shown on EVERY outcome, because the
 // silent ones carry the information we cannot get anywhere else: when the
@@ -1432,6 +1403,231 @@ function crmVerdictRow(r) {
   if (r.crm_account_correct) st.textContent = "sparat";
   return row;
 }
+// ── The note view (2026-08-04) ──────────────────────────────────────────────
+//
+// How the private note READS, in the Coach Review app. Freshdesk gets the plain
+// HTML it always did — its sanitiser strips most styling anyway — so the two
+// deliberately differ. This is the reviewer's view.
+//
+// Everything here is populated from data we actually hold. The design mockup
+// also showed Planhat health, a CSM name, "also open" ticket counts and Slack
+// chips; those systems are not connected, and its own footnote called them
+// representative. Inventing them here would put a confident-looking fabrication
+// in front of the person whose job is judging whether the AI fabricates. So an
+// unavailable field is omitted, never filled.
+
+// Mode → the rail colour and the badge. Derived in code upstream (deriveCoachMode),
+// so this only translates it for display.
+var NOTE_MODE = {
+  REPLY_READY: { cls: "", badge: "Ready to send" },
+  COACH_AGENT: { cls: "amber", badge: "Check before replying" },
+  AGENT_ACTION_REQUIRED: { cls: "red", badge: "Action required first" },
+};
+
+// Confidence → filled bars out of five. Grounding verification counts: an
+// asserting draft that never resolved a source is not a confident answer, it is
+// a confident-sounding one.
+function confBars(r) {
+  if (r.confidence === "high") return r.grounding_verified === false ? 3 : 4;
+  if (r.confidence === "low") return 2;
+  return 0;
+}
+function confWord(r) {
+  if (r.confidence === "high") return r.grounding_verified === false ? "High — but unverified sources" : "Grounded";
+  if (r.confidence === "low") return "Partly grounded";
+  return "Not grounded";
+}
+
+// Which match tier found the account, and how much to trust it. A prefix or
+// domain match is a guess that happened to land — it says so.
+var NV_MATCH_NOTE = {
+  account_map: "via a verified account mapping",
+  contact_email: "matched on the requester's e-mail",
+  company_name: "matched via the ticket's company",
+  company_name_prefix: "matched via the company name — it differs slightly, verify this is the right account",
+  email_domain: "matched via the e-mail domain — verify this is the right account",
+};
+
+function crmStripEl(r) {
+  var c = r.customer_subscriptions;
+  var box = el("div", "nv-crm");
+
+  if (!c) {
+    return set(el("div", "nv-nosrc"), "No CRM lookup for this generation.");
+  }
+  if (c.status === "unavailable") {
+    return set(el("div", "nv-warn"), "📦 CRM temporarily unavailable — check it manually.");
+  }
+  if (c.status === "no_match") {
+    return set(el("div", "nv-nosrc"),
+      "📦 No CRM account matched this customer. Not necessarily an error — they may not be linked.");
+  }
+  if (c.status === "ambiguous") {
+    var cands = Array.isArray(c.candidates)
+      ? c.candidates.filter(function (n) { return typeof n === "string" && n.trim(); })
+      : [];
+    return set(el("div", "nv-warn"),
+      "⚠️ Several similar CRM accounts match — check the CRM manually before relying on this." +
+      (cands.length ? " Candidates: " + cands.join(" · ") + "." : ""));
+  }
+
+  var subs = Array.isArray(c.subscriptions) ? c.subscriptions : [];
+  if (!subs.length) {
+    return set(el("div", "nv-nosrc"), "📦 CRM account matched, but it holds no subscriptions.");
+  }
+
+  var strip = el("div", "nv-cust");
+  subs.slice(0, 4).forEach(function (sub) {
+    var cell = document.createElement("div");
+    cell.appendChild(set(el("dt", ""), sub.productName || "Subscription"));
+    var bits = [sub.renewalStatus, sub.endDate].filter(Boolean);
+    cell.appendChild(set(el("dd", ""), bits.length ? bits.join(" · ") : "—"));
+    strip.appendChild(cell);
+  });
+  box.appendChild(strip);
+  if (c.matchedBy && NV_MATCH_NOTE[c.matchedBy]) {
+    box.appendChild(set(el("div", "nv-matched"), "Account " + NV_MATCH_NOTE[c.matchedBy] + "."));
+  }
+  return box;
+}
+
+function noteViewEl(r) {
+  var mode = NOTE_MODE[r.coach_mode] || NOTE_MODE.COACH_AGENT;
+  var wrap = el("div", "nv");
+
+  // ── ticket context, above the note ──
+  var tk = el("div", "nv-ticket");
+  var who = el("div", "nv-who");
+  var idA = document.createElement("a");
+  idA.className = "id";
+  idA.href = r.ticket_url || ("https://simployer.freshdesk.com/a/tickets/" + r.ticket_id);
+  idA.target = "_blank"; idA.rel = "noopener";
+  idA.textContent = "#" + r.ticket_id;
+  who.appendChild(idA);
+  who.appendChild(set(el("span", "nv-subj"), r.subject || "(no subject)"));
+  tk.appendChild(who);
+
+  var meta = [
+    "Freshdesk",
+    (r.language || "").toUpperCase(),
+    r.ticket_type,
+    r.created_at ? fmtDate(r.created_at) : "",
+  ].filter(Boolean).join(" · ");
+  tk.appendChild(set(el("div", "nv-meta"), meta));
+
+  var custText = (r.customer_message && r.customer_message.trim())
+    ? r.customer_message
+    : (Array.isArray(r.questions) && r.questions.length
+      ? r.questions.join("\n")
+      : (r.detected_intent || ""));
+  if (custText && custText.trim()) {
+    var body = el("div", "nv-body");
+    body.appendChild(proseEl(custText));
+    tk.appendChild(body);
+  }
+  wrap.appendChild(tk);
+
+  // ── the note ──
+  var note = el("div", "nv-note");
+  var rail = el("div", "nv-rail" + (mode.cls ? " " + mode.cls : ""));
+  note.appendChild(rail);
+  var inner = el("div", "nv-inner");
+
+  var head = el("div", "nv-head");
+  head.appendChild(set(el("span", "nv-mode" + (mode.cls ? " " + mode.cls : "")), mode.badge));
+
+  var conf = el("span", "nv-conf");
+  conf.appendChild(document.createTextNode(confWord(r)));
+  var bars = el("span", "nv-bars" + (mode.cls ? " " + mode.cls : ""));
+  var filled = confBars(r);
+  for (var i = 0; i < 5; i++) bars.appendChild(el("i", i < filled ? "on" : ""));
+  conf.appendChild(bars);
+  head.appendChild(conf);
+
+  // Only facts: how long it took, and how many sources were actually retrieved.
+  var stampBits = [];
+  if (r.latency_ms) stampBits.push("drafted in " + Math.round(r.latency_ms / 1000) + "s");
+  var nSrc = Array.isArray(r.sources) ? r.sources.length : 0;
+  stampBits.push(nSrc + " source" + (nSrc === 1 ? "" : "s") + " retrieved");
+  if (holdoutIds[r.ticket_id]) stampBits.push("🔒 holdout");
+  head.appendChild(set(el("span", "nv-stamp"), stampBits.join(" · ")));
+  inner.appendChild(head);
+
+  // ── customer strip ──
+  // Every CRM outcome is shown, not just the happy one. "Found nothing" and
+  // "several accounts match" are the cases the agent most needs to act on, and
+  // the weaker match tiers carry a verify nudge because a plausible wrong
+  // customer is worse than no customer.
+  inner.appendChild(crmStripEl(r));
+
+  // ── what we know ──
+  // Source chips show the systems that actually answered. A system with no
+  // client is not listed at all, rather than shown as an empty "no result" —
+  // "we looked and found nothing" and "we cannot look" are different claims.
+  if (nSrc) {
+    inner.appendChild(set(el("h4", "nv-h"), "What we know"));
+    var facts = el("ul", "nv-facts");
+    r.sources.slice(0, 6).forEach(function (src) {
+      var li = document.createElement("li");
+      li.appendChild(set(el("span", "nv-src hit"), src.kind === "kb" ? "Knowledge base" : "Past ticket"));
+      var txt = el("span", "");
+      var a = document.createElement("a");
+      a.href = src.url || "#"; a.target = "_blank"; a.rel = "noopener";
+      a.textContent = src.title || ("#" + src.id);
+      txt.appendChild(a);
+      // The customer-facing link, so the agent can send it without converting it.
+      if (src.publicUrl) {
+        txt.appendChild(document.createTextNode(" "));
+        var pub = document.createElement("a");
+        pub.href = src.publicUrl; pub.target = "_blank"; pub.rel = "noopener";
+        pub.className = "nv-send";
+        pub.textContent = "send to customer";
+        txt.appendChild(pub);
+      }
+      li.appendChild(txt);
+      facts.appendChild(li);
+    });
+    inner.appendChild(facts);
+  } else {
+    inner.appendChild(set(el("div", "nv-nosrc"),
+      "No sources retrieved — possible knowledge-base gap."));
+  }
+
+  // ── suggested reply ──
+  if (r.draft && r.draft.trim()) {
+    var h = el("h4", "nv-h");
+    h.appendChild(document.createTextNode("Suggested reply"));
+    h.appendChild(set(el("span", "nv-lang"), (r.language || "").toUpperCase()));
+    inner.appendChild(h);
+    var draft = el("div", "nv-draft");
+    draft.appendChild(proseEl(r.draft));
+    inner.appendChild(draft);
+  } else {
+    inner.appendChild(set(el("div", "nv-nodraft"),
+      "No send-ready customer reply — the coach abstained and handed the judgement back."));
+  }
+
+  // ── do this first — the agent's next steps ──
+  // These were never shown in this app before, which for a product that pivoted
+  // to COACHING was the wrong thing to be missing.
+  var steps = Array.isArray(r.resolution_steps) ? r.resolution_steps : [];
+  if (steps.length) {
+    inner.appendChild(set(el("h4", "nv-h"), "Do this first"));
+    var sl = el("ul", "nv-facts");
+    steps.slice(0, 6).forEach(function (st, i) {
+      var li = document.createElement("li");
+      li.appendChild(set(el("span", "nv-src"), "Step " + (i + 1)));
+      li.appendChild(set(el("span", ""), st));
+      sl.appendChild(li);
+    });
+    inner.appendChild(sl);
+  }
+
+  note.appendChild(inner);
+  wrap.appendChild(note);
+  return wrap;
+}
+
 // ── Coaching tab (2026-08-04) ───────────────────────────────────────────────
 //
 // The pivot said the product is a COACH, but only the drafting half is measured.
