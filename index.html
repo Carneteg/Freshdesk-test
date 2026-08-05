@@ -226,6 +226,12 @@
   .cbudget{border:1px solid var(--border);border-left:3px solid var(--good);border-radius:6px;
     padding:10px 14px;margin-bottom:10px;font-size:12.5px;background:var(--surface);line-height:1.55}
   .cbudget.over{border-left-color:var(--crit)}
+  /* A note whose draft was written with the reviewers' gold answers in the
+     prompt. Teal, because on this palette teal is the positive signal. */
+  .tag.trained{background:var(--accent);color:var(--on-solid);font-weight:700;letter-spacing:.06em}
+  .nv-trained{display:inline-flex;align-items:center;background:var(--nv-teal);
+    color:var(--on-solid);border-radius:4px;font-size:10px;font-weight:700;
+    letter-spacing:.07em;padding:3px 8px;text-transform:uppercase}
   .tag.p-yes{background:var(--good-soft);color:var(--good)}
   .tag.p-no{background:var(--crit-soft);color:var(--crit)}
   .tag.p-na{background:var(--surface-2);color:var(--ink-3)}
@@ -463,7 +469,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05g-conversation-summary";
+var APP_VERSION = "v2026-08-05h-trained-notes";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -924,6 +930,7 @@ function cardEl(r) {
 
   var tags = el("div", "tags");
   if (r.coach_mode) tags.appendChild(tag(modeLabel(r.coach_mode), modeCls(r.coach_mode)));
+  if (usedTraining(r)) tags.appendChild(tag("★ trained", "trained"));
   if (r.critical_flag) tags.appendChild(tag("⚠ " + (CRITICAL_LABELS[r.critical_flag] || r.critical_flag), "bad"));
   if (holdoutIds[r.ticket_id]) tags.appendChild(tag("🔒 holdout"));
   tags.appendChild(tag(r.ticket_type || "—"));
@@ -1380,6 +1387,13 @@ var SOURCE_TAG = {
   linear: "Linear",
 };
 function sourceTag(kind) { return SOURCE_TAG[kind] || (kind ? String(kind) : "Source"); }
+
+// A generation produced with the reviewers' gold answers fed in as exemplars.
+// replay.ts marks these by suffixing the prompt version with "+gold", so the
+// flag is carried by the immutable generation payload rather than inferred.
+function usedTraining(r) {
+  return typeof r.prompt_version === "string" && r.prompt_version.indexOf("+gold") >= 0;
+}
 function sourceIcon(kind) {
   return { ticket: "🎫", kb: "📄", playbook: "📕", incident: "🚨",
     confluence: "📘", jira: "🐛", linear: "📌" }[kind] || "📄";
@@ -3160,6 +3174,7 @@ function noteViewEl(r) {
 
   var head = el("div", "nv-head");
   head.appendChild(set(el("span", "nv-mode" + (mode.cls ? " " + mode.cls : "")), mode.badge));
+  if (usedTraining(r)) head.appendChild(set(el("span", "nv-trained"), "★ trained"));
   var conf = el("span", "nv-conf");
   conf.appendChild(document.createTextNode(confWord(r)));
   var bars = el("span", "nv-bars" + (mode.cls ? " " + mode.cls : ""));
@@ -3296,8 +3311,21 @@ function noteActionsEl(r) {
   return box;
 }
 
+var fTrained = "";
+
 function noteControlsEl() {
   var box = el("div", "controls");
+
+  // The point of the filter: put a trained note beside an untrained one for the
+  // same kind of ticket, and see whether the training shows.
+  var nTrained = rows.filter(usedTraining).length;
+  if (nTrained) {
+    box.appendChild(selectEl("Trained and untrained", [
+      ["gold", "★ Trained only (" + nTrained + ")"],
+      ["base", "Untrained only (" + (rows.length - nTrained) + ")"],
+    ], fTrained, function (v) { fTrained = v; renderList(); }));
+  }
+
   var inp = document.createElement("input");
   inp.type = "search"; inp.className = "search";
   inp.placeholder = "Sök ticket, ämne eller svar…";
@@ -3316,6 +3344,8 @@ function renderAgentNotes() {
   var q = search.trim().toLowerCase();
   var list = rows.filter(function (r) {
     if (r.prompt_version === "agent-scan") return false; // history scans carry no note
+    if (fTrained === "gold" && !usedTraining(r)) return false;
+    if (fTrained === "base" && usedTraining(r)) return false;
     if (!q) return true;
     return (String(r.ticket_id) + " " + (r.subject || "") + " " + (r.draft || ""))
       .toLowerCase().indexOf(q) >= 0;
