@@ -245,6 +245,10 @@
   .nv-body{font-size:13.5px;color:var(--nv-ink-2);line-height:1.55;margin-top:10px}
   .nv-body p{margin:0 0 6px}
   .nv-body p:last-child{margin-bottom:0}
+  /* The customer's own words, quoted — it is a quotation, and the marks stop it
+     reading as the app's prose. */
+  .nv-body.quoted p:first-child::before{content:"\201C"}
+  .nv-body.quoted p:last-child::after{content:"\201D"}
 
   .nv-note{display:flex;background:var(--nv-note);border:1px solid var(--nv-note-edge);
     border-radius:0 0 10px 10px;box-shadow:0 1px 2px rgba(22,35,46,.05);overflow:hidden}
@@ -270,22 +274,14 @@
   .nv-crm{margin-bottom:14px}
   .nv-cust{display:flex;flex-wrap:wrap;border:1px solid var(--nv-rule);
     background:var(--nv-paper);border-radius:7px;padding:2px 0}
-  .nv-cust div{padding:8px 16px;border-right:1px solid var(--nv-rule);min-width:0}
+  /* Cells share the width evenly so the strip reads as one bar, as in the
+     design — content-width cells left a ragged gap on the right. */
+  .nv-cust div{flex:1 1 0;padding:8px 16px;border-right:1px solid var(--nv-rule);min-width:110px}
   .nv-cust div:last-child{border-right:none}
   .nv-cust dt{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
     color:var(--nv-ink-3);font-weight:650;margin:0 0 2px}
   .nv-cust dd{margin:0;font-size:12.5px;font-weight:600;color:var(--nv-ink)}
   .nv-matched{font-size:11.5px;color:var(--nv-ink-3);margin-top:5px}
-  /* Demo cells are drawn DIFFERENTLY from real ones on purpose — dashed, muted,
-     and chipped. A placeholder that looks like data is worse than an empty cell,
-     because an agent can act on it. */
-  .nv-cust div.nv-demo{border-right-style:dashed;background:repeating-linear-gradient(
-    45deg,transparent,transparent 6px,var(--nv-canvas) 6px,var(--nv-canvas) 12px)}
-  .nv-cust div.nv-demo dd{color:var(--nv-ink-2);font-weight:500}
-  .nv-cust div.nv-demo:last-child{border-right:none}
-  .nv-demotag{display:inline-block;margin-left:6px;font-size:8.5px;font-weight:700;
-    letter-spacing:.08em;text-transform:uppercase;color:var(--nv-amber);
-    background:var(--nv-amber-soft);border-radius:2px;padding:1px 4px;vertical-align:1px}
   .nv-dot{display:inline-block;width:7px;height:7px;border-radius:50%;
     margin-right:5px;vertical-align:1px;background:var(--nv-ink-3)}
   .nv-dot.green{background:var(--nv-teal)}
@@ -318,6 +314,21 @@
   .nv-draft p{margin:0 0 9px;font-size:13.4px;line-height:1.6;color:var(--nv-ink)}
   .nv-draft p:last-child{margin-bottom:0}
   .nv-analysis{font-size:13px;line-height:1.55;color:var(--nv-ink-2);margin-bottom:4px}
+
+  /* The action row. PREVIEW ONLY — see noteActionsEl: the review app cannot send
+     a reply or write to Linear, and a button that silently does nothing is worse
+     than no button, so these are inert and labelled. Only "Wrong — tell us why"
+     acts, because judging a draft is a thing this app really does. */
+  .nv-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .nv-btn{font-family:inherit;font-size:12.5px;font-weight:650;padding:8px 15px;
+    border-radius:6px;border:1px solid var(--nv-rule);background:var(--nv-paper);
+    color:var(--nv-ink)}
+  .nv-btn.primary{background:var(--nv-teal);border-color:var(--nv-teal);color:var(--on-solid)}
+  .nv-btn[disabled]{cursor:default;opacity:.9}
+  .nv-wrong{margin-left:auto;font-family:inherit;font-size:12.5px;color:var(--nv-ink-3);
+    background:none;border:0;padding:0;cursor:pointer}
+  .nv-wrong:hover{color:var(--nv-teal);text-decoration:underline}
+  .nv-preview{font-size:11px;color:var(--nv-ink-3);margin:8px 0 0;line-height:1.5}
 
   @media (max-width:640px){
     .nv-cust div{border-right:none;border-bottom:1px solid var(--nv-rule);flex:1 1 100%}
@@ -435,7 +446,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05d-delivery-backfill";
+var APP_VERSION = "v2026-08-05e-note-layout";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -2690,12 +2701,12 @@ function demoPlanhat(ticketId) {
   return { health: health, csm: csm, alsoOpen: n % 4 };
 }
 
+// Rendered exactly like a real cell, by request — same rule as the Coaching
+// tab: a strip that is half hatched reads as a broken strip, not a populated
+// one. The disclosure is one line above the list, not a chip on every cell.
 function demoCell(label, value, dotClass) {
-  var cell = el("div", "nv-demo");
-  var dt = el("dt", "");
-  dt.appendChild(document.createTextNode(label));
-  dt.appendChild(set(el("span", "nv-demotag"), "demo"));
-  cell.appendChild(dt);
+  var cell = document.createElement("div");
+  cell.appendChild(set(el("dt", ""), label));
   var dd = el("dd", "");
   if (dotClass) dd.appendChild(el("span", "nv-dot " + dotClass));
   dd.appendChild(document.createTextNode(value));
@@ -2714,6 +2725,47 @@ function appendDemoCells(strip, r) {
   ));
 }
 
+// ACCOUNT and RENEWAL come from Freshworks CRM when it matched. It is opt-in and
+// currently off, so every stored lookup reads no_match — without these the strip
+// collapses to two cells and stops looking like a strip at all.
+//
+// The account NAME is the honest gap here: the CRM client stores accountId and
+// the subscriptions but never the name, so even a real match could not fill this
+// cell today. Capturing it is a pipeline change, not a styling one.
+function appendAccountCells(strip, r) {
+  var c = r.customer_subscriptions;
+  var subs = (c && Array.isArray(c.subscriptions)) ? c.subscriptions : [];
+
+  if (c && c.status === "found" && subs.length) {
+    var products = subs.map(function (x) { return x.productName; }).filter(Boolean);
+    var cell = document.createElement("div");
+    cell.appendChild(set(el("dt", ""), "Account"));
+    cell.appendChild(set(el("dd", ""), products.join(" + ") || "—"));
+    strip.appendChild(cell);
+
+    var renew = subs.map(function (x) { return x.endDate; }).filter(Boolean)[0];
+    var rc = document.createElement("div");
+    rc.appendChild(set(el("dt", ""), "Renewal"));
+    rc.appendChild(set(el("dd", ""), renew || subs[0].renewalStatus || "—"));
+    strip.appendChild(rc);
+    return;
+  }
+  if (!PLANHAT_DEMO) return;
+  var d = demoAccount(r.ticket_id);
+  strip.appendChild(demoCell("Account", d.plan));
+  strip.appendChild(demoCell("Renewal", d.renewal));
+}
+
+// Same rule as demoPlanhat: derived from the ticket id, so a ticket always shows
+// the same sample and a repaint never churns it.
+function demoAccount(ticketId) {
+  var n = Number(ticketId) || 0;
+  var plan = ["One + Survey", "One", "One + Expert", "One + Survey + Expert"][n % 4];
+  var year = 2027 + (n % 2);
+  var month = ["14 Mar", "1 Jun", "30 Sep", "14 Mar", "22 Jan", "9 Nov"][n % 6];
+  return { plan: plan, renewal: month + " " + year };
+}
+
 // Every CRM outcome renders, not only the happy one. "Found nothing" and
 // "several accounts match" are the cases the agent most needs to act on.
 function crmStripEl(r) {
@@ -2724,9 +2776,13 @@ function crmStripEl(r) {
   function demoOnlyStrip(note) {
     var box = el("div", "nv-crm");
     var strip = el("div", "nv-cust");
+    appendAccountCells(strip, r);
     appendDemoCells(strip, r);
     if (strip.children.length) box.appendChild(strip);
-    box.appendChild(set(el("div", "nv-matched"), note));
+    // The "we found nothing" line is worth saying when the strip is empty and
+    // misleading under a strip that is visibly full. Ambiguity still speaks up
+    // below — that one an agent has to act on.
+    else box.appendChild(set(el("div", "nv-matched"), note));
     return box;
   }
 
@@ -2752,13 +2808,10 @@ function crmStripEl(r) {
 
   var box = el("div", "nv-crm");
   var strip = el("div", "nv-cust");
-  subs.slice(0, 3).forEach(function (sub) {
-    var cell = document.createElement("div");
-    cell.appendChild(set(el("dt", ""), sub.productName || "Subscription"));
-    var bits = [sub.renewalStatus, sub.endDate].filter(Boolean);
-    cell.appendChild(set(el("dd", ""), bits.length ? bits.join(" · ") : "—"));
-    strip.appendChild(cell);
-  });
+  // appendAccountCells already condenses the subscriptions into Account +
+  // Renewal, as the design does. A cell per subscription on top of that repeated
+  // the same products twice in one strip.
+  appendAccountCells(strip, r);
   appendDemoCells(strip, r);
   box.appendChild(strip);
   if (c.matchedBy && NV_MATCH_NOTE[c.matchedBy]) {
@@ -2790,7 +2843,7 @@ function noteViewEl(r) {
     ? r.customer_message
     : (Array.isArray(r.questions) && r.questions.length ? r.questions.join("\n") : "");
   if (cust.trim()) {
-    var body = el("div", "nv-body");
+    var body = el("div", "nv-body quoted");
     body.appendChild(proseEl(cust));
     tk.appendChild(body);
   }
@@ -2886,9 +2939,54 @@ function noteViewEl(r) {
     inner.appendChild(set(el("div", "nv-analysis"), r.agent_analysis));
   }
 
+  inner.appendChild(noteActionsEl(r));
+
   note.appendChild(inner);
   wrap.appendChild(note);
   return wrap;
+}
+
+// The action row from the design. THREE OF THE FOUR ARE INERT, deliberately and
+// visibly: this app is read-only + RLS, and sending a customer reply or writing
+// to Linear would be new external writes that CLAUDE.md §3 deliberately does not
+// have. Rendering live-looking buttons that quietly do nothing is worse than
+// rendering none, so they are disabled and the row says why in one line.
+//
+// "Wrong — tell us why" DOES act: judging a draft is a thing this app really
+// does, so it jumps to the ticket in To review, where the verdict is recorded.
+function noteActionsEl(r) {
+  var box = el("div", "");
+  var row = el("div", "nv-actions");
+
+  function btn(label, cls) {
+    var b = document.createElement("button");
+    b.className = "nv-btn" + (cls ? " " + cls : "");
+    b.textContent = label;
+    b.disabled = true;
+    b.title = "Preview only — this app never writes to Freshdesk or Linear.";
+    return b;
+  }
+  row.appendChild(btn("Send reply", "primary"));
+  row.appendChild(btn("Edit first"));
+  row.appendChild(btn("Add to Linear request"));
+
+  var wrong = document.createElement("button");
+  wrong.className = "nv-wrong";
+  wrong.textContent = "Wrong — tell us why";
+  wrong.onclick = function () {
+    // The one real action: go and judge it.
+    tab = "todo";
+    search = String(r.ticket_id);
+    render();
+    window.scrollTo(0, 0);
+  };
+  row.appendChild(wrong);
+  box.appendChild(row);
+
+  box.appendChild(set(el("p", "nv-preview"),
+    "Send / Edit / Linear are a preview of the in-Freshdesk widget — this review app " +
+    "never writes to Freshdesk or Linear. \u201CWrong\u201D opens the ticket in To review."));
+  return box;
 }
 
 function noteControlsEl() {
@@ -2921,8 +3019,11 @@ function renderAgentNotes() {
     "coaching, not evaluation. Judging a draft and writing the ideal answer happen in " +
     "<b>To review</b>; nothing here records a verdict." +
     (PLANHAT_DEMO
-      ? " Cells marked <b>demo</b> are placeholder data — Planhat is not connected, so health, " +
-        "CSM and open-ticket counts are illustrative and must not be acted on."
+      // The cells are no longer chipped individually, so this line is the only
+      // disclosure — it has to name every field it covers.
+      ? " <b>Account, renewal, health, CSM and open-ticket counts are sample data</b> — " +
+        "Freshworks CRM is not enabled and Planhat has no client, so those four cells are " +
+        "illustrative and must not be acted on. Everything else on the card is real."
       : "");
   lw.appendChild(intro);
 
