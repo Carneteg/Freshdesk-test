@@ -5,44 +5,68 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coach Review — Simployer Gate 1</title>
 <style>
+  /* ── ONE palette (2026-08-05) ────────────────────────────────────────────
+     The private note's design is now the standard for the whole app, per
+     Tobias. It previously had its own --nv-* palette, on the reasoning that
+     training the AI and coaching the agent are different jobs and restyling
+     one must not disturb the other. That separation of FUNCTION stands — they
+     are still separate tabs. The separation of visual LANGUAGE does not: two
+     palettes in one app read as two half-finished apps.
+
+     The design statement is the three-state scale. Positive is the TEAL, not a
+     separate green: "ready to send" and "grounded" are the same signal as the
+     primary action, so they are the same colour. Amber is burnt rather than
+     yellow, red is brick rather than crimson — both readable on paper, neither
+     shouting.
+
+     The --nv-* names are kept as ALIASES rather than search-replaced, so the
+     note's ~60 rules keep reading in their own vocabulary and a future
+     re-divergence is one block of edits, not sixty. */
   :root{
-    --bg:#F5F7F9;--surface:#fff;--surface-2:#EDF1F4;--border:#DCE3E8;
-    --ink:#182029;--ink-2:#56636E;--ink-3:#8694A1;
-    --accent:#0F766E;--accent-soft:#D6E8E5;
-    --good:#2F855A;--good-soft:#DCEEE3;--warn:#B7791F;--warn-soft:#F3E8CE;
-    --crit:#C0392B;--crit-soft:#F4D9D5;--info:#5B7089;
+    --ink:#16232E;--ink-2:#41535F;--ink-3:#7B8C96;
+    --bg:#EDF1F2;--surface:#FFFFFF;--surface-2:#F1F5F5;--border:#E2E8EA;
+    --accent:#0F7173;--accent-soft:#E4EFEF;--accent-edge:#BFD8D8;
+    /* good IS the accent teal — see above */
+    --good:#0F7173;--good-soft:#E4EFEF;
+    --warn:#B45A09;--warn-soft:#FBEDDD;
+    --crit:#9E3227;--crit-soft:#F8E6E3;
+    --info:#5B7089;
+    /* The one thing that stays specific to a note: the warm paper that makes it
+       read as a NOTE rather than as another panel of the review tool. */
+    --paper-warm:#FFFDF4;--paper-warm-edge:#F0E4C3;
+    --bar-off:#D8E1E3;
+    /* Text on a solid teal/amber/red fill. White in light mode; in dark the
+       accents are bright enough that white on them is unreadable, so it flips
+       to the page ink. One token, so every solid badge and button flips with
+       it instead of each being remembered separately. */
+    --on-solid:#fff;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
-    --radius:8px;--shadow:0 1px 2px rgba(24,32,41,.05),0 4px 16px rgba(24,32,41,.05);
-    /* The private note has its OWN palette. Training the AI and coaching the
-       agent are different jobs with different readers, so restyling one must
-       never disturb the other. The cream paper is what makes this read as a
-       NOTE rather than as another panel of the review tool. */
-    --nv-ink:#16232E;--nv-ink-2:#41535F;--nv-ink-3:#7B8C96;
-    --nv-rule:#E2E8EA;--nv-paper:#FFFFFF;--nv-canvas:#EDF1F2;
-    --nv-note:#FFFDF4;--nv-note-edge:#F0E4C3;
-    --nv-teal:#0F7173;--nv-teal-soft:#E4EFEF;--nv-teal-edge:#BFD8D8;
-    --nv-amber:#B45A09;--nv-amber-soft:#FBEDDD;
-    --nv-red:#9E3227;--nv-red-soft:#F8E6E3;
-    --nv-bar:#D8E1E3;
+    --radius:8px;--shadow:0 1px 2px rgba(22,35,46,.05),0 4px 16px rgba(22,35,46,.05);
+
+    --nv-ink:var(--ink);--nv-ink-2:var(--ink-2);--nv-ink-3:var(--ink-3);
+    --nv-rule:var(--border);--nv-paper:var(--surface);--nv-canvas:var(--bg);
+    --nv-note:var(--paper-warm);--nv-note-edge:var(--paper-warm-edge);
+    --nv-teal:var(--accent);--nv-teal-soft:var(--accent-soft);--nv-teal-edge:var(--accent-edge);
+    --nv-amber:var(--warn);--nv-amber-soft:var(--warn-soft);
+    --nv-red:var(--crit);--nv-red-soft:var(--crit-soft);
+    --nv-bar:var(--bar-off);
   }
   @media(prefers-color-scheme:dark){:root{
+    --ink:#E8EDF1;--ink-2:#A5B2BD;--ink-3:#7C8B96;
     --bg:#0E1319;--surface:#151C24;--surface-2:#1C252F;--border:#2A3540;
-    --ink:#E8EDF1;--ink-2:#A5B2BD;--ink-3:#6E7E8B;
-    --accent:#4FD1C5;--accent-soft:#123A38;
-    --good:#4FB784;--good-soft:#14301F;--warn:#E0A64B;--warn-soft:#33280F;
-    --crit:#E86B5C;--crit-soft:#38191A;--info:#8AA0B5;
+    --accent:#4FD1C5;--accent-soft:#123A38;--accent-edge:#1C4C49;
+    --good:#4FD1C5;--good-soft:#123A38;
+    --warn:#E0A64B;--warn-soft:#33280F;
+    --crit:#E86B5C;--crit-soft:#38191A;
+    --info:#8AA0B5;
+    /* Warm-TINTED panel rather than the literal cream. A #FFFDF4 slab in dark
+       mode is a torch, not a note — the warmth carries the design across, not
+       the exact hex. */
+    --paper-warm:#1B1E1C;--paper-warm-edge:#3A3524;
+    --bar-off:#2A3540;
+    --on-solid:#0E1319;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.3);
-    /* Dark: warm-tinted panel rather than the literal cream. A #FFFDF4 slab in
-       dark mode is a torch, not a note — the warmth carries the design across,
-       not the exact hex. */
-    --nv-ink:#E8EDF1;--nv-ink-2:#A5B2BD;--nv-ink-3:#7C8B96;
-    --nv-rule:#2A3540;--nv-paper:#151C24;--nv-canvas:#0E1319;
-    --nv-note:#1B1E1C;--nv-note-edge:#3A3524;
-    --nv-teal:#4FD1C5;--nv-teal-soft:#123A38;--nv-teal-edge:#1C4C49;
-    --nv-amber:#E0A64B;--nv-amber-soft:#33280F;
-    --nv-red:#E86B5C;--nv-red-soft:#38191A;
-    --nv-bar:#2A3540;
   }}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;font-variant-numeric:tabular-nums}
@@ -64,7 +88,7 @@
   .field label{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
   input{font-family:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--ink)}
   input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
-  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;padding:11px;font-size:14px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-solid);width:100%;padding:11px;font-size:14px}
   .btn.primary:hover{filter:brightness(1.06)}
   .msg{font-size:13px;margin-top:12px;padding:10px 12px;border-radius:6px}
   .msg.ok{background:var(--good-soft);color:var(--good)}
@@ -82,10 +106,23 @@
   .help b{color:var(--ink)}
   .bar{display:flex;gap:8px;align-items:center;margin:18px 0 16px;flex-wrap:wrap}
   .tab{border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;color:var(--ink-2)}
-  .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .tab.on{background:var(--accent);border-color:var(--accent);color:var(--on-solid)}
   .count{margin-left:auto;font-size:12.5px;color:var(--ink-3);font-family:var(--mono)}
 
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
+  /* Every card carries the note's coloured rail. It is the design's one
+     load-bearing element: the state of the thing is legible before a word is
+     read, and it is the same teal/amber/red scale everywhere. */
+  .card{--rail:var(--border);background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);box-shadow:inset 5px 0 0 var(--rail),var(--shadow);
+    padding:16px 18px 16px 22px;margin-bottom:14px}
+  .card.m-ready{--rail:var(--accent)}
+  .card.m-coach{--rail:var(--warn)}
+  .card.m-action{--rail:var(--crit)}
+  /* Articles use the same scale: teal = settled, amber = your decision is
+     wanted, red = it went wrong. */
+  .card.art.a-approved{--rail:var(--accent)}
+  .card.art.a-drafted{--rail:var(--warn)}
+  .card.art.a-rejected,.card.art.a-failed{--rail:var(--crit)}
   .chead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
   .chead .id{font-family:var(--mono);font-size:12px;color:var(--ink-3);text-decoration:none}
   .chead a.id:hover{color:var(--accent);text-decoration:underline}
@@ -98,9 +135,11 @@
   .tag.qa{background:var(--accent-soft);color:var(--accent)}
   .tag.review,.tag.bad{background:var(--crit-soft);color:var(--crit)}
   /* coach mode (Fas 3): green ready / amber coach / red action-required */
-  .tag.m-ready{background:var(--good-soft);color:var(--good);font-weight:700}
-  .tag.m-coach{background:var(--warn-soft);color:var(--warn);font-weight:700}
-  .tag.m-action{background:var(--crit-soft);color:var(--crit);font-weight:700}
+  .tag.m-ready,.tag.m-coach,.tag.m-action{color:var(--on-solid);font-family:var(--sans);
+    font-weight:700;letter-spacing:.08em;border-radius:4px;padding:3px 9px}
+  .tag.m-ready{background:var(--accent)}
+  .tag.m-coach{background:var(--warn)}
+  .tag.m-action{background:var(--crit)}
   /* reason-code summary on judged cards */
   .reasonline{font-size:12.5px;color:var(--warn);margin:-4px 0 12px}
   /* QA-coach per-criterion breakdown */
@@ -128,7 +167,7 @@
   .subs th,.subs td{border:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top}
   .subs th{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);background:var(--surface-2)}
   .draftlab{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);display:block;margin:2px 0 5px}
-  .draft{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin:0 0 12px}
+  .draft{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:14px 16px;margin:0 0 12px}
   .refbox{background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent);border-radius:6px;padding:12px 14px;margin:0 0 12px}
   .refbox .rl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--good);display:block;margin-bottom:6px}
   .gold{margin:2px 0 12px}
@@ -182,6 +221,7 @@
   .ctable tr.demo td{background:repeating-linear-gradient(45deg,transparent,transparent 6px,
     var(--surface-2) 6px,var(--surface-2) 12px);color:var(--ink-3);border-bottom-style:dashed}
   .ctable tr.demo td b{font-weight:600}
+  .ctable tr.demo:last-child td{border-bottom:none}
   .cdemotag{display:inline-block;margin-left:6px;font-size:8.5px;font-weight:700;
     letter-spacing:.08em;text-transform:uppercase;color:var(--warn);
     background:var(--warn-soft);border-radius:2px;padding:1px 4px;vertical-align:1px}
@@ -227,7 +267,7 @@
   .nv-inner{flex:1;min-width:0;padding:16px 20px 15px}
 
   .nv-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-  .nv-mode{display:inline-flex;align-items:center;background:var(--nv-teal);color:#fff;
+  .nv-mode{display:inline-flex;align-items:center;background:var(--nv-teal);color:var(--on-solid);
     border-radius:4px;font-size:10.5px;font-weight:700;letter-spacing:.08em;
     padding:4px 9px;text-transform:uppercase}
   .nv-mode.amber{background:var(--nv-amber)}
@@ -255,6 +295,7 @@
   .nv-cust div.nv-demo{border-right-style:dashed;background:repeating-linear-gradient(
     45deg,transparent,transparent 6px,var(--nv-canvas) 6px,var(--nv-canvas) 12px)}
   .nv-cust div.nv-demo dd{color:var(--nv-ink-2);font-weight:500}
+  .nv-cust div.nv-demo:last-child{border-right:none}
   .nv-demotag{display:inline-block;margin-left:6px;font-size:8.5px;font-weight:700;
     letter-spacing:.08em;text-transform:uppercase;color:var(--nv-amber);
     background:var(--nv-amber-soft);border-radius:2px;padding:1px 4px;vertical-align:1px}
@@ -336,9 +377,9 @@
   .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;margin-top:4px}
   .actions .lab{font-size:12.5px;color:var(--ink-3);margin-right:2px}
   .vbtn{border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--ink)}
-  .vbtn[data-v=usable]:hover,.vbtn.sel[data-v=usable]{background:var(--good);border-color:var(--good);color:#fff}
-  .vbtn[data-v=edited]:hover,.vbtn.sel[data-v=edited]{background:var(--warn);border-color:var(--warn);color:#fff}
-  .vbtn[data-v=unusable]:hover,.vbtn.sel[data-v=unusable]{background:var(--crit);border-color:var(--crit);color:#fff}
+  .vbtn[data-v=usable]:hover,.vbtn.sel[data-v=usable]{background:var(--good);border-color:var(--good);color:var(--on-solid)}
+  .vbtn[data-v=edited]:hover,.vbtn.sel[data-v=edited]{background:var(--warn);border-color:var(--warn);color:var(--on-solid)}
+  .vbtn[data-v=unusable]:hover,.vbtn.sel[data-v=unusable]{background:var(--crit);border-color:var(--crit);color:var(--on-solid)}
   .vstate{font-size:12.5px;color:var(--ink-3);margin-left:auto}
   .empty{text-align:center;color:var(--ink-3);padding:48px 0;font-size:14px}
   .ticketlink{margin-left:auto;font-size:12.5px}
@@ -355,19 +396,20 @@
   .progress .track{height:7px;border-radius:20px;background:var(--surface-2);overflow:hidden}
   .progress .fill{height:100%;background:var(--good);border-radius:20px;transition:width .25s}
   /* active card for keyboard navigation (#4) */
-  .card.active{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 4px var(--accent-soft),var(--shadow)}
+  .card.active{outline:2px solid var(--accent);outline-offset:2px;
+    box-shadow:inset 5px 0 0 var(--rail),0 0 0 4px var(--accent-soft),var(--shadow)}
   .goldactions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   /* golden action — the hero button: big, gold, unmistakable */
   .btn.golden{background:#C99700;border-color:#B8860B;color:#1a1400;font-size:14px;font-weight:750;
     padding:10px 18px;border-radius:8px;letter-spacing:.01em;box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(201,151,0,.35)}
   .btn.golden:hover{filter:brightness(1.06);transform:translateY(-1px)}
-  .btn.golden.is-set{background:var(--good);border-color:var(--good);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(47,133,90,.3)}
+  .btn.golden.is-set{background:var(--good);border-color:var(--good);color:var(--on-solid);box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(15,113,115,.3)}
   .tag.golden{background:#C99700;color:#1a1400;font-weight:700}
-  .card.golden{border-color:#C99700;box-shadow:inset 4px 0 0 #C99700,var(--shadow)}
+  .card.golden{border-color:#C99700;--rail:#C99700}
   /* spam action — clearly a distinct danger action, not muted */
   .spambtn{margin-left:6px;border:1.5px solid var(--crit);background:var(--crit-soft);color:var(--crit);
     border-radius:8px;padding:8px 16px;font-size:13.5px;font-weight:700}
-  .spambtn:hover{background:var(--crit);color:#fff}
+  .spambtn:hover{background:var(--crit);color:var(--on-solid)}
   .spambtn::before{content:"🚫 "}
   kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--ink)}
   /* structured verdict: reason codes + critical flag */
@@ -381,7 +423,16 @@
   .crit-row .cl{font-size:12px;font-weight:700;color:var(--crit)}
   .crit-row select{font-family:inherit;font-size:12.5px;padding:6px 10px;border:1.5px solid var(--crit);border-radius:6px;background:var(--crit-soft);color:var(--crit);font-weight:650}
   .reasons-panel textarea.other{min-height:44px;font-size:13px;margin-bottom:2px}
-  .card.critical{box-shadow:inset 4px 0 0 var(--crit),var(--shadow)}
+  .card.critical{--rail:var(--crit)}
+
+  /* ── Shared section-label spec ────────────────────────────────────────────
+     "WHAT WE KNOW" / "SUGGESTED REPLY" in the note are sans, 700, widely
+     tracked and muted. Every other section label in the app used a narrower
+     mono variant. One spec now, so a heading looks like a heading wherever it
+     appears; the individual colours above still stand. */
+  .custq .rl,.refbox .rl,.subs .sl,.gold .gl,.draftlab,.reasons-panel .rl,.artlab,.ck{
+    font-family:var(--sans);font-size:10.5px;letter-spacing:.1em;font-weight:700;
+    text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -397,7 +448,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05a-coaching-demo";
+var APP_VERSION = "v2026-08-05b-one-palette";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -843,7 +894,9 @@ document.addEventListener("keydown", function (e) {
 });
 
 function cardEl(r) {
-  var card = el("div", "card");
+  // The mode class only colours the rail — the state itself is still derived in
+  // code (deriveCoachMode), never decided here.
+  var card = el("div", "card" + (r.coach_mode ? " " + modeCls(r.coach_mode) : ""));
   var head = el("div", "chead");
   var idA = document.createElement("a");
   idA.className = "id";
@@ -2149,7 +2202,7 @@ function renderArticleList() {
 }
 
 function articleCardEl(a) {
-  var card = el("div", "card art");
+  var card = el("div", "card art a-" + a.status);
 
   var head = el("div", "arthead");
   head.appendChild(tag(ART_LABEL[a.status] || a.status, "a-" + a.status));

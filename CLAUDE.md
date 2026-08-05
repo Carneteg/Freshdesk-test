@@ -447,6 +447,25 @@ gating are entirely client-side + RLS.
   there): raw `fetch` + email/password Supabase Auth, RLS-gated, anon key only. Published
   to a `gh-pages` branch (app file only, no repo code) for a shareable link.
 
+**One design language — the note's, everywhere (2026-08-05).** Per Tobias, the private-note
+card design and colouring is now **the standard for the whole review app**. This reverses an
+earlier stated rule (the note had its OWN `--nv-*` palette "so restyling one never disturbs
+the other"). The separation of **function** stands — training the AI and coaching the agent
+are still separate tabs, per the explicit correction on 2026-07-23. The separation of
+**visual language** does not: two palettes in one app read as two half-finished apps.
+- Positive is the **teal**, not a separate green: "ready to send", "grounded" and the primary
+  action are the same signal, so they are the same colour. The scale is teal / burnt amber /
+  brick red, and it now means the same thing on every tab.
+- The `--nv-*` names survive as **aliases** of the single token set rather than being
+  search-replaced, so the note's own rules keep reading in their own vocabulary and a future
+  re-divergence is one block of edits, not sixty. The warm paper (`--paper-warm`) is the one
+  token that stays note-specific — it is what makes a note read as a note.
+- `--on-solid` is the text colour on any solid teal/amber/red fill: white in light mode, page
+  ink in dark, where the accents are too bright to carry white.
+- Every card carries the note's coloured **left rail**, driven by `coach_mode` on review cards
+  and by status on article cards. The rail is set from `deriveCoachMode`'s output — the state
+  is still decided in code, the card only paints it.
+
 **Learning loop v1 — gold answers -> prompt (Gate 2 start, 2026-07-23).** Per Tobias the
 near-term Gate 2 focus is **the AI + learning**, NOT the Planhat/Confluence/Slack/Jira
 integrations (those stay deferred). The cheapest loop: feed the reviewer-written
