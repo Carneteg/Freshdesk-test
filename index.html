@@ -5,44 +5,68 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coach Review — Simployer Gate 1</title>
 <style>
+  /* ── ONE palette (2026-08-05) ────────────────────────────────────────────
+     The private note's design is now the standard for the whole app, per
+     Tobias. It previously had its own --nv-* palette, on the reasoning that
+     training the AI and coaching the agent are different jobs and restyling
+     one must not disturb the other. That separation of FUNCTION stands — they
+     are still separate tabs. The separation of visual LANGUAGE does not: two
+     palettes in one app read as two half-finished apps.
+
+     The design statement is the three-state scale. Positive is the TEAL, not a
+     separate green: "ready to send" and "grounded" are the same signal as the
+     primary action, so they are the same colour. Amber is burnt rather than
+     yellow, red is brick rather than crimson — both readable on paper, neither
+     shouting.
+
+     The --nv-* names are kept as ALIASES rather than search-replaced, so the
+     note's ~60 rules keep reading in their own vocabulary and a future
+     re-divergence is one block of edits, not sixty. */
   :root{
-    --bg:#F5F7F9;--surface:#fff;--surface-2:#EDF1F4;--border:#DCE3E8;
-    --ink:#182029;--ink-2:#56636E;--ink-3:#8694A1;
-    --accent:#0F766E;--accent-soft:#D6E8E5;
-    --good:#2F855A;--good-soft:#DCEEE3;--warn:#B7791F;--warn-soft:#F3E8CE;
-    --crit:#C0392B;--crit-soft:#F4D9D5;--info:#5B7089;
+    --ink:#16232E;--ink-2:#41535F;--ink-3:#7B8C96;
+    --bg:#EDF1F2;--surface:#FFFFFF;--surface-2:#F1F5F5;--border:#E2E8EA;
+    --accent:#0F7173;--accent-soft:#E4EFEF;--accent-edge:#BFD8D8;
+    /* good IS the accent teal — see above */
+    --good:#0F7173;--good-soft:#E4EFEF;
+    --warn:#B45A09;--warn-soft:#FBEDDD;
+    --crit:#9E3227;--crit-soft:#F8E6E3;
+    --info:#5B7089;
+    /* The one thing that stays specific to a note: the warm paper that makes it
+       read as a NOTE rather than as another panel of the review tool. */
+    --paper-warm:#FFFDF4;--paper-warm-edge:#F0E4C3;
+    --bar-off:#D8E1E3;
+    /* Text on a solid teal/amber/red fill. White in light mode; in dark the
+       accents are bright enough that white on them is unreadable, so it flips
+       to the page ink. One token, so every solid badge and button flips with
+       it instead of each being remembered separately. */
+    --on-solid:#fff;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
-    --radius:8px;--shadow:0 1px 2px rgba(24,32,41,.05),0 4px 16px rgba(24,32,41,.05);
-    /* The private note has its OWN palette. Training the AI and coaching the
-       agent are different jobs with different readers, so restyling one must
-       never disturb the other. The cream paper is what makes this read as a
-       NOTE rather than as another panel of the review tool. */
-    --nv-ink:#16232E;--nv-ink-2:#41535F;--nv-ink-3:#7B8C96;
-    --nv-rule:#E2E8EA;--nv-paper:#FFFFFF;--nv-canvas:#EDF1F2;
-    --nv-note:#FFFDF4;--nv-note-edge:#F0E4C3;
-    --nv-teal:#0F7173;--nv-teal-soft:#E4EFEF;--nv-teal-edge:#BFD8D8;
-    --nv-amber:#B45A09;--nv-amber-soft:#FBEDDD;
-    --nv-red:#9E3227;--nv-red-soft:#F8E6E3;
-    --nv-bar:#D8E1E3;
+    --radius:8px;--shadow:0 1px 2px rgba(22,35,46,.05),0 4px 16px rgba(22,35,46,.05);
+
+    --nv-ink:var(--ink);--nv-ink-2:var(--ink-2);--nv-ink-3:var(--ink-3);
+    --nv-rule:var(--border);--nv-paper:var(--surface);--nv-canvas:var(--bg);
+    --nv-note:var(--paper-warm);--nv-note-edge:var(--paper-warm-edge);
+    --nv-teal:var(--accent);--nv-teal-soft:var(--accent-soft);--nv-teal-edge:var(--accent-edge);
+    --nv-amber:var(--warn);--nv-amber-soft:var(--warn-soft);
+    --nv-red:var(--crit);--nv-red-soft:var(--crit-soft);
+    --nv-bar:var(--bar-off);
   }
   @media(prefers-color-scheme:dark){:root{
+    --ink:#E8EDF1;--ink-2:#A5B2BD;--ink-3:#7C8B96;
     --bg:#0E1319;--surface:#151C24;--surface-2:#1C252F;--border:#2A3540;
-    --ink:#E8EDF1;--ink-2:#A5B2BD;--ink-3:#6E7E8B;
-    --accent:#4FD1C5;--accent-soft:#123A38;
-    --good:#4FB784;--good-soft:#14301F;--warn:#E0A64B;--warn-soft:#33280F;
-    --crit:#E86B5C;--crit-soft:#38191A;--info:#8AA0B5;
+    --accent:#4FD1C5;--accent-soft:#123A38;--accent-edge:#1C4C49;
+    --good:#4FD1C5;--good-soft:#123A38;
+    --warn:#E0A64B;--warn-soft:#33280F;
+    --crit:#E86B5C;--crit-soft:#38191A;
+    --info:#8AA0B5;
+    /* Warm-TINTED panel rather than the literal cream. A #FFFDF4 slab in dark
+       mode is a torch, not a note — the warmth carries the design across, not
+       the exact hex. */
+    --paper-warm:#1B1E1C;--paper-warm-edge:#3A3524;
+    --bar-off:#2A3540;
+    --on-solid:#0E1319;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.3);
-    /* Dark: warm-tinted panel rather than the literal cream. A #FFFDF4 slab in
-       dark mode is a torch, not a note — the warmth carries the design across,
-       not the exact hex. */
-    --nv-ink:#E8EDF1;--nv-ink-2:#A5B2BD;--nv-ink-3:#7C8B96;
-    --nv-rule:#2A3540;--nv-paper:#151C24;--nv-canvas:#0E1319;
-    --nv-note:#1B1E1C;--nv-note-edge:#3A3524;
-    --nv-teal:#4FD1C5;--nv-teal-soft:#123A38;--nv-teal-edge:#1C4C49;
-    --nv-amber:#E0A64B;--nv-amber-soft:#33280F;
-    --nv-red:#E86B5C;--nv-red-soft:#38191A;
-    --nv-bar:#2A3540;
   }}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;font-variant-numeric:tabular-nums}
@@ -64,7 +88,7 @@
   .field label{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
   input{font-family:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--ink)}
   input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
-  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;padding:11px;font-size:14px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-solid);width:100%;padding:11px;font-size:14px}
   .btn.primary:hover{filter:brightness(1.06)}
   .msg{font-size:13px;margin-top:12px;padding:10px 12px;border-radius:6px}
   .msg.ok{background:var(--good-soft);color:var(--good)}
@@ -82,10 +106,23 @@
   .help b{color:var(--ink)}
   .bar{display:flex;gap:8px;align-items:center;margin:18px 0 16px;flex-wrap:wrap}
   .tab{border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;color:var(--ink-2)}
-  .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .tab.on{background:var(--accent);border-color:var(--accent);color:var(--on-solid)}
   .count{margin-left:auto;font-size:12.5px;color:var(--ink-3);font-family:var(--mono)}
 
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
+  /* Every card carries the note's coloured rail. It is the design's one
+     load-bearing element: the state of the thing is legible before a word is
+     read, and it is the same teal/amber/red scale everywhere. */
+  .card{--rail:var(--border);background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);box-shadow:inset 5px 0 0 var(--rail),var(--shadow);
+    padding:16px 18px 16px 22px;margin-bottom:14px}
+  .card.m-ready{--rail:var(--accent)}
+  .card.m-coach{--rail:var(--warn)}
+  .card.m-action{--rail:var(--crit)}
+  /* Articles use the same scale: teal = settled, amber = your decision is
+     wanted, red = it went wrong. */
+  .card.art.a-approved{--rail:var(--accent)}
+  .card.art.a-drafted{--rail:var(--warn)}
+  .card.art.a-rejected,.card.art.a-failed{--rail:var(--crit)}
   .chead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
   .chead .id{font-family:var(--mono);font-size:12px;color:var(--ink-3);text-decoration:none}
   .chead a.id:hover{color:var(--accent);text-decoration:underline}
@@ -98,9 +135,11 @@
   .tag.qa{background:var(--accent-soft);color:var(--accent)}
   .tag.review,.tag.bad{background:var(--crit-soft);color:var(--crit)}
   /* coach mode (Fas 3): green ready / amber coach / red action-required */
-  .tag.m-ready{background:var(--good-soft);color:var(--good);font-weight:700}
-  .tag.m-coach{background:var(--warn-soft);color:var(--warn);font-weight:700}
-  .tag.m-action{background:var(--crit-soft);color:var(--crit);font-weight:700}
+  .tag.m-ready,.tag.m-coach,.tag.m-action{color:var(--on-solid);font-family:var(--sans);
+    font-weight:700;letter-spacing:.08em;border-radius:4px;padding:3px 9px}
+  .tag.m-ready{background:var(--accent)}
+  .tag.m-coach{background:var(--warn)}
+  .tag.m-action{background:var(--crit)}
   /* reason-code summary on judged cards */
   .reasonline{font-size:12.5px;color:var(--warn);margin:-4px 0 12px}
   /* QA-coach per-criterion breakdown */
@@ -128,7 +167,7 @@
   .subs th,.subs td{border:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top}
   .subs th{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);background:var(--surface-2)}
   .draftlab{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);display:block;margin:2px 0 5px}
-  .draft{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin:0 0 12px}
+  .draft{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:14px 16px;margin:0 0 12px}
   .refbox{background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent);border-radius:6px;padding:12px 14px;margin:0 0 12px}
   .refbox .rl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--good);display:block;margin-bottom:6px}
   .gold{margin:2px 0 12px}
@@ -176,6 +215,22 @@
   .cbudget{border:1px solid var(--border);border-left:3px solid var(--good);border-radius:6px;
     padding:10px 14px;margin-bottom:10px;font-size:12.5px;background:var(--surface);line-height:1.55}
   .cbudget.over{border-left-color:var(--crit)}
+  /* Demo rows are hatched, dashed and muted — deliberately NOT styled like data.
+     Linear and Planhat are not integrated, so these show what the tab will show
+     once they are; they are excluded from every number on this tab. */
+  .ctable tr.demo td{background:repeating-linear-gradient(45deg,transparent,transparent 6px,
+    var(--surface-2) 6px,var(--surface-2) 12px);color:var(--ink-3);border-bottom-style:dashed}
+  .ctable tr.demo td b{font-weight:600}
+  .ctable tr.demo:last-child td{border-bottom:none}
+  .cdemotag{display:inline-block;margin-left:6px;font-size:8.5px;font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--warn);
+    background:var(--warn-soft);border-radius:2px;padding:1px 4px;vertical-align:1px}
+  .cdemonote{font-size:11.5px;color:var(--warn);background:var(--warn-soft);
+    border-radius:6px;padding:9px 13px;margin:0 0 10px;line-height:1.55}
+  .tag.p-yes{background:var(--good-soft);color:var(--good)}
+  .tag.p-no{background:var(--crit-soft);color:var(--crit)}
+  .tag.p-na{background:var(--surface-2);color:var(--ink-3)}
+  .tag.p-demo{background:var(--warn-soft);color:var(--warn)}
   .cfail{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--crit);
     border-radius:6px;padding:12px 14px;margin-bottom:9px}
   .cfail.late{border-left-color:var(--warn)}
@@ -212,7 +267,7 @@
   .nv-inner{flex:1;min-width:0;padding:16px 20px 15px}
 
   .nv-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-  .nv-mode{display:inline-flex;align-items:center;background:var(--nv-teal);color:#fff;
+  .nv-mode{display:inline-flex;align-items:center;background:var(--nv-teal);color:var(--on-solid);
     border-radius:4px;font-size:10.5px;font-weight:700;letter-spacing:.08em;
     padding:4px 9px;text-transform:uppercase}
   .nv-mode.amber{background:var(--nv-amber)}
@@ -240,6 +295,7 @@
   .nv-cust div.nv-demo{border-right-style:dashed;background:repeating-linear-gradient(
     45deg,transparent,transparent 6px,var(--nv-canvas) 6px,var(--nv-canvas) 12px)}
   .nv-cust div.nv-demo dd{color:var(--nv-ink-2);font-weight:500}
+  .nv-cust div.nv-demo:last-child{border-right:none}
   .nv-demotag{display:inline-block;margin-left:6px;font-size:8.5px;font-weight:700;
     letter-spacing:.08em;text-transform:uppercase;color:var(--nv-amber);
     background:var(--nv-amber-soft);border-radius:2px;padding:1px 4px;vertical-align:1px}
@@ -321,9 +377,9 @@
   .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;margin-top:4px}
   .actions .lab{font-size:12.5px;color:var(--ink-3);margin-right:2px}
   .vbtn{border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--ink)}
-  .vbtn[data-v=usable]:hover,.vbtn.sel[data-v=usable]{background:var(--good);border-color:var(--good);color:#fff}
-  .vbtn[data-v=edited]:hover,.vbtn.sel[data-v=edited]{background:var(--warn);border-color:var(--warn);color:#fff}
-  .vbtn[data-v=unusable]:hover,.vbtn.sel[data-v=unusable]{background:var(--crit);border-color:var(--crit);color:#fff}
+  .vbtn[data-v=usable]:hover,.vbtn.sel[data-v=usable]{background:var(--good);border-color:var(--good);color:var(--on-solid)}
+  .vbtn[data-v=edited]:hover,.vbtn.sel[data-v=edited]{background:var(--warn);border-color:var(--warn);color:var(--on-solid)}
+  .vbtn[data-v=unusable]:hover,.vbtn.sel[data-v=unusable]{background:var(--crit);border-color:var(--crit);color:var(--on-solid)}
   .vstate{font-size:12.5px;color:var(--ink-3);margin-left:auto}
   .empty{text-align:center;color:var(--ink-3);padding:48px 0;font-size:14px}
   .ticketlink{margin-left:auto;font-size:12.5px}
@@ -340,19 +396,20 @@
   .progress .track{height:7px;border-radius:20px;background:var(--surface-2);overflow:hidden}
   .progress .fill{height:100%;background:var(--good);border-radius:20px;transition:width .25s}
   /* active card for keyboard navigation (#4) */
-  .card.active{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 4px var(--accent-soft),var(--shadow)}
+  .card.active{outline:2px solid var(--accent);outline-offset:2px;
+    box-shadow:inset 5px 0 0 var(--rail),0 0 0 4px var(--accent-soft),var(--shadow)}
   .goldactions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   /* golden action — the hero button: big, gold, unmistakable */
   .btn.golden{background:#C99700;border-color:#B8860B;color:#1a1400;font-size:14px;font-weight:750;
     padding:10px 18px;border-radius:8px;letter-spacing:.01em;box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(201,151,0,.35)}
   .btn.golden:hover{filter:brightness(1.06);transform:translateY(-1px)}
-  .btn.golden.is-set{background:var(--good);border-color:var(--good);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(47,133,90,.3)}
+  .btn.golden.is-set{background:var(--good);border-color:var(--good);color:var(--on-solid);box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(15,113,115,.3)}
   .tag.golden{background:#C99700;color:#1a1400;font-weight:700}
-  .card.golden{border-color:#C99700;box-shadow:inset 4px 0 0 #C99700,var(--shadow)}
+  .card.golden{border-color:#C99700;--rail:#C99700}
   /* spam action — clearly a distinct danger action, not muted */
   .spambtn{margin-left:6px;border:1.5px solid var(--crit);background:var(--crit-soft);color:var(--crit);
     border-radius:8px;padding:8px 16px;font-size:13.5px;font-weight:700}
-  .spambtn:hover{background:var(--crit);color:#fff}
+  .spambtn:hover{background:var(--crit);color:var(--on-solid)}
   .spambtn::before{content:"🚫 "}
   kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--ink)}
   /* structured verdict: reason codes + critical flag */
@@ -366,7 +423,16 @@
   .crit-row .cl{font-size:12px;font-weight:700;color:var(--crit)}
   .crit-row select{font-family:inherit;font-size:12.5px;padding:6px 10px;border:1.5px solid var(--crit);border-radius:6px;background:var(--crit-soft);color:var(--crit);font-weight:650}
   .reasons-panel textarea.other{min-height:44px;font-size:13px;margin-bottom:2px}
-  .card.critical{box-shadow:inset 4px 0 0 var(--crit),var(--shadow)}
+  .card.critical{--rail:var(--crit)}
+
+  /* ── Shared section-label spec ────────────────────────────────────────────
+     "WHAT WE KNOW" / "SUGGESTED REPLY" in the note are sans, 700, widely
+     tracked and muted. Every other section label in the app used a narrower
+     mono variant. One spec now, so a heading looks like a heading wherever it
+     appears; the individual colours above still stand. */
+  .custq .rl,.refbox .rl,.subs .sl,.gold .gl,.draftlab,.reasons-panel .rl,.artlab,.ck{
+    font-family:var(--sans);font-size:10.5px;letter-spacing:.1em;font-weight:700;
+    text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -382,7 +448,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-04e-planhat-demo";
+var APP_VERSION = "v2026-08-05b-one-palette";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -828,7 +894,9 @@ document.addEventListener("keydown", function (e) {
 });
 
 function cardEl(r) {
-  var card = el("div", "card");
+  // The mode class only colours the rail — the state itself is still derived in
+  // code (deriveCoachMode), never decided here.
+  var card = el("div", "card" + (r.coach_mode ? " " + modeCls(r.coach_mode) : ""));
   var head = el("div", "chead");
   var idA = document.createElement("a");
   idA.className = "id";
@@ -1709,6 +1777,11 @@ function renderCoaching() {
     "One row per recommended step. Each type has one signal in a system we already read, so " +
     "follow-through is observed — there is no button here asking an agent whether they complied.",
     coach.steps.length ? null : "collecting", "c-wait"));
+  var demoSystems = uniq(
+    demoRowsFor(DEMO_MIX, coach.mix.map(function (m) { return m.step_type; }))
+      .concat(demoRowsFor(DEMO_STEPS, coach.steps.map(function (r) { return r.step_type; })))
+      .map(function (d) { return d.system; }));
+  if (demoSystems.length) wrap.appendChild(demoNoteEl(demoSystems));
   wrap.appendChild(stepMixEl());
   wrap.appendChild(stepTableEl());
 
@@ -1750,25 +1823,122 @@ function renderCoaching() {
   lw.appendChild(wrap);
 }
 
+// ── Demo data for the systems that are not integrated ───────────────────────
+//
+// Three of the eight step types have their follow-through signal in Linear or
+// Planhat, and neither has a client in this codebase (connections.ts reports
+// both as not connected, by absence of credentials rather than by a flag). So
+// those rows are not merely empty today — they cannot be filled at all, and an
+// empty table reads as "this was never built" rather than "this needs an
+// integration".
+//
+// These demo rows show what the tab WILL show once those systems are connected.
+// Two rules keep that honest:
+//
+//   1. They never look like data. Hatched, dashed, muted, DEMO-chipped, and
+//      carrying no ticket link — because a demo row hung on a real ticket id
+//      would attribute a recommendation the AI never made to a ticket that
+//      really exists, which is worse than showing nothing.
+//   2. They never enter the arithmetic. The unobservable-share budget, the
+//      follow-through percentages, the pairing table and the tab's badge count
+//      are computed from real rows only. That budget exists to judge the
+//      PROMPT; a fabricated denominator would judge nothing.
+//
+// Flip to false the moment a Linear or Planhat client exists — the real rows
+// then flow through exactly the same table. (PLANHAT_DEMO further down is the
+// sibling flag for the Agent note tab; separate on purpose, since the two tabs
+// are read by different people for different reasons.)
+var COACH_DEMO = true;
+
+// One sample per not-integrated step type. Fixed, not generated: a demo table
+// that changes between repaints reads as a bug.
+var DEMO_MIX = [
+  { step_type: "link_linear",  system: "Linear",  steps: 6, observable: 6, followed: 4, followed_pct: 66.7 },
+  { step_type: "copy_csm",     system: "Planhat", steps: 4, observable: 4, followed: 3, followed_pct: 75.0 },
+  { step_type: "offer_meeting", system: "Planhat", steps: 3, observable: 3, followed: 1, followed_pct: 33.3 },
+];
+
+var DEMO_STEPS = [
+  {
+    step_type: "link_linear", system: "Linear",
+    subject: "Example — feature gap raised by three customers this month",
+    step_text: "Attach this ticket to the Linear request that already tracks the gap, so the " +
+      "customer count behind it is visible when it is prioritised.",
+    observed_via: "Linear · REQ-1184", observed: true, delivery_status: "in_time",
+  },
+  {
+    step_type: "copy_csm", system: "Planhat",
+    subject: "Example — same billing question from a key account, second time",
+    step_text: "Copy the CSM. This account has asked the same question twice, which is a " +
+      "relationship signal rather than a support one.",
+    observed_via: "Planhat · activity created", observed: true, delivery_status: "in_time",
+  },
+  {
+    step_type: "offer_meeting", system: "Planhat",
+    subject: "Example — fourth exchange on the same configuration",
+    step_text: "Offer a 20-minute walkthrough instead of a fourth written reply — the thread " +
+      "is not converging.",
+    observed_via: "Planhat", observed: false, delivery_status: "in_time",
+  },
+];
+
+// A step type only gets a demo row while it has no real rows. Real data always
+// wins: the moment the corpus contains a genuine link_linear step, the demo one
+// disappears rather than sitting beside it.
+function demoRowsFor(list, realTypes) {
+  if (!COACH_DEMO) return [];
+  return list.filter(function (d) { return realTypes.indexOf(d.step_type) === -1; });
+}
+
+function demoLabel(text) {
+  var b = el("b", "");
+  b.appendChild(document.createTextNode(text));
+  b.appendChild(set(el("span", "cdemotag"), "demo"));
+  return b;
+}
+
+function demoNoteEl(systems) {
+  var p = el("p", "cdemonote");
+  p.textContent =
+    "The hatched rows are demo data. " + systems.join(" and ") + " " +
+    (systems.length > 1 ? "are" : "is") + " not integrated, so follow-through there cannot be " +
+    "observed yet — these show what this table will show once " +
+    (systems.length > 1 ? "they are" : "it is") + " connected. They are excluded from every " +
+    "number on this tab, and from the step count on the tab itself.";
+  return p;
+}
+
 // Step-type mix — and the unobservable share, which judges the PROMPT, not the agent.
 function stepMixEl() {
   var box = el("div", "cmix");
-  if (!coach.mix.length) {
+
+  var realTypes = coach.mix.map(function (m) { return m.step_type; });
+  var demo = demoRowsFor(DEMO_MIX, realTypes);
+
+  if (!coach.mix.length && !demo.length) {
     box.appendChild(set(el("p", "chint"),
       "No steps classified yet. Run `deno task observe-coaching` to populate them."));
     return box;
   }
-  var total = coach.mix.reduce(function (n, m) { return n + m.steps; }, 0);
-  var blind = coach.mix.reduce(function (n, m) { return n + (m.steps - m.observable); }, 0);
-  var share = total ? Math.round(1000 * blind / total) / 10 : 0;
 
-  var warn = el("div", "cbudget" + (share > 15 ? " over" : ""));
-  warn.innerHTML = "<b>" + share + "%</b> of recommendations have no observable signal " +
-    "(budget 15%). " + (share > 15
-      ? "Over budget — the prompt is producing advice that cannot be evaluated. That is a prompt " +
-        "problem to fix, not an agent problem to chase."
-      : "Within budget.");
-  box.appendChild(warn);
+  if (coach.mix.length) {
+    // Real rows only, deliberately. See COACH_DEMO.
+    var total = coach.mix.reduce(function (n, m) { return n + m.steps; }, 0);
+    var blind = coach.mix.reduce(function (n, m) { return n + (m.steps - m.observable); }, 0);
+    var share = total ? Math.round(1000 * blind / total) / 10 : 0;
+
+    var warn = el("div", "cbudget" + (share > 15 ? " over" : ""));
+    warn.innerHTML = "<b>" + share + "%</b> of recommendations have no observable signal " +
+      "(budget 15%). " + (share > 15
+        ? "Over budget — the prompt is producing advice that cannot be evaluated. That is a prompt " +
+          "problem to fix, not an agent problem to chase."
+        : "Within budget.") +
+      (demo.length ? " Measured on observed steps only; the demo rows below are not counted." : "");
+    box.appendChild(warn);
+  } else {
+    box.appendChild(set(el("p", "chint"),
+      "No real steps classified yet — run `deno task observe-coaching`. The rows below are demo."));
+  }
 
   var t = document.createElement("table");
   t.className = "ctable";
@@ -1783,9 +1953,29 @@ function stepMixEl() {
     tr.appendChild(set(document.createElement("td"),
       m.observable ? (m.followed + (m.followed_pct != null ? " (" + m.followed_pct + "%)" : "")) : "—"));
     var sig = document.createElement("td");
+    // internal_check has no system signal BY DESIGN — it is not a missing
+    // integration, and labelling it "not connected" invites someone to go and
+    // connect something.
     sig.appendChild(m.observable
       ? tag("observable", "p-yes")
+      : m.step_type === "internal_check"
+      ? tag("no signal by design", "p-na")
       : tag("not connected", "p-na"));
+    tr.appendChild(sig);
+    tb.appendChild(tr);
+  });
+  demo.forEach(function (m) {
+    var tr = document.createElement("tr");
+    tr.className = "demo";
+    var td1 = document.createElement("td");
+    td1.appendChild(demoLabel(m.step_type));
+    tr.appendChild(td1);
+    tr.appendChild(set(document.createElement("td"), String(m.steps)));
+    tr.appendChild(set(document.createElement("td"), String(m.observable)));
+    tr.appendChild(set(document.createElement("td"),
+      m.followed + " (" + m.followed_pct + "%)"));
+    var sig = document.createElement("td");
+    sig.appendChild(tag(m.system + " · demo", "p-demo"));
     tr.appendChild(sig);
     tb.appendChild(tr);
   });
@@ -1794,9 +1984,22 @@ function stepMixEl() {
   return box;
 }
 
+function uniq(list) {
+  return list.filter(function (v, i) { return list.indexOf(v) === i; });
+}
+
 function stepTableEl() {
-  if (!coach.steps.length) {
+  var realTypes = coach.steps.map(function (r) { return r.step_type; });
+  var demo = demoRowsFor(DEMO_STEPS, realTypes);
+
+  if (!coach.steps.length && !demo.length) {
     return set(el("p", "chint"), "No recommended steps recorded yet.");
+  }
+
+  var box = el("div", "");
+  if (!coach.steps.length) {
+    box.appendChild(set(el("p", "chint"),
+      "No real recommended steps recorded yet. The rows below are demo."));
   }
   var t = document.createElement("table");
   t.className = "ctable";
@@ -1845,8 +2048,39 @@ function stepTableEl() {
 
     tb.appendChild(tr);
   });
+
+  // Demo rows carry NO ticket link and an "Example —" subject: a fabricated
+  // recommendation must never be attributable to a real ticket.
+  demo.forEach(function (d) {
+    var tr = document.createElement("tr");
+    tr.className = "demo";
+
+    var dt1 = document.createElement("td");
+    dt1.appendChild(demoLabel("Example ticket"));
+    dt1.appendChild(set(el("div", "cstep"), d.subject));
+    tr.appendChild(dt1);
+
+    var dt2 = document.createElement("td");
+    dt2.appendChild(set(el("b", ""), d.step_type));
+    dt2.appendChild(set(el("div", "cstep"), d.step_text));
+    tr.appendChild(dt2);
+
+    tr.appendChild(set(document.createElement("td"), d.observed_via));
+
+    var dt4 = document.createElement("td");
+    dt4.appendChild(tag(d.observed ? "Yes" : "No", "p-demo"));
+    tr.appendChild(dt4);
+
+    var dt5 = document.createElement("td");
+    dt5.appendChild(tag("in time", "p-demo"));
+    tr.appendChild(dt5);
+
+    tb.appendChild(tr);
+  });
+
   t.appendChild(tb);
-  return t;
+  box.appendChild(t);
+  return box;
 }
 
 function signalName(type) {
@@ -1968,7 +2202,7 @@ function renderArticleList() {
 }
 
 function articleCardEl(a) {
-  var card = el("div", "card art");
+  var card = el("div", "card art a-" + a.status);
 
   var head = el("div", "arthead");
   head.appendChild(tag(ART_LABEL[a.status] || a.status, "a-" + a.status));
