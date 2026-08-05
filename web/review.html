@@ -435,7 +435,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05c-coaching-demo";
+var APP_VERSION = "v2026-08-05d-delivery-backfill";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -1754,19 +1754,48 @@ function renderCoaching() {
   }
   var dv = coach.delivery;
   var lateLine = el("p", "chint");
+  var caveatLine = null;
   if (!dv || !dv.measured) {
     lateLine.textContent =
       "No delivery rows yet. Run `deno task observe-coaching` (dry run by default) to measure " +
       "note timing against the first agent reply.";
   } else {
+    var judgeable = (dv.in_time || 0) + (dv.late || 0);
     var pct = dv.late_pct == null ? "—" : dv.late_pct + "%";
     lateLine.innerHTML =
-      "<b>" + num(dv.late) + " late</b> of " + num(dv.in_time + dv.late) +
+      "<b>" + num(dv.late) + " late</b> of " + num(judgeable) +
       " judgeable note(s) — " + esc(pct) + " (target under 2%). " +
       num(dv.no_reply_yet) + " ticket(s) have no agent reply yet, so there is nothing to judge.";
     if (dv.late_pct != null && Number(dv.late_pct) > 2) lateLine.className = "chint bad";
+    // A low late rate is only good news if notes were actually racing a
+    // deadline. Excluded rows are stated, not hidden, and a judgeable
+    // population this small is called out — otherwise "0% late" reads as
+    // "delivery is solved" when it means "delivery has not been tested".
+    var excluded = (dv.backfill || 0) + (dv.never_delivered || 0);
+    if (excluded || judgeable < 20) {
+      var caveat = el("p", "chint");
+      var bits = [];
+      if (dv.backfill) {
+        bits.push("<b>" + num(dv.backfill) + "</b> generated after the agent had already " +
+          "replied (backfill — never racing a deadline, so not a delivery failure)");
+      }
+      if (dv.never_delivered) {
+        bits.push("<b>" + num(dv.never_delivered) + "</b> never posted at all (replay/dry-run)");
+      }
+      caveat.innerHTML =
+        (bits.length ? "Excluded from that rate: " + bits.join("; ") + ". " : "") +
+        (judgeable < 20
+          ? "<b>Read the rate as untested, not as good.</b> The live scheduler has not been " +
+            "enabled, so almost nothing has ever raced an agent — this becomes a real " +
+            "measurement once notes are posted by the minute-poller against live tickets."
+          : "");
+      caveatLine = caveat;
+    }
   }
   timing.appendChild(lateLine);
+  // After the count, not before it: the caveat qualifies the number, so the
+  // number has to be on screen first.
+  if (caveatLine) timing.appendChild(caveatLine);
   wrap.appendChild(timing);
 
   // ── 3. Next steps ─────────────────────────────────────────────────────────

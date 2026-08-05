@@ -242,6 +242,43 @@ Deno.test("deriveDeliveryStatus: late is a delivery failure, not a bad suggestio
   assertEquals(deriveDeliveryStatus(null, "2026-08-01T10:00:00Z"), "late");
 });
 
+Deno.test("deriveDeliveryStatus: a generation started after the reply is backfill, not late", () => {
+  // The case that made every historical run look like a missed deadline: the
+  // ticket was already answered before the pipeline ever looked at it, so there
+  // was no race to lose.
+  assertEquals(
+    deriveDeliveryStatus("2026-08-01T12:00:00Z", "2026-08-01T10:00:00Z", "2026-08-01T11:00:00Z"),
+    "backfill",
+    "generated an hour after the agent replied — never racing a deadline",
+  );
+  assertEquals(
+    deriveDeliveryStatus("2026-05-01T12:00:00Z", "2025-09-01T10:00:00Z", "2026-05-01T11:00:00Z"),
+    "backfill",
+    "a batch run months after the ticket was answered is not a late delivery",
+  );
+
+  // Still late when we WERE in the race: generation before the reply, note after.
+  assertEquals(
+    deriveDeliveryStatus("2026-08-01T10:30:00Z", "2026-08-01T10:00:00Z", "2026-08-01T09:55:00Z"),
+    "late",
+    "started before the agent replied and landed after it — a genuine miss",
+  );
+  // A live note that never posted, while we were in the race, is still a failure.
+  assertEquals(
+    deriveDeliveryStatus(null, "2026-08-01T10:00:00Z", "2026-08-01T09:55:00Z"),
+    "late",
+  );
+  // Generated exactly at the reply time is not backfill — the boundary is
+  // strictly after, so a tie stays judgeable rather than being excused.
+  assertEquals(
+    deriveDeliveryStatus("2026-08-01T09:59:00Z", "2026-08-01T10:00:00Z", "2026-08-01T10:00:00Z"),
+    "in_time",
+  );
+  // Omitting generatedAt keeps the old two-argument behaviour for callers that
+  // genuinely do not have it.
+  assertEquals(deriveDeliveryStatus("2026-08-01T11:00:00Z", "2026-08-01T10:00:00Z"), "late");
+});
+
 // ── Connection registry + the content gate (CLAUDE.md §11) ───────────────────
 
 Deno.test("systemStatus: connected only when EVERY credential is present", () => {

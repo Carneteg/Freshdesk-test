@@ -159,7 +159,7 @@ export function extractTargetRef(text: string): string | null {
 
 // ── Delivery timing ───────────────────────────────────────────────────────────
 
-export type DeliveryStatus = "in_time" | "late" | "no_reply_yet";
+export type DeliveryStatus = "in_time" | "late" | "no_reply_yet" | "backfill";
 
 /**
  * The first PUBLIC agent reply on a ticket — the deadline the note has to beat.
@@ -183,13 +183,29 @@ export function firstAgentReplyAt(ticket: Pick<Ticket, "conversations">): string
  * This distinction is the whole point: a note that arrives after the first reply
  * is a DELIVERY failure, not a bad suggestion. Conflating the two understates the
  * model — it gets blamed for advice the agent never saw.
+ *
+ * BACKFILL is the third case, and it is the one this function originally got
+ * wrong. A generation created AFTER the agent had already replied was never in
+ * the race: the ticket was answered before the pipeline ever looked at it. That
+ * is a batch run over an old ticket, not a delivery that arrived too late.
+ * Scoring it as `late` made every historical run look like a missed deadline —
+ * on the first real measurement, all 34 "late" notes turned out to be exactly
+ * this, and the true late count was zero.
+ *
+ * `generatedAt` is the discriminator and it is a FACT about the row, not a
+ * tuned threshold: either we started before the agent replied or we did not.
+ * Callers that genuinely have no generation time may omit it, and the old
+ * two-argument behaviour applies.
  */
 export function deriveDeliveryStatus(
   noteCreatedAt: string | null,
   firstReplyAt: string | null,
+  generatedAt?: string | null,
 ): DeliveryStatus {
   if (!firstReplyAt) return "no_reply_yet";
-  if (!noteCreatedAt) return "late"; // never delivered but the agent already replied
+  // The race was already over before we started — there was no deadline to miss.
+  if (generatedAt && Date.parse(generatedAt) > Date.parse(firstReplyAt)) return "backfill";
+  if (!noteCreatedAt) return "late"; // in the race, never delivered, agent replied
   return Date.parse(noteCreatedAt) <= Date.parse(firstReplyAt) ? "in_time" : "late";
 }
 

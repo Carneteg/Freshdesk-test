@@ -223,7 +223,7 @@ for (const g of generations) {
   byTicket.set(g.ticket_id, list);
 }
 
-let deliveryWrites = 0, obsWrites = 0, readFailures = 0, late = 0;
+let deliveryWrites = 0, obsWrites = 0, readFailures = 0, late = 0, backfill = 0;
 
 for (const [ticketId, gensForTicket] of byTicket) {
   let ticket;
@@ -254,10 +254,14 @@ for (const [ticketId, gensForTicket] of byTicket) {
     const attempted = g.posted_at != null || g.posting_started_at != null;
     if (!attempted) continue;
 
-    // posted_at is when we actually posted it.
+    // posted_at is when we actually posted it; created_at is when the pipeline
+    // started, which is what tells a missed deadline apart from a backfill.
     const noteAt = g.posted_at ?? null;
-    const status = noteAt || replyAt ? deriveDeliveryStatus(noteAt, replyAt) : "no_reply_yet";
+    const status = noteAt || replyAt
+      ? deriveDeliveryStatus(noteAt, replyAt, g.created_at ?? null)
+      : "no_reply_yet";
     if (status === "late") late++;
+    if (status === "backfill") backfill++;
     const { error } = await db.from("suggestion_delivery").upsert({
       suggestion_id: g.id,
       ticket_id: ticketId,
@@ -315,6 +319,9 @@ for (const [ticketId, gensForTicket] of byTicket) {
 console.log(
   `\n${deliveryWrites} delivery row(s), ${obsWrites} observation(s) written.\n` +
     `${late} note(s) landed after the first agent reply.` +
+    // Reported beside it, never folded into it: a backfill was generated after
+    // the agent had already replied, so it was never in the race.
+    (backfill ? `  ${backfill} backfill (generated after the reply — not a deadline missed).` : "") +
     (readFailures ? `  ${readFailures} ticket read(s) failed and were skipped.` : ""),
 );
 if (!safeLog) {
