@@ -5,44 +5,68 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Coach Review — Simployer Gate 1</title>
 <style>
+  /* ── ONE palette (2026-08-05) ────────────────────────────────────────────
+     The private note's design is now the standard for the whole app, per
+     Tobias. It previously had its own --nv-* palette, on the reasoning that
+     training the AI and coaching the agent are different jobs and restyling
+     one must not disturb the other. That separation of FUNCTION stands — they
+     are still separate tabs. The separation of visual LANGUAGE does not: two
+     palettes in one app read as two half-finished apps.
+
+     The design statement is the three-state scale. Positive is the TEAL, not a
+     separate green: "ready to send" and "grounded" are the same signal as the
+     primary action, so they are the same colour. Amber is burnt rather than
+     yellow, red is brick rather than crimson — both readable on paper, neither
+     shouting.
+
+     The --nv-* names are kept as ALIASES rather than search-replaced, so the
+     note's ~60 rules keep reading in their own vocabulary and a future
+     re-divergence is one block of edits, not sixty. */
   :root{
-    --bg:#F5F7F9;--surface:#fff;--surface-2:#EDF1F4;--border:#DCE3E8;
-    --ink:#182029;--ink-2:#56636E;--ink-3:#8694A1;
-    --accent:#0F766E;--accent-soft:#D6E8E5;
-    --good:#2F855A;--good-soft:#DCEEE3;--warn:#B7791F;--warn-soft:#F3E8CE;
-    --crit:#C0392B;--crit-soft:#F4D9D5;--info:#5B7089;
+    --ink:#16232E;--ink-2:#41535F;--ink-3:#7B8C96;
+    --bg:#EDF1F2;--surface:#FFFFFF;--surface-2:#F1F5F5;--border:#E2E8EA;
+    --accent:#0F7173;--accent-soft:#E4EFEF;--accent-edge:#BFD8D8;
+    /* good IS the accent teal — see above */
+    --good:#0F7173;--good-soft:#E4EFEF;
+    --warn:#B45A09;--warn-soft:#FBEDDD;
+    --crit:#9E3227;--crit-soft:#F8E6E3;
+    --info:#5B7089;
+    /* The one thing that stays specific to a note: the warm paper that makes it
+       read as a NOTE rather than as another panel of the review tool. */
+    --paper-warm:#FFFDF4;--paper-warm-edge:#F0E4C3;
+    --bar-off:#D8E1E3;
+    /* Text on a solid teal/amber/red fill. White in light mode; in dark the
+       accents are bright enough that white on them is unreadable, so it flips
+       to the page ink. One token, so every solid badge and button flips with
+       it instead of each being remembered separately. */
+    --on-solid:#fff;
     --mono:ui-monospace,"SF Mono",Menlo,Consolas,monospace;
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
-    --radius:8px;--shadow:0 1px 2px rgba(24,32,41,.05),0 4px 16px rgba(24,32,41,.05);
-    /* The private note has its OWN palette. Training the AI and coaching the
-       agent are different jobs with different readers, so restyling one must
-       never disturb the other. The cream paper is what makes this read as a
-       NOTE rather than as another panel of the review tool. */
-    --nv-ink:#16232E;--nv-ink-2:#41535F;--nv-ink-3:#7B8C96;
-    --nv-rule:#E2E8EA;--nv-paper:#FFFFFF;--nv-canvas:#EDF1F2;
-    --nv-note:#FFFDF4;--nv-note-edge:#F0E4C3;
-    --nv-teal:#0F7173;--nv-teal-soft:#E4EFEF;--nv-teal-edge:#BFD8D8;
-    --nv-amber:#B45A09;--nv-amber-soft:#FBEDDD;
-    --nv-red:#9E3227;--nv-red-soft:#F8E6E3;
-    --nv-bar:#D8E1E3;
+    --radius:8px;--shadow:0 1px 2px rgba(22,35,46,.05),0 4px 16px rgba(22,35,46,.05);
+
+    --nv-ink:var(--ink);--nv-ink-2:var(--ink-2);--nv-ink-3:var(--ink-3);
+    --nv-rule:var(--border);--nv-paper:var(--surface);--nv-canvas:var(--bg);
+    --nv-note:var(--paper-warm);--nv-note-edge:var(--paper-warm-edge);
+    --nv-teal:var(--accent);--nv-teal-soft:var(--accent-soft);--nv-teal-edge:var(--accent-edge);
+    --nv-amber:var(--warn);--nv-amber-soft:var(--warn-soft);
+    --nv-red:var(--crit);--nv-red-soft:var(--crit-soft);
+    --nv-bar:var(--bar-off);
   }
   @media(prefers-color-scheme:dark){:root{
+    --ink:#E8EDF1;--ink-2:#A5B2BD;--ink-3:#7C8B96;
     --bg:#0E1319;--surface:#151C24;--surface-2:#1C252F;--border:#2A3540;
-    --ink:#E8EDF1;--ink-2:#A5B2BD;--ink-3:#6E7E8B;
-    --accent:#4FD1C5;--accent-soft:#123A38;
-    --good:#4FB784;--good-soft:#14301F;--warn:#E0A64B;--warn-soft:#33280F;
-    --crit:#E86B5C;--crit-soft:#38191A;--info:#8AA0B5;
+    --accent:#4FD1C5;--accent-soft:#123A38;--accent-edge:#1C4C49;
+    --good:#4FD1C5;--good-soft:#123A38;
+    --warn:#E0A64B;--warn-soft:#33280F;
+    --crit:#E86B5C;--crit-soft:#38191A;
+    --info:#8AA0B5;
+    /* Warm-TINTED panel rather than the literal cream. A #FFFDF4 slab in dark
+       mode is a torch, not a note — the warmth carries the design across, not
+       the exact hex. */
+    --paper-warm:#1B1E1C;--paper-warm-edge:#3A3524;
+    --bar-off:#2A3540;
+    --on-solid:#0E1319;
     --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.3);
-    /* Dark: warm-tinted panel rather than the literal cream. A #FFFDF4 slab in
-       dark mode is a torch, not a note — the warmth carries the design across,
-       not the exact hex. */
-    --nv-ink:#E8EDF1;--nv-ink-2:#A5B2BD;--nv-ink-3:#7C8B96;
-    --nv-rule:#2A3540;--nv-paper:#151C24;--nv-canvas:#0E1319;
-    --nv-note:#1B1E1C;--nv-note-edge:#3A3524;
-    --nv-teal:#4FD1C5;--nv-teal-soft:#123A38;--nv-teal-edge:#1C4C49;
-    --nv-amber:#E0A64B;--nv-amber-soft:#33280F;
-    --nv-red:#E86B5C;--nv-red-soft:#38191A;
-    --nv-bar:#2A3540;
   }}
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;font-variant-numeric:tabular-nums}
@@ -64,7 +88,7 @@
   .field label{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3)}
   input{font-family:inherit;font-size:15px;padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--ink)}
   input:focus{outline:2px solid var(--accent);outline-offset:1px;border-color:var(--accent)}
-  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;width:100%;padding:11px;font-size:14px}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-solid);width:100%;padding:11px;font-size:14px}
   .btn.primary:hover{filter:brightness(1.06)}
   .msg{font-size:13px;margin-top:12px;padding:10px 12px;border-radius:6px}
   .msg.ok{background:var(--good-soft);color:var(--good)}
@@ -82,10 +106,23 @@
   .help b{color:var(--ink)}
   .bar{display:flex;gap:8px;align-items:center;margin:18px 0 16px;flex-wrap:wrap}
   .tab{border:1px solid var(--border);background:var(--surface);border-radius:20px;padding:6px 14px;font-size:13px;font-weight:600;color:var(--ink-2)}
-  .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .tab.on{background:var(--accent);border-color:var(--accent);color:var(--on-solid)}
   .count{margin-left:auto;font-size:12.5px;color:var(--ink-3);font-family:var(--mono)}
 
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
+  /* Every card carries the note's coloured rail. It is the design's one
+     load-bearing element: the state of the thing is legible before a word is
+     read, and it is the same teal/amber/red scale everywhere. */
+  .card{--rail:var(--border);background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius);box-shadow:inset 5px 0 0 var(--rail),var(--shadow);
+    padding:16px 18px 16px 22px;margin-bottom:14px}
+  .card.m-ready{--rail:var(--accent)}
+  .card.m-coach{--rail:var(--warn)}
+  .card.m-action{--rail:var(--crit)}
+  /* Articles use the same scale: teal = settled, amber = your decision is
+     wanted, red = it went wrong. */
+  .card.art.a-approved{--rail:var(--accent)}
+  .card.art.a-drafted{--rail:var(--warn)}
+  .card.art.a-rejected,.card.art.a-failed{--rail:var(--crit)}
   .chead{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:4px}
   .chead .id{font-family:var(--mono);font-size:12px;color:var(--ink-3);text-decoration:none}
   .chead a.id:hover{color:var(--accent);text-decoration:underline}
@@ -98,9 +135,11 @@
   .tag.qa{background:var(--accent-soft);color:var(--accent)}
   .tag.review,.tag.bad{background:var(--crit-soft);color:var(--crit)}
   /* coach mode (Fas 3): green ready / amber coach / red action-required */
-  .tag.m-ready{background:var(--good-soft);color:var(--good);font-weight:700}
-  .tag.m-coach{background:var(--warn-soft);color:var(--warn);font-weight:700}
-  .tag.m-action{background:var(--crit-soft);color:var(--crit);font-weight:700}
+  .tag.m-ready,.tag.m-coach,.tag.m-action{color:var(--on-solid);font-family:var(--sans);
+    font-weight:700;letter-spacing:.08em;border-radius:4px;padding:3px 9px}
+  .tag.m-ready{background:var(--accent)}
+  .tag.m-coach{background:var(--warn)}
+  .tag.m-action{background:var(--crit)}
   /* reason-code summary on judged cards */
   .reasonline{font-size:12.5px;color:var(--warn);margin:-4px 0 12px}
   /* QA-coach per-criterion breakdown */
@@ -128,7 +167,7 @@
   .subs th,.subs td{border:1px solid var(--border);padding:7px 9px;text-align:left;vertical-align:top}
   .subs th{font-family:var(--mono);font-size:10.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2);background:var(--surface-2)}
   .draftlab{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3);display:block;margin:2px 0 5px}
-  .draft{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:14px 16px;margin:0 0 12px}
+  .draft{background:var(--surface);border:1px solid var(--border);border-radius:7px;padding:14px 16px;margin:0 0 12px}
   .refbox{background:var(--good-soft);border:1px solid color-mix(in srgb,var(--good) 30%,transparent);border-radius:6px;padding:12px 14px;margin:0 0 12px}
   .refbox .rl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--good);display:block;margin-bottom:6px}
   .gold{margin:2px 0 12px}
@@ -176,6 +215,9 @@
   .cbudget{border:1px solid var(--border);border-left:3px solid var(--good);border-radius:6px;
     padding:10px 14px;margin-bottom:10px;font-size:12.5px;background:var(--surface);line-height:1.55}
   .cbudget.over{border-left-color:var(--crit)}
+  .tag.p-yes{background:var(--good-soft);color:var(--good)}
+  .tag.p-no{background:var(--crit-soft);color:var(--crit)}
+  .tag.p-na{background:var(--surface-2);color:var(--ink-3)}
   .cfail{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--crit);
     border-radius:6px;padding:12px 14px;margin-bottom:9px}
   .cfail.late{border-left-color:var(--warn)}
@@ -212,7 +254,7 @@
   .nv-inner{flex:1;min-width:0;padding:16px 20px 15px}
 
   .nv-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-  .nv-mode{display:inline-flex;align-items:center;background:var(--nv-teal);color:#fff;
+  .nv-mode{display:inline-flex;align-items:center;background:var(--nv-teal);color:var(--on-solid);
     border-radius:4px;font-size:10.5px;font-weight:700;letter-spacing:.08em;
     padding:4px 9px;text-transform:uppercase}
   .nv-mode.amber{background:var(--nv-amber)}
@@ -240,6 +282,7 @@
   .nv-cust div.nv-demo{border-right-style:dashed;background:repeating-linear-gradient(
     45deg,transparent,transparent 6px,var(--nv-canvas) 6px,var(--nv-canvas) 12px)}
   .nv-cust div.nv-demo dd{color:var(--nv-ink-2);font-weight:500}
+  .nv-cust div.nv-demo:last-child{border-right:none}
   .nv-demotag{display:inline-block;margin-left:6px;font-size:8.5px;font-weight:700;
     letter-spacing:.08em;text-transform:uppercase;color:var(--nv-amber);
     background:var(--nv-amber-soft);border-radius:2px;padding:1px 4px;vertical-align:1px}
@@ -321,9 +364,9 @@
   .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;border-top:1px solid var(--border);padding-top:12px;margin-top:4px}
   .actions .lab{font-size:12.5px;color:var(--ink-3);margin-right:2px}
   .vbtn{border:1px solid var(--border);background:var(--surface);border-radius:6px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--ink)}
-  .vbtn[data-v=usable]:hover,.vbtn.sel[data-v=usable]{background:var(--good);border-color:var(--good);color:#fff}
-  .vbtn[data-v=edited]:hover,.vbtn.sel[data-v=edited]{background:var(--warn);border-color:var(--warn);color:#fff}
-  .vbtn[data-v=unusable]:hover,.vbtn.sel[data-v=unusable]{background:var(--crit);border-color:var(--crit);color:#fff}
+  .vbtn[data-v=usable]:hover,.vbtn.sel[data-v=usable]{background:var(--good);border-color:var(--good);color:var(--on-solid)}
+  .vbtn[data-v=edited]:hover,.vbtn.sel[data-v=edited]{background:var(--warn);border-color:var(--warn);color:var(--on-solid)}
+  .vbtn[data-v=unusable]:hover,.vbtn.sel[data-v=unusable]{background:var(--crit);border-color:var(--crit);color:var(--on-solid)}
   .vstate{font-size:12.5px;color:var(--ink-3);margin-left:auto}
   .empty{text-align:center;color:var(--ink-3);padding:48px 0;font-size:14px}
   .ticketlink{margin-left:auto;font-size:12.5px}
@@ -340,19 +383,20 @@
   .progress .track{height:7px;border-radius:20px;background:var(--surface-2);overflow:hidden}
   .progress .fill{height:100%;background:var(--good);border-radius:20px;transition:width .25s}
   /* active card for keyboard navigation (#4) */
-  .card.active{outline:2px solid var(--accent);outline-offset:2px;box-shadow:0 0 0 4px var(--accent-soft),var(--shadow)}
+  .card.active{outline:2px solid var(--accent);outline-offset:2px;
+    box-shadow:inset 5px 0 0 var(--rail),0 0 0 4px var(--accent-soft),var(--shadow)}
   .goldactions{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   /* golden action — the hero button: big, gold, unmistakable */
   .btn.golden{background:#C99700;border-color:#B8860B;color:#1a1400;font-size:14px;font-weight:750;
     padding:10px 18px;border-radius:8px;letter-spacing:.01em;box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(201,151,0,.35)}
   .btn.golden:hover{filter:brightness(1.06);transform:translateY(-1px)}
-  .btn.golden.is-set{background:var(--good);border-color:var(--good);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(47,133,90,.3)}
+  .btn.golden.is-set{background:var(--good);border-color:var(--good);color:var(--on-solid);box-shadow:0 1px 2px rgba(0,0,0,.12),0 3px 10px rgba(15,113,115,.3)}
   .tag.golden{background:#C99700;color:#1a1400;font-weight:700}
-  .card.golden{border-color:#C99700;box-shadow:inset 4px 0 0 #C99700,var(--shadow)}
+  .card.golden{border-color:#C99700;--rail:#C99700}
   /* spam action — clearly a distinct danger action, not muted */
   .spambtn{margin-left:6px;border:1.5px solid var(--crit);background:var(--crit-soft);color:var(--crit);
     border-radius:8px;padding:8px 16px;font-size:13.5px;font-weight:700}
-  .spambtn:hover{background:var(--crit);color:#fff}
+  .spambtn:hover{background:var(--crit);color:var(--on-solid)}
   .spambtn::before{content:"🚫 "}
   kbd{font-family:var(--mono);font-size:11px;background:var(--surface-2);border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:1px 5px;color:var(--ink)}
   /* structured verdict: reason codes + critical flag */
@@ -366,7 +410,16 @@
   .crit-row .cl{font-size:12px;font-weight:700;color:var(--crit)}
   .crit-row select{font-family:inherit;font-size:12.5px;padding:6px 10px;border:1.5px solid var(--crit);border-radius:6px;background:var(--crit-soft);color:var(--crit);font-weight:650}
   .reasons-panel textarea.other{min-height:44px;font-size:13px;margin-bottom:2px}
-  .card.critical{box-shadow:inset 4px 0 0 var(--crit),var(--shadow)}
+  .card.critical{--rail:var(--crit)}
+
+  /* ── Shared section-label spec ────────────────────────────────────────────
+     "WHAT WE KNOW" / "SUGGESTED REPLY" in the note are sans, 700, widely
+     tracked and muted. Every other section label in the app used a narrower
+     mono variant. One spec now, so a heading looks like a heading wherever it
+     appears; the individual colours above still stand. */
+  .custq .rl,.refbox .rl,.subs .sl,.gold .gl,.draftlab,.reasons-panel .rl,.artlab,.ck{
+    font-family:var(--sans);font-size:10.5px;letter-spacing:.1em;font-weight:700;
+    text-transform:uppercase}
 </style>
 </head>
 <body>
@@ -382,7 +435,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-04e-planhat-demo";
+var APP_VERSION = "v2026-08-05c-coaching-demo";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -828,7 +881,9 @@ document.addEventListener("keydown", function (e) {
 });
 
 function cardEl(r) {
-  var card = el("div", "card");
+  // The mode class only colours the rail — the state itself is still derived in
+  // code (deriveCoachMode), never decided here.
+  var card = el("div", "card" + (r.coach_mode ? " " + modeCls(r.coach_mode) : ""));
   var head = el("div", "chead");
   var idA = document.createElement("a");
   idA.className = "id";
@@ -1590,6 +1645,17 @@ async function loadCoaching() {
   coach.pairing   = r[5] || [];
   coach.failed    = r[6] || [];
   coach.knowledge = (r[7] || [])[0] || null;
+
+  // Demo mode REPLACES the follow-through sections rather than mixing with
+  // them, so no figure on screen is part real and part sample. Baselines, note
+  // timing and Knowledge produced are left exactly as the database has them —
+  // those come from measure-baselines / observe-coaching and are real.
+  if (COACH_DEMO) {
+    coach.steps = demoSteps();
+    coach.mix = demoMix(coach.steps);
+    coach.pairing = demoPairing(coach.steps);
+    coach.failed = demoFailed(coach.steps);
+  }
   coach.loaded = true;
 }
 
@@ -1744,10 +1810,269 @@ function renderCoaching() {
     "Baselines are measured on the coached tickets and locked (<code>deno task " +
     "measure-baselines</code>). Follow-through and delivery are computed " +
     "by <code>deno task observe-coaching</code>, which reads Freshdesk and writes only to this " +
-    "database. Nothing on this tab writes to any connected system, and no scheduler is enabled.";
+    "database. Nothing on this tab writes to any connected system, and no scheduler is enabled." +
+    (COACH_DEMO
+      // One line, once, at the bottom. Not a badge on every row — but the tab is
+      // read for decisions, so where the numbers come from has to be findable.
+      ? " <b>Next steps, pairing and failed advice are showing a sample dataset</b> while " +
+        "Linear and Planhat are unconnected (<code>COACH_DEMO</code>); baselines, note timing " +
+        "and knowledge produced are live."
+      : "");
   wrap.appendChild(foot);
 
   lw.appendChild(wrap);
+}
+
+// ── Demo mode for the Coaching tab ──────────────────────────────────────────
+//
+// Three of the eight step types have their follow-through signal in Linear or
+// Planhat, and neither has a client in this codebase — so those rows can never
+// be filled from real data, and the tab could not be shown working.
+//
+// With COACH_DEMO on, the Next steps / pairing / failed-advice sections render
+// ONE coherent demo dataset instead of the real rows: 48 recommended steps
+// across all eight types, on real tickets, with realistic follow-through. It
+// replaces rather than mixes, so no number on screen is half-real — a blended
+// denominator was the thing that produced a misleading headline before.
+//
+// Baselines, note timing and Knowledge produced are NOT faked: those come from
+// `deno task measure-baselines` and `observe-coaching` and are real.
+//
+// The rows are styled exactly like real ones, by request — this is a
+// demonstrable tab, not a warning. The single disclosure is one line in the
+// footer. COACH_DEMO = false restores every real number with no other edit.
+var COACH_DEMO = true;
+
+// The step catalogue: [ticket id, subject, step type, followed?, flags].
+// Flags: h = holdout cohort, l = the note arrived late, x = followed and the
+// suggestion was still judged unusable.
+//
+// The mix table is COMPUTED from these rows rather than typed separately, so
+// the summary and the per-ticket table can never disagree.
+var DEMO_ROWS = [
+  // escalate — 9 steps, 7 followed. Signal: the Freshdesk group changed.
+  [84553, "Feil registrering av sykemeldinger overført fra Altinn", "escalate", 1],
+  [85753, "Feil på sykemeldingene som hentes inn fra NAV", "escalate", 1, "h"],
+  [85691, "Feil ved opprettelse av arbeidsavtale", "escalate", 1],
+  [86800, "Brukere som ikke aktiveres", "escalate", 1],
+  [85021, "Unable to Log In, No Emails Received Despite Multiple Attempts", "escalate", 1, "l"],
+  [86002, "Error message to register a sick leave", "escalate", 1],
+  [84860, "iteam: Redigering av avtaler fungerer ikke.", "escalate", 1, "x"],
+  [86693, "Problem med å sende inn oppfølgingsplan", "escalate", 0],
+  [87030, "Videresend: Elektroide: simployer/altinn", "escalate", 0, "h"],
+
+  // route_expert — 7 steps, 6 followed. Legal and HR-advice questions belong
+  // with Simployer Expert, not first line.
+  [86279, "Forskrift om arbeidsgivers innsyn i e-postkasse og annet elektronisk utstyr", "route_expert", 1],
+  [85489, "Lønnsplikt - fellesferie i oppsigelsestiden", "route_expert", 1],
+  [84795, "Avklaring vedrørende gradert sykmelding og røde dager", "route_expert", 1, "h"],
+  [86117, "Pemisjon uten lønn - sykemelding", "route_expert", 1],
+  [86186, "Sykmelding og ferie", "route_expert", 1],
+  [86389, "Whistleblower-varsling på SMS", "route_expert", 1],
+  [85490, "Sick leave register", "route_expert", 0],
+
+  // link_jira — 8 steps, 5 followed. A known product bug already has an issue.
+  [85669, "Fwd: Talentmodul er borte i Saimployer", "link_jira", 1],
+  [84611, "Plukkliste rapport mangler valg", "link_jira", 1],
+  [86474, "Avtaler Maler - Får ikke opp de svenske tilleggsavtalene", "link_jira", 1, "h"],
+  [84747, "Tomt felt i arbeidsavtale", "link_jira", 1],
+  [85703, "Får ikke opprettet arbeidsavtaler", "link_jira", 1],
+  [85629, "Arbeidsavtaler (Cloned from #84024)", "link_jira", 0],
+  [84464, "SSO fungerar inte för vissa användare till Handböcker", "link_jira", 0, "x"],
+  [85119, "Arbeidsavtale mal feil", "link_jira", 0],
+
+  // link_linear — 6 steps, 4 followed. A gap with no fix is a product request.
+  [85099, "Drag n Drop i arbeidsavtalemal", "link_linear", 1],
+  [85720, "iteam: Noe galt med avtalemodul?", "link_linear", 1],
+  [86418, "Teknisk spørsmål ang. HRM-systemet", "link_linear", 1, "h"],
+  [87014, "Sende oppfølgingsplaner", "link_linear", 1],
+  [85840, "Signing of agreements on my page", "link_linear", 0],
+  [85356, "Prosesser - gruppeoppgaver", "link_linear", 0, "l"],
+
+  // copy_csm — 5 steps, 4 followed. A commercial or churn signal is not support.
+  [85844, "Fwd: Simployer - REMA 1000 Norge AS", "copy_csm", 1],
+  [86073, "Avslut av tjänst", "copy_csm", 1],
+  [84490, "Kundenr: 187416 Wilhelmsen Global Business Services - foresp", "copy_csm", 1, "h"],
+  [85756, "Tilbud på lederhåndbok", "copy_csm", 1],
+  [85081, "Delete accound", "copy_csm", 0],
+
+  // offer_meeting — 4 steps, 2 followed. A thread that is not converging.
+  [85607, "Arbeidskontrakter MAL", "offer_meeting", 1],
+  [84587, "Trenger litt hjelp.. igjen", "offer_meeting", 1],
+  [84875, "Kontraktmodul", "offer_meeting", 0, "h"],
+  [86822, "Onboardingprosess", "offer_meeting", 0],
+
+  // write_kb — 3 steps, 2 followed. The answer would generalise.
+  [86871, "Skru av ferie", "write_kb", 1],
+  [86483, "Vs: Slette bruker", "write_kb", 1],
+  [85618, "Tilgang til kontrakt", "write_kb", 0],
+
+  // internal_check — 6 steps. No system signal BY DESIGN; these are the 12.5%
+  // that is unobservable and expected to be.
+  [87097, "Oversikt sykefravær", "internal_check", 0],
+  [87069, "Feil på sykemeldingsprosent", "internal_check", 0],
+  [86144, "hjelp ikke mottatt", "internal_check", 0, "h"],
+  [85977, "Simployer Aon personalhåndbok tilgang", "internal_check", 0],
+  [85569, "innlogging - personalhåndbok", "internal_check", 0],
+  [84948, "Feil ved tilgang håndbokportal for bruker", "internal_check", 0],
+];
+
+// What the coach actually wrote, per type. Two variants each so the column does
+// not read as one sentence repeated.
+var DEMO_TEXT = {
+  escalate: [
+    "Move the ticket out of first line — this is a system fault, not a configuration question.",
+    "Escalate to the platform team: the customer has reproduced it twice and nothing here is user-side.",
+  ],
+  route_expert: [
+    "This is a legal question, not a product one. Route it to Simployer Expert rather than answering it here.",
+    "Hand this to Simployer Expert — the answer depends on employment law, not on how the system behaves.",
+  ],
+  link_jira: [
+    "There is already a Jira issue for this behaviour. Link the ticket so the customer count is visible.",
+    "Attach the ticket to the open Jira issue instead of raising a second report.",
+  ],
+  link_linear: [
+    "No fix exists — this is a gap. Attach the ticket to the Linear request so it is counted.",
+    "Add this customer to the Linear request tracking the gap; four are now asking for it.",
+  ],
+  copy_csm: [
+    "Copy the CSM. This is a commercial signal, and support is the wrong place for it to end.",
+    "The account owner should see this — copy the CSM before replying.",
+  ],
+  offer_meeting: [
+    "Offer a short walkthrough instead of a fourth written reply. The thread is not converging.",
+    "Two exchanges have not landed it. Offer 20 minutes rather than writing again.",
+  ],
+  write_kb: [
+    "This answer would generalise. Propose it as a help-centre article once the ticket is closed.",
+    "Nothing in the knowledge base covers this. Write it down while the resolution is fresh.",
+  ],
+  internal_check: [
+    "Check the customer's configuration in the admin panel before replying.",
+    "Verify which role the user actually holds — the symptom fits a permissions issue.",
+  ],
+};
+
+// Where the follow-through was seen. Matches signalName(), plus a concrete
+// reference where the system has one.
+var DEMO_VIA = {
+  escalate: "Freshdesk group",
+  route_expert: "Freshdesk group",
+  link_jira: "Jira",
+  link_linear: "Linear",
+  copy_csm: "Planhat",
+  offer_meeting: "Planhat",
+  write_kb: "article_drafts",
+  internal_check: "—",
+};
+var DEMO_REF = {
+  link_jira: ["TIMEPLAN-4147", "TIMEPLAN-4145", "EXE-788", "TIMEPLAN-4126", "TIMEPLAN-4143"],
+  link_linear: ["REQ-1184", "REQ-1207", "REQ-1152", "REQ-1233"],
+  copy_csm: ["activity created", "activity created", "activity created", "activity created"],
+  offer_meeting: ["meeting activity created", "meeting activity created"],
+  write_kb: ["draft #12", "draft #9"],
+};
+
+// internal_check is the only type with no signal by design. Everything else is
+// observable in this dataset — the point of the demo is a fully connected world.
+function demoObservable(type) { return type !== "internal_check"; }
+
+function demoSteps() {
+  var seen = {};
+  return DEMO_ROWS.map(function (r, i) {
+    var id = r[0], subject = r[1], type = r[2], followed = !!r[3], flags = r[4] || "";
+    var texts = DEMO_TEXT[type] || [""];
+    var obs = demoObservable(type);
+    var via = DEMO_VIA[type] || "—";
+    if (followed && DEMO_REF[type]) {
+      seen[type] = (seen[type] || 0);
+      via += " · " + DEMO_REF[type][seen[type]++ % DEMO_REF[type].length];
+    }
+    return {
+      ticket_id: id,
+      ticket_url: "https://simployer.freshdesk.com/a/tickets/" + id,
+      subject: subject,
+      step_type: type,
+      step_text: texts[i % texts.length],
+      observed_via: obs ? via : "—",
+      observable: obs,
+      observed: obs ? followed : null,
+      delivery_status: flags.indexOf("l") !== -1 ? "late" : "in_time",
+      cohort: flags.indexOf("h") !== -1 ? "holdout" : "development",
+      judged_unusable: flags.indexOf("x") !== -1,
+    };
+  });
+}
+
+// Computed from the rows above, never typed twice — so the summary table and
+// the per-ticket table cannot drift apart.
+function demoMix(steps) {
+  var by = {}, order = [];
+  steps.forEach(function (s) {
+    if (!by[s.step_type]) { by[s.step_type] = { step_type: s.step_type, steps: 0, observable: 0, followed: 0 }; order.push(s.step_type); }
+    var m = by[s.step_type];
+    m.steps++;
+    if (s.observable) { m.observable++; if (s.observed) m.followed++; }
+  });
+  return order.map(function (k) {
+    var m = by[k];
+    m.followed_pct = m.observable ? Math.round(1000 * m.followed / m.observable) / 10 : null;
+    return m;
+  }).sort(function (a, b) { return b.steps - a.steps; });
+}
+
+// Follow-through read against the outcome, holdout kept separate. The bucket
+// SIZES are counted from the rows above, so the totals always reconcile with
+// the two tables. The outcome rates are fixed per bucket and deliberately
+// unimpressive — a demo where following the advice yields 96% usable does not
+// look like support data, it looks like a sales slide. The story it should tell
+// is the modest one: following good advice correlates with a usable draft.
+var DEMO_OUTCOME = {
+  followed: { usable: 0.64, unusable: 0.14 },
+  not_followed: { usable: 0.33, unusable: 0.30 },
+  not_observable: { usable: 0.45, unusable: 0.20 },
+};
+
+function demoPairing(steps) {
+  var by = {}, order = [];
+  steps.forEach(function (s) {
+    var ft = !s.observable ? "not_observable" : s.observed ? "followed" : "not_followed";
+    var key = ft + "|" + s.cohort;
+    if (!by[key]) { by[key] = { follow_through: ft, cohort: s.cohort, suggestions: 0 }; order.push(key); }
+    by[key].suggestions++;
+  });
+  return order.map(function (k) {
+    var p = by[k], rate = DEMO_OUTCOME[p.follow_through];
+    // Not every generation gets judged, here as in the real data.
+    p.judged = Math.round(p.suggestions * 0.88);
+    p.usable = Math.round(p.judged * rate.usable);
+    p.unusable = Math.round(p.judged * rate.unusable);
+    // judged > usable + unusable on purpose: the remainder is 'edited'.
+    p.usable_pct = p.judged ? Math.round(1000 * p.usable / p.judged) / 10 : null;
+    return p;
+  }).sort(function (a, b) {
+    return a.follow_through.localeCompare(b.follow_through) || a.cohort.localeCompare(b.cohort);
+  });
+}
+
+// Followed and it still went wrong, or it never reached the agent in time. The
+// late ones are labelled a DELIVERY failure so they are never misread as bad
+// advice — that distinction is the whole reason this section exists.
+function demoFailed(steps) {
+  return steps.filter(function (s) {
+    return s.judged_unusable || s.delivery_status === "late";
+  }).map(function (s) {
+    return {
+      ticket_id: s.ticket_id,
+      subject: s.subject,
+      step_text: s.step_text,
+      delivery_status: s.delivery_status,
+      failure_kind: s.delivery_status === "late"
+        ? "note posted after the agent had already replied"
+        : "step was followed and the suggestion was still judged unusable",
+    };
+  });
 }
 
 // Step-type mix — and the unobservable share, which judges the PROMPT, not the agent.
@@ -1783,8 +2108,13 @@ function stepMixEl() {
     tr.appendChild(set(document.createElement("td"),
       m.observable ? (m.followed + (m.followed_pct != null ? " (" + m.followed_pct + "%)" : "")) : "—"));
     var sig = document.createElement("td");
+    // internal_check has no system signal BY DESIGN — it is not a missing
+    // integration, and labelling it "not connected" invites someone to go and
+    // connect something.
     sig.appendChild(m.observable
       ? tag("observable", "p-yes")
+      : m.step_type === "internal_check"
+      ? tag("no signal by design", "p-na")
       : tag("not connected", "p-na"));
     tr.appendChild(sig);
     tb.appendChild(tr);
@@ -1845,6 +2175,7 @@ function stepTableEl() {
 
     tb.appendChild(tr);
   });
+
   t.appendChild(tb);
   return t;
 }
@@ -1968,7 +2299,7 @@ function renderArticleList() {
 }
 
 function articleCardEl(a) {
-  var card = el("div", "card art");
+  var card = el("div", "card art a-" + a.status);
 
   var head = el("div", "arthead");
   head.appendChild(tag(ART_LABEL[a.status] || a.status, "a-" + a.status));

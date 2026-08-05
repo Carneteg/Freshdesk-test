@@ -1,0 +1,111 @@
+name: Observe coaching (follow-through + delivery)
+
+# Fills the Coaching tab: was the recommended next step actually followed, and
+# did the note arrive before the agent started writing?
+#
+# Dry-run by default (prints the step-type mix, writes nothing). Set apply=true
+# to store next steps, delivery timing and observations in Supabase.
+#
+# READ-ONLY against every external system. Freshdesk is reached through
+# ReadOnlyFreshdesk, which exposes no write method (asserted in coaching_test.ts);
+# Jira through ReadOnlyAtlassian, whose only request method is hard-wired to GET.
+# The sole writes go to this project's own coaching tables.
+#
+# NOT A SCHEDULE. workflow_dispatch only — there is no cron here and none is
+# implied. A job ran outside its agreed window on 30 July 2026 and posted 14 live
+# notes; anything that runs unattended is now an explicit decision.
+#
+# Required repo secrets:
+#   FRESHDESK_DOMAIN, FRESHDESK_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY
+# Optional — when present, Jira follow-through is observed instead of "not connected":
+#   ATLASSIAN_SITE, ATLASSIAN_EMAIL, ATLASSIAN_API_TOKEN
+
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: "How many recent generations to scan (COACHING_LIMIT). Empty = 200."
+        type: string
+        required: false
+        default: ""
+      apply:
+        description: "Store the results. Leave false for a dry-run preview."
+        type: boolean
+        required: false
+        default: false
+
+concurrency:
+  group: observe-coaching
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      FRESHDESK_DOMAIN: ${{ secrets.FRESHDESK_DOMAIN }}
+      FRESHDESK_API_KEY: ${{ secrets.FRESHDESK_API_KEY }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      # Optional. Absent is fine: connections.ts then reports Jira as not
+      # connected and the affected steps render "Not visible" rather than "No".
+      ATLASSIAN_SITE: ${{ secrets.ATLASSIAN_SITE }}
+      ATLASSIAN_EMAIL: ${{ secrets.ATLASSIAN_EMAIL }}
+      ATLASSIAN_API_TOKEN: ${{ secrets.ATLASSIAN_API_TOKEN }}
+      # No ticket subject, customer text or draft reaches the Actions log.
+      CLOUD_LOG_MODE: safe
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check required secrets
+        run: |
+          missing=""
+          for v in FRESHDESK_DOMAIN FRESHDESK_API_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
+            if [ -z "${!v}" ]; then missing="$missing $v"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required repo secret(s):$missing"
+            exit 1
+          fi
+          echo "All required secrets are present."
+          if [ -z "$ATLASSIAN_API_TOKEN" ]; then
+            echo "::notice::No Atlassian credentials — Jira follow-through will read as 'not connected' rather than 'not followed'."
+          fi
+
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.9.4
+
+      - name: Observe coaching
+        env:
+          IN_LIMIT: ${{ inputs.limit }}
+          IN_APPLY: ${{ inputs.apply }}
+        run: |
+          set -uo pipefail
+          if [ -n "$IN_LIMIT" ]; then export COACHING_LIMIT="$IN_LIMIT"; fi
+          if [ "$IN_APPLY" = "true" ]; then
+            export COACHING_APPLY=true
+            mode="APPLY (storing results)"
+          else
+            mode="dry-run (preview only)"
+          fi
+          echo "Running observe-coaching mode=$mode limit=${IN_LIMIT:-default}"
+          rc=0
+          {
+            deno run --allow-env --allow-net scripts/observe_coaching.ts
+          } 2>&1 | tee /tmp/observe-out.log || rc=$?
+          {
+            echo "### Observe coaching: $mode $( [ "$rc" -eq 0 ] && echo OK || echo "FAIL (exit $rc)")"
+            echo ""
+            echo '```text'
+            # The step-type mix and the unobservable share are the point of the
+            # run, and they print near the top — so head, not tail.
+            head -n 40 /tmp/observe-out.log
+            echo "..."
+            tail -n 12 /tmp/observe-out.log
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit "$rc"

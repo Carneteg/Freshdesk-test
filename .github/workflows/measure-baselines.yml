@@ -78,7 +78,11 @@ jobs:
             deno run --allow-env --allow-net scripts/measure_baselines.ts
           } 2>&1 | tee /tmp/measure-out.log || rc=$?
           {
-            echo "### Measure baselines: $mode $( [ "$rc" -eq 0 ] && echo OK || echo \"FAIL (exit $rc)\")"
+            # The escaped \" here used to leave the parens in "FAIL (exit …)"
+            # unquoted inside $( ), so bash aborted with a syntax error AFTER the
+            # baselines had already been written — a successful run reported as
+            # a failure. Plain nested quotes are correct inside $( ).
+            echo "### Measure baselines: $mode $( [ "$rc" -eq 0 ] && echo OK || echo "FAIL (exit $rc)")"
             echo ""
             echo '```text'
             tail -n 40 /tmp/measure-out.log
