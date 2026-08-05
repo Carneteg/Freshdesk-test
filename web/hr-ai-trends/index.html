@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HR i AI-eran — Simployer</title>
+<meta name="description" content="Interaktiv översikt över trender inom HR och people management i AI-eran: när AI räcker, och när en mänsklig HR-expert behövs.">
+<!-- Inbäddad favicon: håller sidan självförsörjande och slipper en 404 i konsolen. -->
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 26 26'%3E%3Crect width='26' height='26' rx='7' fill='%239773FF'/%3E%3Ctext x='13' y='19' font-family='Georgia,serif' font-size='16' fill='white' text-anchor='middle'%3ES%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+
+<!-- Tangentbordsanvändare ska inte behöva tabba genom hela navigeringen. -->
+<a class="skip" href="#main">Hoppa till innehåll</a>
+
+<!--
+  INGET INNEHÅLL ÄR HÅRDKODAT HÄR.
+
+  Markup:en är enbart en tom scenografi — rubriker, siffror, flikar, kort och
+  källor renderas av app.js från det laddade dataobjektet. Det är hela poängen
+  med datalagret: byt datakälla och layouten behöver inte röras.
+
+  Det du ser nedan är därför behållare med id, plus laddningsskelett som visas
+  tills data finns.
+-->
+
+<header class="topbar" id="topbar">
+  <div class="wrap topbar-inner">
+    <a class="brand" href="#hero" aria-label="Simployer — till toppen">
+      <!-- Platshållarmärke. Byt hela denna <svg> mot den riktiga logotypen. -->
+      <svg class="brand-mark" width="26" height="26" viewBox="0 0 26 26" aria-hidden="true" focusable="false">
+        <rect width="26" height="26" rx="7" fill="var(--brand)"></rect>
+        <path d="M7.5 16.4c1.2 1.1 2.8 1.7 4.4 1.7 2 0 3.2-.8 3.2-2 0-1.3-1.3-1.8-3.4-2.3-2.8-.6-4.6-1.6-4.6-4 0-2.3 2-3.9 5-3.9 1.7 0 3.3.5 4.6 1.4l-1.2 2.2A6 6 0 0 0 12 8.3c-1.7 0-2.7.7-2.7 1.7 0 1.1 1.1 1.5 3.2 2 2.9.7 4.8 1.7 4.8 4.2 0 2.6-2.2 4.3-5.5 4.3-2.2 0-4.2-.7-5.7-2z" fill="#fff"></path>
+      </svg>
+      <span class="brand-name">Simployer</span>
+    </a>
+
+    <nav class="nav" aria-label="Sidnavigering">
+      <a href="#trender">Trender</a>
+      <a href="#resan">Medarbetarresan</a>
+      <a href="#kontext">Kontext</a>
+      <a href="#matris">Beslutsmatris</a>
+      <a href="#kallor">Källor</a>
+    </nav>
+
+    <a class="btn btn-primary btn-demo" href="#kallor">Book demo</a>
+  </div>
+  <!-- Syns bara när sidan kör på dummydata. Fylls av app.js. -->
+  <div id="demo-banner" class="demo-banner" hidden role="status"></div>
+</header>
+
+<main id="main">
+
+  <!-- ── 1. Hero ─────────────────────────────────────────────────────────── -->
+  <section class="hero" id="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow" id="hero-eyebrow"><span class="sk sk-line w-30"></span></p>
+        <h1 id="hero-title"><span class="sk sk-line w-90"></span><span class="sk sk-line w-60"></span></h1>
+        <p class="ingress" id="hero-ingress"><span class="sk sk-line w-100"></span><span class="sk sk-line w-80"></span></p>
+        <div class="cta-row" id="hero-ctas"></div>
+      </div>
+
+      <aside class="hero-aside" aria-labelledby="hero-fact-title">
+        <!-- Dekorativ grafik: en abstrakt "AI möter människa"-figur. -->
+        <svg class="hero-art" viewBox="0 0 320 200" role="img" aria-label="Illustration: automatiserade ärenden till vänster, mänsklig bedömning till höger">
+          <defs>
+            <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#E0DEF9"></stop>
+              <stop offset="100%" stop-color="#F2F0F7"></stop>
+            </linearGradient>
+          </defs>
+          <rect x="0" y="0" width="320" height="200" rx="18" fill="url(#g1)"></rect>
+          <g fill="none" stroke="var(--brand)" stroke-width="2" stroke-linecap="round">
+            <path d="M40 150 C 90 150, 90 60, 150 60"></path>
+            <path d="M40 150 C 100 150, 110 100, 150 100"></path>
+            <path d="M40 150 C 110 150, 130 140, 150 140"></path>
+          </g>
+          <circle cx="40" cy="150" r="9" fill="var(--brand)"></circle>
+          <circle cx="150" cy="60" r="7" fill="var(--brand)" opacity=".55"></circle>
+          <circle cx="150" cy="100" r="7" fill="var(--brand)" opacity=".55"></circle>
+          <circle cx="150" cy="140" r="7" fill="var(--brand)" opacity=".55"></circle>
+          <rect x="196" y="46" width="86" height="108" rx="14" fill="#fff" stroke="var(--brand-2)" stroke-width="2"></rect>
+          <circle cx="239" cy="82" r="15" fill="var(--brand-2)" opacity=".5"></circle>
+          <path d="M214 130c0-14 11-24 25-24s25 10 25 24" fill="var(--brand-2)" opacity=".5"></path>
+        </svg>
+        <div class="factbox">
+          <h2 class="factbox-title" id="hero-fact-title">Kort om underlaget</h2>
+          <p id="hero-fact-body"><span class="sk sk-line w-100"></span><span class="sk sk-line w-70"></span></p>
+        </div>
+      </aside>
+    </div>
+
+    <div class="wrap">
+      <ul class="stat-row" id="hero-stats" aria-label="Nyckeltal"></ul>
+    </div>
+  </section>
+
+  <!-- ── 2. Trender ──────────────────────────────────────────────────────── -->
+  <section class="section" id="trender" aria-labelledby="trender-h">
+    <div class="wrap">
+      <h2 class="section-h" id="trender-h">Fem trender som <em>formar om</em> HR-arbetet</h2>
+      <p class="section-lead">Varje trend flyttar gränsen för vad som kan lösas utan en människa — och gör det tydligare var en människa fortfarande är oumbärlig.</p>
+
+      <div class="tabs">
+        <div class="tablist" role="tablist" aria-label="Trender" id="trend-tabs"></div>
+        <div id="trend-panels"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 3. Medarbetarresan ──────────────────────────────────────────────── -->
+  <section class="section section-tint" id="resan" aria-labelledby="resan-h">
+    <div class="wrap">
+      <h2 class="section-h" id="resan-h">Följ ett ärende genom <em>medarbetarresan</em></h2>
+      <p class="section-lead">Välj ett ärende och se var friktionen sitter — steg för steg, med rekommenderad väg längst ned.</p>
+
+      <div class="chip-row" role="tablist" aria-label="Välj ärende" id="journey-chips"></div>
+
+      <div class="journey" id="journey-panel"></div>
+    </div>
+  </section>
+
+  <!-- ── 4. Kontextsimulator ─────────────────────────────────────────────── -->
+  <section class="section" id="kontext" aria-labelledby="kontext-h">
+    <div class="wrap">
+      <h2 class="section-h" id="kontext-h">Vad händer när AI:n <em>känner till sammanhanget</em>?</h2>
+      <p class="section-lead">Slå på de datalager assistenten har tillgång till, och se friktionen falla. Varje lager motsvarar något en erfaren HR-kollega redan vet om personen framför sig.</p>
+
+      <div class="ctx-grid">
+        <div class="ctx-toggles" id="ctx-toggles" role="group" aria-label="Datalager"></div>
+        <div class="ctx-result" id="ctx-result" aria-live="polite"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 5. Beslutsmatris ────────────────────────────────────────────────── -->
+  <section class="section section-tint" id="matris" aria-labelledby="matris-h">
+    <div class="wrap">
+      <h2 class="section-h" id="matris-h">När räcker AI, och när behövs <em>en människa</em>?</h2>
+      <p class="section-lead">Två frågor avgör: hur komplext ärendet är, och hur känsligt det är för individen. Välj ett ärende så flyttar sig punkten.</p>
+
+      <div class="matrix-grid">
+        <div>
+          <div class="chip-row" role="tablist" aria-label="Välj ärende för matrisen" id="matrix-chips"></div>
+          <div class="matrix-wrap">
+            <span class="axis axis-y">Känslighet →</span>
+            <span class="axis axis-x">Komplexitet →</span>
+            <div class="matrix" id="matrix" role="img" aria-label="Beslutsmatris: komplexitet mot känslighet">
+              <div class="quad q1"><span>Automatisera</span></div>
+              <div class="quad q2"><span>Låt AI stötta HR</span></div>
+              <div class="quad q3"><span>Automatisera med mänskligt stöd</span></div>
+              <div class="quad q4"><span>Prioritera mänsklig HR-expert</span></div>
+              <div class="dot" id="matrix-dot" hidden></div>
+            </div>
+          </div>
+        </div>
+        <aside class="matrix-side" id="matrix-side" aria-live="polite"></aside>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 6. Källor & metod ───────────────────────────────────────────────── -->
+  <section class="section" id="kallor" aria-labelledby="kallor-h">
+    <div class="wrap">
+      <h2 class="section-h" id="kallor-h">Källor &amp; <em>metod</em></h2>
+      <p class="section-lead" id="sources-lead"></p>
+      <div class="source-grid" id="source-grid"></div>
+      <div class="scope" id="scope-box"></div>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="wrap footer-inner">
+    <span id="footer-meta"></span>
+    <a class="btn btn-ghost" href="#hero">Till toppen ↑</a>
+  </div>
+</footer>
+
+<script src="./app.js"></script>
+</body>
+</html>
