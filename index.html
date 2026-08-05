@@ -281,6 +281,12 @@
   .nv-cust dt{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
     color:var(--nv-ink-3);font-weight:650;margin:0 0 2px}
   .nv-cust dd{margin:0;font-size:12.5px;font-weight:600;color:var(--nv-ink)}
+  /* Sample fields are LABELLED, not disfigured. The earlier version also hatched
+     and dimmed them, which made a populated strip read as a broken one; the chip
+     alone says the same thing without wrecking the design. */
+  .nv-demotag{display:inline-block;margin-left:6px;font-size:8.5px;font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--nv-amber);
+    background:var(--nv-amber-soft);border-radius:2px;padding:1px 4px;vertical-align:1px}
   .nv-matched{font-size:11.5px;color:var(--nv-ink-3);margin-top:5px}
   .nv-dot{display:inline-block;width:7px;height:7px;border-radius:50%;
     margin-right:5px;vertical-align:1px;background:var(--nv-ink-3)}
@@ -446,7 +452,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05e-note-layout";
+var APP_VERSION = "v2026-08-05f-sample-fields";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -2706,7 +2712,10 @@ function demoPlanhat(ticketId) {
 // one. The disclosure is one line above the list, not a chip on every cell.
 function demoCell(label, value, dotClass) {
   var cell = document.createElement("div");
-  cell.appendChild(set(el("dt", ""), label));
+  var dt = el("dt", "");
+  dt.appendChild(document.createTextNode(label));
+  dt.appendChild(set(el("span", "nv-demotag"), "sample"));
+  cell.appendChild(dt);
   var dd = el("dd", "");
   if (dotClass) dd.appendChild(el("span", "nv-dot " + dotClass));
   dd.appendChild(document.createTextNode(value));
@@ -2758,6 +2767,32 @@ function appendAccountCells(strip, r) {
 
 // Same rule as demoPlanhat: derived from the ticket id, so a ticket always shows
 // the same sample and a repaint never churns it.
+// Deliberately plain, plainly fictional names — the point is to show the layout
+// working, not to look like a real customer record. Derived from the ticket id
+// so a ticket always shows the same person and a repaint never churns it.
+function demoRequester(ticketId, draft) {
+  var n = Number(ticketId) || 0;
+  var first = [
+    "Anna", "Erik", "Johanna", "Mikael", "Sofia", "Petter", "Kristin", "Lars",
+  ][n % 8];
+  var surnames = ["Lind", "Sandvik", "Berg", "Haugen", "Nyman", "Dahl", "Aas", "Wikström"];
+  var companies = [
+    "Nordvik AS", "Bergås AB", "Fjordkraft Nord AS", "Lindqvist Group AB",
+    "Sundby Industri AS", "Kvist & Sønner AS",
+  ];
+  // If the draft greets the customer by name, use THAT first name. It is already
+  // on the card two inches below, so this exposes nothing new — and a header
+  // reading "Anna Lind" above a reply opening "Hej Kari!" would make the sample
+  // look broken rather than illustrative.
+  var greeted = /^\s*(?:hej|hei|hi|hello|hallå|god dag)\s+([A-Za-zÅÄÖÆØåäöæø][\wÅÄÖÆØåäöæø'’-]{1,20})/i
+    .exec(draft || "");
+  if (greeted) first = greeted[1].replace(/[,!.]+$/, "");
+  return {
+    name: first + " " + surnames[n % surnames.length],
+    company: companies[n % companies.length],
+  };
+}
+
 function demoAccount(ticketId) {
   var n = Number(ticketId) || 0;
   var plan = ["One + Survey", "One", "One + Expert", "One + Survey + Expert"][n % 4];
@@ -2825,19 +2860,40 @@ function noteViewEl(r) {
   var wrap = el("div", "nv");
 
   // ── the ticket, above the note ──
+  //
+  // The design leads with WHO is asking, because that is what an agent reads
+  // first. Requester name and company are not stored on `suggestions` — and the
+  // CRM client keeps accountId and the subscriptions but never the account name
+  // — so the name line is sample data, chipped as such.
+  //
+  // The real identifiers do not disappear: the ticket id (linked) and subject
+  // move to the line below, so a reviewer can still find the actual ticket. A
+  // sampled name that displaced the real reference would be a trap.
   var tk = el("div", "nv-ticket");
   var who = el("div", "nv-who");
+  if (PLANHAT_DEMO) {
+    var person = demoRequester(r.ticket_id, r.draft);
+    var nameEl = el("span", "nv-subj");
+    nameEl.appendChild(document.createTextNode(person.name + " · " + person.company));
+    nameEl.appendChild(set(el("span", "nv-demotag"), "sample"));
+    who.appendChild(nameEl);
+  } else {
+    who.appendChild(set(el("span", "nv-subj"), r.subject || "(no subject)"));
+  }
+  tk.appendChild(who);
+
+  var meta = el("div", "nv-meta");
   var a = document.createElement("a");
   a.className = "nv-id"; a.target = "_blank"; a.rel = "noopener";
   a.href = r.ticket_url || ("https://simployer.freshdesk.com/a/tickets/" + r.ticket_id);
   a.textContent = "#" + r.ticket_id;
-  who.appendChild(a);
-  who.appendChild(set(el("span", "nv-subj"), r.subject || "(no subject)"));
-  tk.appendChild(who);
-  tk.appendChild(set(el("div", "nv-meta"), [
+  meta.appendChild(a);
+  meta.appendChild(document.createTextNode(" · " + [
+    PLANHAT_DEMO ? (r.subject || "(no subject)") : null,
     "Freshdesk", (r.language || "").toUpperCase(), r.ticket_type,
     r.created_at ? fmtDate(r.created_at) : "",
   ].filter(Boolean).join(" · ")));
+  tk.appendChild(meta);
 
   var cust = (r.customer_message && r.customer_message.trim())
     ? r.customer_message
@@ -3021,9 +3077,10 @@ function renderAgentNotes() {
     (PLANHAT_DEMO
       // The cells are no longer chipped individually, so this line is the only
       // disclosure — it has to name every field it covers.
-      ? " <b>Account, renewal, health, CSM and open-ticket counts are sample data</b> — " +
-        "Freshworks CRM is not enabled and Planhat has no client, so those four cells are " +
-        "illustrative and must not be acted on. Everything else on the card is real."
+      ? " Fields chipped <b>sample</b> are placeholder data — the requester name and " +
+        "company, and the account, renewal, health, CSM and open-ticket cells. Those are " +
+        "not stored or not connected, so they are illustrative and must not be acted on. " +
+        "The ticket id, subject, customer message, sources and draft are all real."
       : "");
   lw.appendChild(intro);
 
