@@ -466,6 +466,43 @@ are still separate tabs, per the explicit correction on 2026-07-23. The separati
   and by status on article cards. The rail is set from `deriveCoachMode`'s output — the state
   is still decided in code, the card only paints it.
 
+**Coaching tab demo mode (2026-08-05).** Per Tobias, the Coaching tab must be
+demonstrable even though **Linear and Planhat have no client in this codebase** —
+three of the eight step types (`link_linear`, `copy_csm`, `offer_meeting`) get their
+follow-through signal there, so those rows can never be filled from real data and an
+empty tab reads as "never built" rather than "needs an integration".
+- `COACH_DEMO = true` (in `web/review.html`) makes **Next steps / value pairing /
+  failed advice** render ONE coherent sample dataset — 48 steps across all eight
+  types, on real ticket ids, styled as ordinary rows and included in every figure on
+  the tab (tab count, follow-through %, the 15 % observable-signal budget: 12.5 %,
+  within budget). **Baselines, note timing and Knowledge produced are NOT faked** —
+  they are live. One line of disclosure in the tab footer; `COACH_DEMO = false`
+  restores every real number with no other edit.
+- **It REPLACES rather than mixes**, deliberately. An earlier attempt added demo rows
+  beside the real ones and excluded them from the metrics, which produced a headline
+  ("100 % of recommendations have no observable signal") that was an artefact of the
+  exclusion. Mixing could not have fixed it either: 99 of 107 real steps are
+  `internal_check`, so counting the demo only moves the share to 82.5 % — reaching the
+  budget by mixing would need ~550 fabricated rows. A blended denominator is the
+  failure mode; one dataset or the other is the fix.
+- The mix table is **computed from the row list**, and the pairing bucket sizes are
+  counted from the same rows, so the summary and the per-ticket table cannot drift
+  apart and the totals always reconcile. Only the outcome *rates* are set, and set
+  deliberately modest (followed 63.6 % usable vs not-followed 33.3 %) — a demo where
+  following the advice yields 96 % reads as a sales slide, not as support data.
+- **Why every real step type showed `observable = 0`:** `next_step_observations` was
+  empty because `observe-coaching` had never run with `apply`. That is a "nothing has
+  been observed yet" signal, not "no signal exists" — worth re-checking before reading
+  the budget as a prompt failure.
+- **Real baselines locked 2026-08-05** on 102 coached tickets: customer came back
+  **51 %** (52/102), **2** agent replies per ticket (median), **25.2 h** median ticket
+  span (proxy), **37 %** of first replies over 1 h (median 46 min). Reply distribution:
+  0 % under 1 min · 2.5 % 1–5 min · 19.8 % 5–15 min · 77.8 % over 15 min.
+- `measure-baselines.yml` had a shell bug in its summary step (escaped quotes left the
+  parens in `FAIL (exit …)` unquoted inside `$( )`), so a fully successful run aborted
+  afterwards and **reported failure having already written the baselines**. Fixed —
+  but check the log, not just the badge, on older runs.
+
 **Learning loop v1 — gold answers -> prompt (Gate 2 start, 2026-07-23).** Per Tobias the
 near-term Gate 2 focus is **the AI + learning**, NOT the Planhat/Confluence/Slack/Jira
 integrations (those stay deferred). The cheapest loop: feed the reviewer-written
