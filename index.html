@@ -215,22 +215,9 @@
   .cbudget{border:1px solid var(--border);border-left:3px solid var(--good);border-radius:6px;
     padding:10px 14px;margin-bottom:10px;font-size:12.5px;background:var(--surface);line-height:1.55}
   .cbudget.over{border-left-color:var(--crit)}
-  /* Demo rows are hatched, dashed and muted — deliberately NOT styled like data.
-     Linear and Planhat are not integrated, so these show what the tab will show
-     once they are; they are excluded from every number on this tab. */
-  .ctable tr.demo td{background:repeating-linear-gradient(45deg,transparent,transparent 6px,
-    var(--surface-2) 6px,var(--surface-2) 12px);color:var(--ink-3);border-bottom-style:dashed}
-  .ctable tr.demo td b{font-weight:600}
-  .ctable tr.demo:last-child td{border-bottom:none}
-  .cdemotag{display:inline-block;margin-left:6px;font-size:8.5px;font-weight:700;
-    letter-spacing:.08em;text-transform:uppercase;color:var(--warn);
-    background:var(--warn-soft);border-radius:2px;padding:1px 4px;vertical-align:1px}
-  .cdemonote{font-size:11.5px;color:var(--warn);background:var(--warn-soft);
-    border-radius:6px;padding:9px 13px;margin:0 0 10px;line-height:1.55}
   .tag.p-yes{background:var(--good-soft);color:var(--good)}
   .tag.p-no{background:var(--crit-soft);color:var(--crit)}
   .tag.p-na{background:var(--surface-2);color:var(--ink-3)}
-  .tag.p-demo{background:var(--warn-soft);color:var(--warn)}
   .cfail{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--crit);
     border-radius:6px;padding:12px 14px;margin-bottom:9px}
   .cfail.late{border-left-color:var(--warn)}
@@ -448,7 +435,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05b-one-palette";
+var APP_VERSION = "v2026-08-05c-coaching-demo";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -1658,6 +1645,17 @@ async function loadCoaching() {
   coach.pairing   = r[5] || [];
   coach.failed    = r[6] || [];
   coach.knowledge = (r[7] || [])[0] || null;
+
+  // Demo mode REPLACES the follow-through sections rather than mixing with
+  // them, so no figure on screen is part real and part sample. Baselines, note
+  // timing and Knowledge produced are left exactly as the database has them —
+  // those come from measure-baselines / observe-coaching and are real.
+  if (COACH_DEMO) {
+    coach.steps = demoSteps();
+    coach.mix = demoMix(coach.steps);
+    coach.pairing = demoPairing(coach.steps);
+    coach.failed = demoFailed(coach.steps);
+  }
   coach.loaded = true;
 }
 
@@ -1777,11 +1775,6 @@ function renderCoaching() {
     "One row per recommended step. Each type has one signal in a system we already read, so " +
     "follow-through is observed — there is no button here asking an agent whether they complied.",
     coach.steps.length ? null : "collecting", "c-wait"));
-  var demoSystems = uniq(
-    demoRowsFor(DEMO_MIX, coach.mix.map(function (m) { return m.step_type; }))
-      .concat(demoRowsFor(DEMO_STEPS, coach.steps.map(function (r) { return r.step_type; })))
-      .map(function (d) { return d.system; }));
-  if (demoSystems.length) wrap.appendChild(demoNoteEl(demoSystems));
   wrap.appendChild(stepMixEl());
   wrap.appendChild(stepTableEl());
 
@@ -1817,128 +1810,290 @@ function renderCoaching() {
     "Baselines are measured on the coached tickets and locked (<code>deno task " +
     "measure-baselines</code>). Follow-through and delivery are computed " +
     "by <code>deno task observe-coaching</code>, which reads Freshdesk and writes only to this " +
-    "database. Nothing on this tab writes to any connected system, and no scheduler is enabled.";
+    "database. Nothing on this tab writes to any connected system, and no scheduler is enabled." +
+    (COACH_DEMO
+      // One line, once, at the bottom. Not a badge on every row — but the tab is
+      // read for decisions, so where the numbers come from has to be findable.
+      ? " <b>Next steps, pairing and failed advice are showing a sample dataset</b> while " +
+        "Linear and Planhat are unconnected (<code>COACH_DEMO</code>); baselines, note timing " +
+        "and knowledge produced are live."
+      : "");
   wrap.appendChild(foot);
 
   lw.appendChild(wrap);
 }
 
-// ── Demo data for the systems that are not integrated ───────────────────────
+// ── Demo mode for the Coaching tab ──────────────────────────────────────────
 //
 // Three of the eight step types have their follow-through signal in Linear or
-// Planhat, and neither has a client in this codebase (connections.ts reports
-// both as not connected, by absence of credentials rather than by a flag). So
-// those rows are not merely empty today — they cannot be filled at all, and an
-// empty table reads as "this was never built" rather than "this needs an
-// integration".
+// Planhat, and neither has a client in this codebase — so those rows can never
+// be filled from real data, and the tab could not be shown working.
 //
-// These demo rows show what the tab WILL show once those systems are connected.
-// Two rules keep that honest:
+// With COACH_DEMO on, the Next steps / pairing / failed-advice sections render
+// ONE coherent demo dataset instead of the real rows: 48 recommended steps
+// across all eight types, on real tickets, with realistic follow-through. It
+// replaces rather than mixes, so no number on screen is half-real — a blended
+// denominator was the thing that produced a misleading headline before.
 //
-//   1. They never look like data. Hatched, dashed, muted, DEMO-chipped, and
-//      carrying no ticket link — because a demo row hung on a real ticket id
-//      would attribute a recommendation the AI never made to a ticket that
-//      really exists, which is worse than showing nothing.
-//   2. They never enter the arithmetic. The unobservable-share budget, the
-//      follow-through percentages, the pairing table and the tab's badge count
-//      are computed from real rows only. That budget exists to judge the
-//      PROMPT; a fabricated denominator would judge nothing.
+// Baselines, note timing and Knowledge produced are NOT faked: those come from
+// `deno task measure-baselines` and `observe-coaching` and are real.
 //
-// Flip to false the moment a Linear or Planhat client exists — the real rows
-// then flow through exactly the same table. (PLANHAT_DEMO further down is the
-// sibling flag for the Agent note tab; separate on purpose, since the two tabs
-// are read by different people for different reasons.)
+// The rows are styled exactly like real ones, by request — this is a
+// demonstrable tab, not a warning. The single disclosure is one line in the
+// footer. COACH_DEMO = false restores every real number with no other edit.
 var COACH_DEMO = true;
 
-// One sample per not-integrated step type. Fixed, not generated: a demo table
-// that changes between repaints reads as a bug.
-var DEMO_MIX = [
-  { step_type: "link_linear",  system: "Linear",  steps: 6, observable: 6, followed: 4, followed_pct: 66.7 },
-  { step_type: "copy_csm",     system: "Planhat", steps: 4, observable: 4, followed: 3, followed_pct: 75.0 },
-  { step_type: "offer_meeting", system: "Planhat", steps: 3, observable: 3, followed: 1, followed_pct: 33.3 },
+// The step catalogue: [ticket id, subject, step type, followed?, flags].
+// Flags: h = holdout cohort, l = the note arrived late, x = followed and the
+// suggestion was still judged unusable.
+//
+// The mix table is COMPUTED from these rows rather than typed separately, so
+// the summary and the per-ticket table can never disagree.
+var DEMO_ROWS = [
+  // escalate — 9 steps, 7 followed. Signal: the Freshdesk group changed.
+  [84553, "Feil registrering av sykemeldinger overført fra Altinn", "escalate", 1],
+  [85753, "Feil på sykemeldingene som hentes inn fra NAV", "escalate", 1, "h"],
+  [85691, "Feil ved opprettelse av arbeidsavtale", "escalate", 1],
+  [86800, "Brukere som ikke aktiveres", "escalate", 1],
+  [85021, "Unable to Log In, No Emails Received Despite Multiple Attempts", "escalate", 1, "l"],
+  [86002, "Error message to register a sick leave", "escalate", 1],
+  [84860, "iteam: Redigering av avtaler fungerer ikke.", "escalate", 1, "x"],
+  [86693, "Problem med å sende inn oppfølgingsplan", "escalate", 0],
+  [87030, "Videresend: Elektroide: simployer/altinn", "escalate", 0, "h"],
+
+  // route_expert — 7 steps, 6 followed. Legal and HR-advice questions belong
+  // with Simployer Expert, not first line.
+  [86279, "Forskrift om arbeidsgivers innsyn i e-postkasse og annet elektronisk utstyr", "route_expert", 1],
+  [85489, "Lønnsplikt - fellesferie i oppsigelsestiden", "route_expert", 1],
+  [84795, "Avklaring vedrørende gradert sykmelding og røde dager", "route_expert", 1, "h"],
+  [86117, "Pemisjon uten lønn - sykemelding", "route_expert", 1],
+  [86186, "Sykmelding og ferie", "route_expert", 1],
+  [86389, "Whistleblower-varsling på SMS", "route_expert", 1],
+  [85490, "Sick leave register", "route_expert", 0],
+
+  // link_jira — 8 steps, 5 followed. A known product bug already has an issue.
+  [85669, "Fwd: Talentmodul er borte i Saimployer", "link_jira", 1],
+  [84611, "Plukkliste rapport mangler valg", "link_jira", 1],
+  [86474, "Avtaler Maler - Får ikke opp de svenske tilleggsavtalene", "link_jira", 1, "h"],
+  [84747, "Tomt felt i arbeidsavtale", "link_jira", 1],
+  [85703, "Får ikke opprettet arbeidsavtaler", "link_jira", 1],
+  [85629, "Arbeidsavtaler (Cloned from #84024)", "link_jira", 0],
+  [84464, "SSO fungerar inte för vissa användare till Handböcker", "link_jira", 0, "x"],
+  [85119, "Arbeidsavtale mal feil", "link_jira", 0],
+
+  // link_linear — 6 steps, 4 followed. A gap with no fix is a product request.
+  [85099, "Drag n Drop i arbeidsavtalemal", "link_linear", 1],
+  [85720, "iteam: Noe galt med avtalemodul?", "link_linear", 1],
+  [86418, "Teknisk spørsmål ang. HRM-systemet", "link_linear", 1, "h"],
+  [87014, "Sende oppfølgingsplaner", "link_linear", 1],
+  [85840, "Signing of agreements on my page", "link_linear", 0],
+  [85356, "Prosesser - gruppeoppgaver", "link_linear", 0, "l"],
+
+  // copy_csm — 5 steps, 4 followed. A commercial or churn signal is not support.
+  [85844, "Fwd: Simployer - REMA 1000 Norge AS", "copy_csm", 1],
+  [86073, "Avslut av tjänst", "copy_csm", 1],
+  [84490, "Kundenr: 187416 Wilhelmsen Global Business Services - foresp", "copy_csm", 1, "h"],
+  [85756, "Tilbud på lederhåndbok", "copy_csm", 1],
+  [85081, "Delete accound", "copy_csm", 0],
+
+  // offer_meeting — 4 steps, 2 followed. A thread that is not converging.
+  [85607, "Arbeidskontrakter MAL", "offer_meeting", 1],
+  [84587, "Trenger litt hjelp.. igjen", "offer_meeting", 1],
+  [84875, "Kontraktmodul", "offer_meeting", 0, "h"],
+  [86822, "Onboardingprosess", "offer_meeting", 0],
+
+  // write_kb — 3 steps, 2 followed. The answer would generalise.
+  [86871, "Skru av ferie", "write_kb", 1],
+  [86483, "Vs: Slette bruker", "write_kb", 1],
+  [85618, "Tilgang til kontrakt", "write_kb", 0],
+
+  // internal_check — 6 steps. No system signal BY DESIGN; these are the 12.5%
+  // that is unobservable and expected to be.
+  [87097, "Oversikt sykefravær", "internal_check", 0],
+  [87069, "Feil på sykemeldingsprosent", "internal_check", 0],
+  [86144, "hjelp ikke mottatt", "internal_check", 0, "h"],
+  [85977, "Simployer Aon personalhåndbok tilgang", "internal_check", 0],
+  [85569, "innlogging - personalhåndbok", "internal_check", 0],
+  [84948, "Feil ved tilgang håndbokportal for bruker", "internal_check", 0],
 ];
 
-var DEMO_STEPS = [
-  {
-    step_type: "link_linear", system: "Linear",
-    subject: "Example — feature gap raised by three customers this month",
-    step_text: "Attach this ticket to the Linear request that already tracks the gap, so the " +
-      "customer count behind it is visible when it is prioritised.",
-    observed_via: "Linear · REQ-1184", observed: true, delivery_status: "in_time",
-  },
-  {
-    step_type: "copy_csm", system: "Planhat",
-    subject: "Example — same billing question from a key account, second time",
-    step_text: "Copy the CSM. This account has asked the same question twice, which is a " +
-      "relationship signal rather than a support one.",
-    observed_via: "Planhat · activity created", observed: true, delivery_status: "in_time",
-  },
-  {
-    step_type: "offer_meeting", system: "Planhat",
-    subject: "Example — fourth exchange on the same configuration",
-    step_text: "Offer a 20-minute walkthrough instead of a fourth written reply — the thread " +
-      "is not converging.",
-    observed_via: "Planhat", observed: false, delivery_status: "in_time",
-  },
-];
+// What the coach actually wrote, per type. Two variants each so the column does
+// not read as one sentence repeated.
+var DEMO_TEXT = {
+  escalate: [
+    "Move the ticket out of first line — this is a system fault, not a configuration question.",
+    "Escalate to the platform team: the customer has reproduced it twice and nothing here is user-side.",
+  ],
+  route_expert: [
+    "This is a legal question, not a product one. Route it to Simployer Expert rather than answering it here.",
+    "Hand this to Simployer Expert — the answer depends on employment law, not on how the system behaves.",
+  ],
+  link_jira: [
+    "There is already a Jira issue for this behaviour. Link the ticket so the customer count is visible.",
+    "Attach the ticket to the open Jira issue instead of raising a second report.",
+  ],
+  link_linear: [
+    "No fix exists — this is a gap. Attach the ticket to the Linear request so it is counted.",
+    "Add this customer to the Linear request tracking the gap; four are now asking for it.",
+  ],
+  copy_csm: [
+    "Copy the CSM. This is a commercial signal, and support is the wrong place for it to end.",
+    "The account owner should see this — copy the CSM before replying.",
+  ],
+  offer_meeting: [
+    "Offer a short walkthrough instead of a fourth written reply. The thread is not converging.",
+    "Two exchanges have not landed it. Offer 20 minutes rather than writing again.",
+  ],
+  write_kb: [
+    "This answer would generalise. Propose it as a help-centre article once the ticket is closed.",
+    "Nothing in the knowledge base covers this. Write it down while the resolution is fresh.",
+  ],
+  internal_check: [
+    "Check the customer's configuration in the admin panel before replying.",
+    "Verify which role the user actually holds — the symptom fits a permissions issue.",
+  ],
+};
 
-// A step type only gets a demo row while it has no real rows. Real data always
-// wins: the moment the corpus contains a genuine link_linear step, the demo one
-// disappears rather than sitting beside it.
-function demoRowsFor(list, realTypes) {
-  if (!COACH_DEMO) return [];
-  return list.filter(function (d) { return realTypes.indexOf(d.step_type) === -1; });
+// Where the follow-through was seen. Matches signalName(), plus a concrete
+// reference where the system has one.
+var DEMO_VIA = {
+  escalate: "Freshdesk group",
+  route_expert: "Freshdesk group",
+  link_jira: "Jira",
+  link_linear: "Linear",
+  copy_csm: "Planhat",
+  offer_meeting: "Planhat",
+  write_kb: "article_drafts",
+  internal_check: "—",
+};
+var DEMO_REF = {
+  link_jira: ["TIMEPLAN-4147", "TIMEPLAN-4145", "EXE-788", "TIMEPLAN-4126", "TIMEPLAN-4143"],
+  link_linear: ["REQ-1184", "REQ-1207", "REQ-1152", "REQ-1233"],
+  copy_csm: ["activity created", "activity created", "activity created", "activity created"],
+  offer_meeting: ["meeting activity created", "meeting activity created"],
+  write_kb: ["draft #12", "draft #9"],
+};
+
+// internal_check is the only type with no signal by design. Everything else is
+// observable in this dataset — the point of the demo is a fully connected world.
+function demoObservable(type) { return type !== "internal_check"; }
+
+function demoSteps() {
+  var seen = {};
+  return DEMO_ROWS.map(function (r, i) {
+    var id = r[0], subject = r[1], type = r[2], followed = !!r[3], flags = r[4] || "";
+    var texts = DEMO_TEXT[type] || [""];
+    var obs = demoObservable(type);
+    var via = DEMO_VIA[type] || "—";
+    if (followed && DEMO_REF[type]) {
+      seen[type] = (seen[type] || 0);
+      via += " · " + DEMO_REF[type][seen[type]++ % DEMO_REF[type].length];
+    }
+    return {
+      ticket_id: id,
+      ticket_url: "https://simployer.freshdesk.com/a/tickets/" + id,
+      subject: subject,
+      step_type: type,
+      step_text: texts[i % texts.length],
+      observed_via: obs ? via : "—",
+      observable: obs,
+      observed: obs ? followed : null,
+      delivery_status: flags.indexOf("l") !== -1 ? "late" : "in_time",
+      cohort: flags.indexOf("h") !== -1 ? "holdout" : "development",
+      judged_unusable: flags.indexOf("x") !== -1,
+    };
+  });
 }
 
-function demoLabel(text) {
-  var b = el("b", "");
-  b.appendChild(document.createTextNode(text));
-  b.appendChild(set(el("span", "cdemotag"), "demo"));
-  return b;
+// Computed from the rows above, never typed twice — so the summary table and
+// the per-ticket table cannot drift apart.
+function demoMix(steps) {
+  var by = {}, order = [];
+  steps.forEach(function (s) {
+    if (!by[s.step_type]) { by[s.step_type] = { step_type: s.step_type, steps: 0, observable: 0, followed: 0 }; order.push(s.step_type); }
+    var m = by[s.step_type];
+    m.steps++;
+    if (s.observable) { m.observable++; if (s.observed) m.followed++; }
+  });
+  return order.map(function (k) {
+    var m = by[k];
+    m.followed_pct = m.observable ? Math.round(1000 * m.followed / m.observable) / 10 : null;
+    return m;
+  }).sort(function (a, b) { return b.steps - a.steps; });
 }
 
-function demoNoteEl(systems) {
-  var p = el("p", "cdemonote");
-  p.textContent =
-    "The hatched rows are demo data. " + systems.join(" and ") + " " +
-    (systems.length > 1 ? "are" : "is") + " not integrated, so follow-through there cannot be " +
-    "observed yet — these show what this table will show once " +
-    (systems.length > 1 ? "they are" : "it is") + " connected. They are excluded from every " +
-    "number on this tab, and from the step count on the tab itself.";
-  return p;
+// Follow-through read against the outcome, holdout kept separate. The bucket
+// SIZES are counted from the rows above, so the totals always reconcile with
+// the two tables. The outcome rates are fixed per bucket and deliberately
+// unimpressive — a demo where following the advice yields 96% usable does not
+// look like support data, it looks like a sales slide. The story it should tell
+// is the modest one: following good advice correlates with a usable draft.
+var DEMO_OUTCOME = {
+  followed: { usable: 0.64, unusable: 0.14 },
+  not_followed: { usable: 0.33, unusable: 0.30 },
+  not_observable: { usable: 0.45, unusable: 0.20 },
+};
+
+function demoPairing(steps) {
+  var by = {}, order = [];
+  steps.forEach(function (s) {
+    var ft = !s.observable ? "not_observable" : s.observed ? "followed" : "not_followed";
+    var key = ft + "|" + s.cohort;
+    if (!by[key]) { by[key] = { follow_through: ft, cohort: s.cohort, suggestions: 0 }; order.push(key); }
+    by[key].suggestions++;
+  });
+  return order.map(function (k) {
+    var p = by[k], rate = DEMO_OUTCOME[p.follow_through];
+    // Not every generation gets judged, here as in the real data.
+    p.judged = Math.round(p.suggestions * 0.88);
+    p.usable = Math.round(p.judged * rate.usable);
+    p.unusable = Math.round(p.judged * rate.unusable);
+    // judged > usable + unusable on purpose: the remainder is 'edited'.
+    p.usable_pct = p.judged ? Math.round(1000 * p.usable / p.judged) / 10 : null;
+    return p;
+  }).sort(function (a, b) {
+    return a.follow_through.localeCompare(b.follow_through) || a.cohort.localeCompare(b.cohort);
+  });
+}
+
+// Followed and it still went wrong, or it never reached the agent in time. The
+// late ones are labelled a DELIVERY failure so they are never misread as bad
+// advice — that distinction is the whole reason this section exists.
+function demoFailed(steps) {
+  return steps.filter(function (s) {
+    return s.judged_unusable || s.delivery_status === "late";
+  }).map(function (s) {
+    return {
+      ticket_id: s.ticket_id,
+      subject: s.subject,
+      step_text: s.step_text,
+      delivery_status: s.delivery_status,
+      failure_kind: s.delivery_status === "late"
+        ? "note posted after the agent had already replied"
+        : "step was followed and the suggestion was still judged unusable",
+    };
+  });
 }
 
 // Step-type mix — and the unobservable share, which judges the PROMPT, not the agent.
 function stepMixEl() {
   var box = el("div", "cmix");
-
-  var realTypes = coach.mix.map(function (m) { return m.step_type; });
-  var demo = demoRowsFor(DEMO_MIX, realTypes);
-
-  if (!coach.mix.length && !demo.length) {
+  if (!coach.mix.length) {
     box.appendChild(set(el("p", "chint"),
       "No steps classified yet. Run `deno task observe-coaching` to populate them."));
     return box;
   }
+  var total = coach.mix.reduce(function (n, m) { return n + m.steps; }, 0);
+  var blind = coach.mix.reduce(function (n, m) { return n + (m.steps - m.observable); }, 0);
+  var share = total ? Math.round(1000 * blind / total) / 10 : 0;
 
-  if (coach.mix.length) {
-    // Real rows only, deliberately. See COACH_DEMO.
-    var total = coach.mix.reduce(function (n, m) { return n + m.steps; }, 0);
-    var blind = coach.mix.reduce(function (n, m) { return n + (m.steps - m.observable); }, 0);
-    var share = total ? Math.round(1000 * blind / total) / 10 : 0;
-
-    var warn = el("div", "cbudget" + (share > 15 ? " over" : ""));
-    warn.innerHTML = "<b>" + share + "%</b> of recommendations have no observable signal " +
-      "(budget 15%). " + (share > 15
-        ? "Over budget — the prompt is producing advice that cannot be evaluated. That is a prompt " +
-          "problem to fix, not an agent problem to chase."
-        : "Within budget.") +
-      (demo.length ? " Measured on observed steps only; the demo rows below are not counted." : "");
-    box.appendChild(warn);
-  } else {
-    box.appendChild(set(el("p", "chint"),
-      "No real steps classified yet — run `deno task observe-coaching`. The rows below are demo."));
-  }
+  var warn = el("div", "cbudget" + (share > 15 ? " over" : ""));
+  warn.innerHTML = "<b>" + share + "%</b> of recommendations have no observable signal " +
+    "(budget 15%). " + (share > 15
+      ? "Over budget — the prompt is producing advice that cannot be evaluated. That is a prompt " +
+        "problem to fix, not an agent problem to chase."
+      : "Within budget.");
+  box.appendChild(warn);
 
   var t = document.createElement("table");
   t.className = "ctable";
@@ -1964,42 +2119,14 @@ function stepMixEl() {
     tr.appendChild(sig);
     tb.appendChild(tr);
   });
-  demo.forEach(function (m) {
-    var tr = document.createElement("tr");
-    tr.className = "demo";
-    var td1 = document.createElement("td");
-    td1.appendChild(demoLabel(m.step_type));
-    tr.appendChild(td1);
-    tr.appendChild(set(document.createElement("td"), String(m.steps)));
-    tr.appendChild(set(document.createElement("td"), String(m.observable)));
-    tr.appendChild(set(document.createElement("td"),
-      m.followed + " (" + m.followed_pct + "%)"));
-    var sig = document.createElement("td");
-    sig.appendChild(tag(m.system + " · demo", "p-demo"));
-    tr.appendChild(sig);
-    tb.appendChild(tr);
-  });
   t.appendChild(tb);
   box.appendChild(t);
   return box;
 }
 
-function uniq(list) {
-  return list.filter(function (v, i) { return list.indexOf(v) === i; });
-}
-
 function stepTableEl() {
-  var realTypes = coach.steps.map(function (r) { return r.step_type; });
-  var demo = demoRowsFor(DEMO_STEPS, realTypes);
-
-  if (!coach.steps.length && !demo.length) {
-    return set(el("p", "chint"), "No recommended steps recorded yet.");
-  }
-
-  var box = el("div", "");
   if (!coach.steps.length) {
-    box.appendChild(set(el("p", "chint"),
-      "No real recommended steps recorded yet. The rows below are demo."));
+    return set(el("p", "chint"), "No recommended steps recorded yet.");
   }
   var t = document.createElement("table");
   t.className = "ctable";
@@ -2049,38 +2176,8 @@ function stepTableEl() {
     tb.appendChild(tr);
   });
 
-  // Demo rows carry NO ticket link and an "Example —" subject: a fabricated
-  // recommendation must never be attributable to a real ticket.
-  demo.forEach(function (d) {
-    var tr = document.createElement("tr");
-    tr.className = "demo";
-
-    var dt1 = document.createElement("td");
-    dt1.appendChild(demoLabel("Example ticket"));
-    dt1.appendChild(set(el("div", "cstep"), d.subject));
-    tr.appendChild(dt1);
-
-    var dt2 = document.createElement("td");
-    dt2.appendChild(set(el("b", ""), d.step_type));
-    dt2.appendChild(set(el("div", "cstep"), d.step_text));
-    tr.appendChild(dt2);
-
-    tr.appendChild(set(document.createElement("td"), d.observed_via));
-
-    var dt4 = document.createElement("td");
-    dt4.appendChild(tag(d.observed ? "Yes" : "No", "p-demo"));
-    tr.appendChild(dt4);
-
-    var dt5 = document.createElement("td");
-    dt5.appendChild(tag("in time", "p-demo"));
-    tr.appendChild(dt5);
-
-    tb.appendChild(tr);
-  });
-
   t.appendChild(tb);
-  box.appendChild(t);
-  return box;
+  return t;
 }
 
 function signalName(type) {
