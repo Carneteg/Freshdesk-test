@@ -83,7 +83,7 @@ const freshdeskDomain = env("FRESHDESK_DOMAIN");
 
 const { data: gens, error: genErr } = await db
   .from("suggestions")
-  .select("id, ticket_id, resolution_steps, posted_at, created_at, note_id")
+  .select("id, ticket_id, resolution_steps, posted_at, posting_started_at, created_at, note_id")
   .is("error", null)
   .neq("prompt_version", "agent-scan")
   .eq("is_spam", false)
@@ -223,7 +223,7 @@ for (const g of generations) {
   byTicket.set(g.ticket_id, list);
 }
 
-let deliveryWrites = 0, obsWrites = 0, readFailures = 0, late = 0;
+let deliveryWrites = 0, obsWrites = 0, readFailures = 0, late = 0, backfill = 0;
 
 for (const [ticketId, gensForTicket] of byTicket) {
   let ticket;
@@ -242,11 +242,26 @@ for (const [ticketId, gensForTicket] of byTicket) {
   const replyAt = firstAgentReplyAt(ticket);
 
   for (const g of gensForTicket) {
-    // The note's creation time. posted_at is when we actually posted it; for a
-    // never-posted generation there is no delivery to judge.
+    // A generation that never ATTEMPTED delivery has no delivery to judge, and
+    // must not be counted as a late one. Replay and dry-run runs never post by
+    // design, so scoring them against the agent's reply time asks "did this note
+    // arrive in time" of a note that was never sent — it answered "no" every
+    // time and put 77 phantom failures into the late rate.
+    //
+    // Attempted means posted_at (it went out) or posting_started_at (it was
+    // reserved for posting and may have failed). A live note that genuinely
+    // failed to post IS a delivery failure and still counts.
+    const attempted = g.posted_at != null || g.posting_started_at != null;
+    if (!attempted) continue;
+
+    // posted_at is when we actually posted it; created_at is when the pipeline
+    // started, which is what tells a missed deadline apart from a backfill.
     const noteAt = g.posted_at ?? null;
-    const status = noteAt || replyAt ? deriveDeliveryStatus(noteAt, replyAt) : "no_reply_yet";
+    const status = noteAt || replyAt
+      ? deriveDeliveryStatus(noteAt, replyAt, g.created_at ?? null)
+      : "no_reply_yet";
     if (status === "late") late++;
+    if (status === "backfill") backfill++;
     const { error } = await db.from("suggestion_delivery").upsert({
       suggestion_id: g.id,
       ticket_id: ticketId,
@@ -304,6 +319,9 @@ for (const [ticketId, gensForTicket] of byTicket) {
 console.log(
   `\n${deliveryWrites} delivery row(s), ${obsWrites} observation(s) written.\n` +
     `${late} note(s) landed after the first agent reply.` +
+    // Reported beside it, never folded into it: a backfill was generated after
+    // the agent had already replied, so it was never in the race.
+    (backfill ? `  ${backfill} backfill (generated after the reply — not a deadline missed).` : "") +
     (readFailures ? `  ${readFailures} ticket read(s) failed and were skipped.` : ""),
 );
 if (!safeLog) {
