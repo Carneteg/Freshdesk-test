@@ -176,6 +176,21 @@
   .cbudget{border:1px solid var(--border);border-left:3px solid var(--good);border-radius:6px;
     padding:10px 14px;margin-bottom:10px;font-size:12.5px;background:var(--surface);line-height:1.55}
   .cbudget.over{border-left-color:var(--crit)}
+  /* Demo rows are hatched, dashed and muted — deliberately NOT styled like data.
+     Linear and Planhat are not integrated, so these show what the tab will show
+     once they are; they are excluded from every number on this tab. */
+  .ctable tr.demo td{background:repeating-linear-gradient(45deg,transparent,transparent 6px,
+    var(--surface-2) 6px,var(--surface-2) 12px);color:var(--ink-3);border-bottom-style:dashed}
+  .ctable tr.demo td b{font-weight:600}
+  .cdemotag{display:inline-block;margin-left:6px;font-size:8.5px;font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;color:var(--warn);
+    background:var(--warn-soft);border-radius:2px;padding:1px 4px;vertical-align:1px}
+  .cdemonote{font-size:11.5px;color:var(--warn);background:var(--warn-soft);
+    border-radius:6px;padding:9px 13px;margin:0 0 10px;line-height:1.55}
+  .tag.p-yes{background:var(--good-soft);color:var(--good)}
+  .tag.p-no{background:var(--crit-soft);color:var(--crit)}
+  .tag.p-na{background:var(--surface-2);color:var(--ink-3)}
+  .tag.p-demo{background:var(--warn-soft);color:var(--warn)}
   .cfail{background:var(--surface);border:1px solid var(--border);border-left:3px solid var(--crit);
     border-radius:6px;padding:12px 14px;margin-bottom:9px}
   .cfail.late{border-left-color:var(--warn)}
@@ -382,7 +397,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-04e-planhat-demo";
+var APP_VERSION = "v2026-08-05a-coaching-demo";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -1709,6 +1724,11 @@ function renderCoaching() {
     "One row per recommended step. Each type has one signal in a system we already read, so " +
     "follow-through is observed — there is no button here asking an agent whether they complied.",
     coach.steps.length ? null : "collecting", "c-wait"));
+  var demoSystems = uniq(
+    demoRowsFor(DEMO_MIX, coach.mix.map(function (m) { return m.step_type; }))
+      .concat(demoRowsFor(DEMO_STEPS, coach.steps.map(function (r) { return r.step_type; })))
+      .map(function (d) { return d.system; }));
+  if (demoSystems.length) wrap.appendChild(demoNoteEl(demoSystems));
   wrap.appendChild(stepMixEl());
   wrap.appendChild(stepTableEl());
 
@@ -1750,25 +1770,122 @@ function renderCoaching() {
   lw.appendChild(wrap);
 }
 
+// ── Demo data for the systems that are not integrated ───────────────────────
+//
+// Three of the eight step types have their follow-through signal in Linear or
+// Planhat, and neither has a client in this codebase (connections.ts reports
+// both as not connected, by absence of credentials rather than by a flag). So
+// those rows are not merely empty today — they cannot be filled at all, and an
+// empty table reads as "this was never built" rather than "this needs an
+// integration".
+//
+// These demo rows show what the tab WILL show once those systems are connected.
+// Two rules keep that honest:
+//
+//   1. They never look like data. Hatched, dashed, muted, DEMO-chipped, and
+//      carrying no ticket link — because a demo row hung on a real ticket id
+//      would attribute a recommendation the AI never made to a ticket that
+//      really exists, which is worse than showing nothing.
+//   2. They never enter the arithmetic. The unobservable-share budget, the
+//      follow-through percentages, the pairing table and the tab's badge count
+//      are computed from real rows only. That budget exists to judge the
+//      PROMPT; a fabricated denominator would judge nothing.
+//
+// Flip to false the moment a Linear or Planhat client exists — the real rows
+// then flow through exactly the same table. (PLANHAT_DEMO further down is the
+// sibling flag for the Agent note tab; separate on purpose, since the two tabs
+// are read by different people for different reasons.)
+var COACH_DEMO = true;
+
+// One sample per not-integrated step type. Fixed, not generated: a demo table
+// that changes between repaints reads as a bug.
+var DEMO_MIX = [
+  { step_type: "link_linear",  system: "Linear",  steps: 6, observable: 6, followed: 4, followed_pct: 66.7 },
+  { step_type: "copy_csm",     system: "Planhat", steps: 4, observable: 4, followed: 3, followed_pct: 75.0 },
+  { step_type: "offer_meeting", system: "Planhat", steps: 3, observable: 3, followed: 1, followed_pct: 33.3 },
+];
+
+var DEMO_STEPS = [
+  {
+    step_type: "link_linear", system: "Linear",
+    subject: "Example — feature gap raised by three customers this month",
+    step_text: "Attach this ticket to the Linear request that already tracks the gap, so the " +
+      "customer count behind it is visible when it is prioritised.",
+    observed_via: "Linear · REQ-1184", observed: true, delivery_status: "in_time",
+  },
+  {
+    step_type: "copy_csm", system: "Planhat",
+    subject: "Example — same billing question from a key account, second time",
+    step_text: "Copy the CSM. This account has asked the same question twice, which is a " +
+      "relationship signal rather than a support one.",
+    observed_via: "Planhat · activity created", observed: true, delivery_status: "in_time",
+  },
+  {
+    step_type: "offer_meeting", system: "Planhat",
+    subject: "Example — fourth exchange on the same configuration",
+    step_text: "Offer a 20-minute walkthrough instead of a fourth written reply — the thread " +
+      "is not converging.",
+    observed_via: "Planhat", observed: false, delivery_status: "in_time",
+  },
+];
+
+// A step type only gets a demo row while it has no real rows. Real data always
+// wins: the moment the corpus contains a genuine link_linear step, the demo one
+// disappears rather than sitting beside it.
+function demoRowsFor(list, realTypes) {
+  if (!COACH_DEMO) return [];
+  return list.filter(function (d) { return realTypes.indexOf(d.step_type) === -1; });
+}
+
+function demoLabel(text) {
+  var b = el("b", "");
+  b.appendChild(document.createTextNode(text));
+  b.appendChild(set(el("span", "cdemotag"), "demo"));
+  return b;
+}
+
+function demoNoteEl(systems) {
+  var p = el("p", "cdemonote");
+  p.textContent =
+    "The hatched rows are demo data. " + systems.join(" and ") + " " +
+    (systems.length > 1 ? "are" : "is") + " not integrated, so follow-through there cannot be " +
+    "observed yet — these show what this table will show once " +
+    (systems.length > 1 ? "they are" : "it is") + " connected. They are excluded from every " +
+    "number on this tab, and from the step count on the tab itself.";
+  return p;
+}
+
 // Step-type mix — and the unobservable share, which judges the PROMPT, not the agent.
 function stepMixEl() {
   var box = el("div", "cmix");
-  if (!coach.mix.length) {
+
+  var realTypes = coach.mix.map(function (m) { return m.step_type; });
+  var demo = demoRowsFor(DEMO_MIX, realTypes);
+
+  if (!coach.mix.length && !demo.length) {
     box.appendChild(set(el("p", "chint"),
       "No steps classified yet. Run `deno task observe-coaching` to populate them."));
     return box;
   }
-  var total = coach.mix.reduce(function (n, m) { return n + m.steps; }, 0);
-  var blind = coach.mix.reduce(function (n, m) { return n + (m.steps - m.observable); }, 0);
-  var share = total ? Math.round(1000 * blind / total) / 10 : 0;
 
-  var warn = el("div", "cbudget" + (share > 15 ? " over" : ""));
-  warn.innerHTML = "<b>" + share + "%</b> of recommendations have no observable signal " +
-    "(budget 15%). " + (share > 15
-      ? "Over budget — the prompt is producing advice that cannot be evaluated. That is a prompt " +
-        "problem to fix, not an agent problem to chase."
-      : "Within budget.");
-  box.appendChild(warn);
+  if (coach.mix.length) {
+    // Real rows only, deliberately. See COACH_DEMO.
+    var total = coach.mix.reduce(function (n, m) { return n + m.steps; }, 0);
+    var blind = coach.mix.reduce(function (n, m) { return n + (m.steps - m.observable); }, 0);
+    var share = total ? Math.round(1000 * blind / total) / 10 : 0;
+
+    var warn = el("div", "cbudget" + (share > 15 ? " over" : ""));
+    warn.innerHTML = "<b>" + share + "%</b> of recommendations have no observable signal " +
+      "(budget 15%). " + (share > 15
+        ? "Over budget — the prompt is producing advice that cannot be evaluated. That is a prompt " +
+          "problem to fix, not an agent problem to chase."
+        : "Within budget.") +
+      (demo.length ? " Measured on observed steps only; the demo rows below are not counted." : "");
+    box.appendChild(warn);
+  } else {
+    box.appendChild(set(el("p", "chint"),
+      "No real steps classified yet — run `deno task observe-coaching`. The rows below are demo."));
+  }
 
   var t = document.createElement("table");
   t.className = "ctable";
@@ -1783,9 +1900,29 @@ function stepMixEl() {
     tr.appendChild(set(document.createElement("td"),
       m.observable ? (m.followed + (m.followed_pct != null ? " (" + m.followed_pct + "%)" : "")) : "—"));
     var sig = document.createElement("td");
+    // internal_check has no system signal BY DESIGN — it is not a missing
+    // integration, and labelling it "not connected" invites someone to go and
+    // connect something.
     sig.appendChild(m.observable
       ? tag("observable", "p-yes")
+      : m.step_type === "internal_check"
+      ? tag("no signal by design", "p-na")
       : tag("not connected", "p-na"));
+    tr.appendChild(sig);
+    tb.appendChild(tr);
+  });
+  demo.forEach(function (m) {
+    var tr = document.createElement("tr");
+    tr.className = "demo";
+    var td1 = document.createElement("td");
+    td1.appendChild(demoLabel(m.step_type));
+    tr.appendChild(td1);
+    tr.appendChild(set(document.createElement("td"), String(m.steps)));
+    tr.appendChild(set(document.createElement("td"), String(m.observable)));
+    tr.appendChild(set(document.createElement("td"),
+      m.followed + " (" + m.followed_pct + "%)"));
+    var sig = document.createElement("td");
+    sig.appendChild(tag(m.system + " · demo", "p-demo"));
     tr.appendChild(sig);
     tb.appendChild(tr);
   });
@@ -1794,9 +1931,22 @@ function stepMixEl() {
   return box;
 }
 
+function uniq(list) {
+  return list.filter(function (v, i) { return list.indexOf(v) === i; });
+}
+
 function stepTableEl() {
-  if (!coach.steps.length) {
+  var realTypes = coach.steps.map(function (r) { return r.step_type; });
+  var demo = demoRowsFor(DEMO_STEPS, realTypes);
+
+  if (!coach.steps.length && !demo.length) {
     return set(el("p", "chint"), "No recommended steps recorded yet.");
+  }
+
+  var box = el("div", "");
+  if (!coach.steps.length) {
+    box.appendChild(set(el("p", "chint"),
+      "No real recommended steps recorded yet. The rows below are demo."));
   }
   var t = document.createElement("table");
   t.className = "ctable";
@@ -1845,8 +1995,39 @@ function stepTableEl() {
 
     tb.appendChild(tr);
   });
+
+  // Demo rows carry NO ticket link and an "Example —" subject: a fabricated
+  // recommendation must never be attributable to a real ticket.
+  demo.forEach(function (d) {
+    var tr = document.createElement("tr");
+    tr.className = "demo";
+
+    var dt1 = document.createElement("td");
+    dt1.appendChild(demoLabel("Example ticket"));
+    dt1.appendChild(set(el("div", "cstep"), d.subject));
+    tr.appendChild(dt1);
+
+    var dt2 = document.createElement("td");
+    dt2.appendChild(set(el("b", ""), d.step_type));
+    dt2.appendChild(set(el("div", "cstep"), d.step_text));
+    tr.appendChild(dt2);
+
+    tr.appendChild(set(document.createElement("td"), d.observed_via));
+
+    var dt4 = document.createElement("td");
+    dt4.appendChild(tag(d.observed ? "Yes" : "No", "p-demo"));
+    tr.appendChild(dt4);
+
+    var dt5 = document.createElement("td");
+    dt5.appendChild(tag("in time", "p-demo"));
+    tr.appendChild(dt5);
+
+    tb.appendChild(tr);
+  });
+
   t.appendChild(tb);
-  return t;
+  box.appendChild(t);
+  return box;
 }
 
 function signalName(type) {
