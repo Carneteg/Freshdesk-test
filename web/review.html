@@ -23,17 +23,23 @@
      note's ~60 rules keep reading in their own vocabulary and a future
      re-divergence is one block of edits, not sixty. */
   :root{
-    --ink:#16232E;--ink-2:#41535F;--ink-3:#7B8C96;
-    --bg:#EDF1F2;--surface:#FFFFFF;--surface-2:#F1F5F5;--border:#E2E8EA;
-    --accent:#0F7173;--accent-soft:#E4EFEF;--accent-edge:#BFD8D8;
+    /* Taken VERBATIM from the uploaded mockups — coach_review_coaching_tab.html
+       for the app shell, private_note_freshdesk_v5.html for the note's paper.
+       Six of these had drifted when the palette was unified, because I derived
+       them by hand instead of copying them. Two drifts were plainly visible: the
+       page background was a full step darker (I had used the mockup's --line2
+       where its --bg belonged), and the note's cream was far too pale. */
+    --ink:#16232E;--ink-2:#41535F;--ink-3:#7A8B95;
+    --bg:#F6F8F9;--surface:#FFFFFF;--surface-2:#F0F3F4;--border:#E1E7E9;
+    --accent:#0F7173;--accent-soft:#E3EFEF;--accent-edge:#BFD8D8;
     /* good IS the accent teal — see above */
-    --good:#0F7173;--good-soft:#E4EFEF;
+    --good:#0F7173;--good-soft:#E3EFEF;
     --warn:#B45A09;--warn-soft:#FBEDDD;
     --crit:#9E3227;--crit-soft:#F8E6E3;
     --info:#5B7089;
     /* The one thing that stays specific to a note: the warm paper that makes it
        read as a NOTE rather than as another panel of the review tool. */
-    --paper-warm:#FFFDF4;--paper-warm-edge:#F0E4C3;
+    --paper-warm:#FFF9E3;--paper-warm-edge:#EFE0B0;
     --bar-off:#D8E1E3;
     /* Text on a solid teal/amber/red fill. White in light mode; in dark the
        accents are bright enough that white on them is unreadable, so it flips
@@ -45,7 +51,10 @@
     --radius:8px;--shadow:0 1px 2px rgba(22,35,46,.05),0 4px 16px rgba(22,35,46,.05);
 
     --nv-ink:var(--ink);--nv-ink-2:var(--ink-2);--nv-ink-3:var(--ink-3);
-    --nv-rule:var(--border);--nv-paper:var(--surface);--nv-canvas:var(--bg);
+    /* The note mockup sits on a slightly darker canvas than the app shell
+       (#EEF1F2 vs #F6F8F9) so the paper lifts off it. Kept as its own value
+       rather than aliasing --bg, which is what flattened it before. */
+    --nv-rule:var(--border);--nv-paper:var(--surface);--nv-canvas:#EEF1F2;
     --nv-note:var(--paper-warm);--nv-note-edge:var(--paper-warm-edge);
     --nv-teal:var(--accent);--nv-teal-soft:var(--accent-soft);--nv-teal-edge:var(--accent-edge);
     --nv-amber:var(--warn);--nv-amber-soft:var(--warn-soft);
@@ -476,7 +485,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05i-demo-actions";
+var APP_VERSION = "v2026-08-05j-mockup-palette";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
