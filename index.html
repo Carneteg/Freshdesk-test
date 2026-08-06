@@ -356,6 +356,25 @@
   .nv-src.hit{color:var(--nv-teal);background:var(--nv-teal-soft)}
   .nv-src.miss{color:var(--nv-red);background:var(--nv-red-soft)}
   .nv-src.na{color:var(--nv-ink-3);background:#E7EDEF}
+  .nv-src.none{color:var(--nv-ink-3);background:#E7EDEF}
+  .nv-src.bad{color:var(--nv-red);background:var(--nv-red-soft)}
+
+  /* En rad per system, hopfälld. Vänsterkanten bär läget så att hela listan
+     går att läsa av i en svep utan att läsa texten. */
+  .nv-sys{display:grid;gap:6px;margin-bottom:15px}
+  .nv-sysrow{border-left:3px solid var(--nv-rule);border-radius:0 6px 6px 0;
+    background:var(--nv-paper);padding:2px 0}
+  .nv-sysrow.hit{border-left-color:var(--nv-teal)}
+  .nv-sysrow.bad{border-left-color:var(--nv-red)}
+  .nv-sysrow.none,.nv-sysrow.na{border-left-color:var(--nv-rule)}
+  .nv-syshead{display:flex;align-items:center;gap:10px;width:100%;text-align:left;
+    font-family:inherit;background:none;border:0;padding:7px 11px;cursor:pointer}
+  .nv-syshead[disabled]{cursor:default}
+  .nv-syssum{flex:1;min-width:0;font-size:12.4px;color:var(--nv-ink-2);line-height:1.4}
+  .nv-sysrow.none .nv-syssum,.nv-sysrow.na .nv-syssum{color:var(--nv-ink-3)}
+  .nv-caret{flex:0 0 auto;font-size:11px;color:var(--nv-ink-3)}
+  .nv-sysbody{margin:0;padding:2px 11px 9px 11px}
+  .nv-sysbody li{padding-bottom:5px;font-size:12.5px}
   .nv-facts li{align-items:flex-start}
   .nv-fact{min-width:0}
   .nv-fact a{color:var(--nv-ink);text-decoration:none;border-bottom:1px solid var(--nv-rule)}
@@ -546,7 +565,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-06d-editable-draft";
+var APP_VERSION = "v2026-08-06e-collapsible-sources";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -3276,6 +3295,103 @@ function renderCoverageEl(coverage) {
   return box;
 }
 
+// Ett läge per system:
+//   hit   grönt  — vi hittade något att gå på
+//   bad   rött   — vi hittade något, och det är ett problem (en öppen bugg)
+//   none  grått  — kollad, inget fanns
+//   na    grått  — inte ansluten, alltså inte kollad alls
+// Rött markerar alltså också DATA, inte bara frånvaro: en öppen bugg är ett
+// fynd, och det är dåliga nyheter — vilket är precis vad agenten ska se först.
+function sourceSystemsEl(r) {
+  var srcs = Array.isArray(r.sources) ? r.sources : [];
+  function of(kind) { return srcs.filter(function (s) { return s.kind === kind; }); }
+
+  var n = Number(r.ticket_id) || 0;
+  var groups = [
+    { key: "ticket", label: "Past tickets", items: of("ticket") },
+    { key: "kb", label: "Knowledge base", items: of("kb") },
+    { key: "playbook", label: "Playbook", items: of("playbook").concat(of("incident")) },
+  ];
+
+  // System utan klient: raden finns ändå, för "inte ansluten" är ett svar.
+  if (PLANHAT_DEMO) {
+    var jiraHit = n % 3 === 0;
+    groups.push({ key: "jira", label: "Jira", sample: true, bad: jiraHit,
+      items: jiraHit ? [{ title: "TIMEPLAN-" + (4100 + (n % 60)) + " — open, no fix version" }] : [],
+      empty: "No open issue matches this ticket's topic." });
+    groups.push({ key: "linear", label: "Linear", sample: true,
+      items: n % 2 === 0
+        ? [{ title: "Request open — " + (1 + (n % 5)) + " customers asking. No committed date." }] : [],
+      empty: "No product request covers this." });
+  }
+  groups.push({ key: "confluence", label: "Confluence", notConnected: true,
+    empty: "Not connected — this ticket's topic was never checked there." });
+
+  var box = el("div", "nv-sys");
+  groups.forEach(function (g) {
+    var has = g.items && g.items.length;
+    var state = g.notConnected ? "na" : has ? (g.bad ? "bad" : "hit") : "none";
+
+    var row = el("div", "nv-sysrow " + state);
+    var head = document.createElement("button");
+    head.className = "nv-syshead";
+    head.type = "button";
+    head.disabled = !has;
+    head.setAttribute("aria-expanded", "false");
+
+    head.appendChild(set(el("span", "nv-src " + state), g.label));
+    var sum = el("span", "nv-syssum");
+    sum.textContent = g.notConnected
+      ? "not connected"
+      : has
+      ? (g.items.length === 1 && g.items[0].title && !g.items[0].id
+          ? g.items[0].title
+          : g.items.length + (g.items.length === 1 ? " source" : " sources"))
+      : (g.empty || "nothing found");
+    head.appendChild(sum);
+    if (g.sample) head.appendChild(set(el("span", "nv-demotag"), "sample"));
+    if (has) head.appendChild(set(el("span", "nv-caret"), "▸"));
+    row.appendChild(head);
+
+    if (has) {
+      var list = el("ul", "nv-facts nv-sysbody");
+      list.style.display = "none";
+      g.items.forEach(function (src) {
+        var li = document.createElement("li");
+        var txt = el("span", "nv-fact");
+        if (src.url) {
+          var link = document.createElement("a");
+          link.href = src.url; link.target = "_blank"; link.rel = "noopener";
+          link.textContent = src.title || ("#" + src.id);
+          txt.appendChild(link);
+        } else {
+          txt.appendChild(document.createTextNode(src.title || ("#" + src.id)));
+        }
+        if (src.publicUrl) {
+          txt.appendChild(document.createTextNode(" · "));
+          var pub = document.createElement("a");
+          pub.href = src.publicUrl; pub.target = "_blank"; pub.rel = "noopener";
+          pub.className = "nv-send";
+          pub.textContent = "send to customer";
+          txt.appendChild(pub);
+        }
+        li.appendChild(txt);
+        list.appendChild(li);
+      });
+      var open = false;
+      head.onclick = function () {
+        open = !open;
+        list.style.display = open ? "" : "none";
+        head.setAttribute("aria-expanded", open ? "true" : "false");
+        head.querySelector(".nv-caret").textContent = open ? "▾" : "▸";
+      };
+      row.appendChild(list);
+    }
+    box.appendChild(row);
+  });
+  return box;
+}
+
 function noteViewEl(r) {
   var mode = NOTE_MODE[r.coach_mode] || NOTE_MODE.COACH_AGENT;
   var wrap = el("div", "nv");
@@ -3394,46 +3510,16 @@ function noteViewEl(r) {
   }
 
   // ── höger: varför ──
-  var nSrc = Array.isArray(r.sources) ? r.sources.length : 0;
-  if (nSrc) {
-    side.appendChild(set(el("h4", "nv-h"), "What we know"));
-    var facts = el("ul", "nv-facts");
-    r.sources.forEach(function (src) {
-      var li = document.createElement("li");
-      // Grönt kräver något konkret att öppna: ett ärende-id eller en artikel med
-      // länk. En källa utan det är hittad men inte användbar, och ska inte se ut
-      // som en träff.
-      var usable = !!(src.id || src.url);
-      li.appendChild(set(el("span", "nv-src " + (usable ? "hit" : "na")),
-        sourceTag(src.kind)));
-      var txt = el("span", "nv-fact");
-      var link = document.createElement("a");
-      link.href = src.url || "#"; link.target = "_blank"; link.rel = "noopener";
-      link.textContent = src.title || ("#" + src.id);
-      txt.appendChild(link);
-      if (src.publicUrl) {
-        txt.appendChild(document.createTextNode(" · "));
-        var pub = document.createElement("a");
-        pub.href = src.publicUrl; pub.target = "_blank"; pub.rel = "noopener";
-        pub.className = "nv-send";
-        pub.textContent = "send to customer";
-        txt.appendChild(pub);
-      }
-      li.appendChild(txt);
-      facts.appendChild(li);
-    });
-    appendSampleSystemFacts(facts, r);
-    side.appendChild(facts);
-  } else {
-    var only = el("ul", "nv-facts");
-    appendSampleSystemFacts(only, r);
-    if (only.children.length) {
-      side.appendChild(set(el("h4", "nv-h"), "What we know"));
-      side.appendChild(only);
-    }
-    side.appendChild(set(el("div", "nv-quiet"),
-      "No sources found — possible knowledge-base gap."));
-  }
+  //
+  // EN RAD PER SYSTEM, hopfälld. Förut listades varje enskild källa, vilket blev
+  // tio rader att läsa igenom för att svara på en fråga som egentligen är
+  // binär: hittade vi något, och var? Nu syns svaret direkt och detaljerna
+  // ligger ett klick bort.
+  //
+  // Confluence saknades helt. "Inte ansluten" är ett svar agenten behöver —
+  // utan raden går det inte att skilja från "kollad, hittade inget".
+  side.appendChild(set(el("h4", "nv-h"), "What we know"));
+  side.appendChild(sourceSystemsEl(r));
 
   if (r.agent_analysis && r.agent_analysis.trim()) {
     side.appendChild(set(el("h4", "nv-h"), "Read of the situation"));
