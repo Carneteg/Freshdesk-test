@@ -1,0 +1,186 @@
+{
+  "_comment": "Exempel på en RIKTIG datakälla. Samma schema som getDummyData(), men meta.isDemo = false — så demobannern visas inte när den här filen laddas. Byt innehållet mot era egna siffror; layouten behöver inte röras.",
+
+  "meta": {
+    "isDemo": false,
+    "source": "Simployer — internt underlag",
+    "published": "2026-08-05"
+  },
+
+  "hero": {
+    "title": "HR i <em>AI-eran</em>",
+    "ingress": "AI besvarar allt fler av medarbetarnas frågor på sekunder. Det gör inte HR mindre viktigt — det flyttar HR:s tid dit där bedömning, ansvar och förtroende faktiskt krävs. Den här sidan visar var gränsen går.",
+    "fact": "Modellen bygger på hur ärenden fördelar sig över två axlar: hur komplext ärendet är att lösa, och hur känsligt det är för den enskilda medarbetaren.",
+    "ctas": [
+      { "label": "Utforska trenderna", "href": "#trender", "variant": "primary" },
+      { "label": "Testa medarbetarresan", "href": "#resan", "variant": "ghost" }
+    ],
+    "stats": [
+      { "value": "68 %", "key": "av medarbetarfrågorna är återkommande", "detail": "Semester, sjukfrånvaro, lönespecifikation och policyfrågor — samma frågor, hela året." },
+      { "value": "4,2 h", "key": "per vecka som en chef lägger på HR-administration", "detail": "Tid som inte går till att leda, coacha eller följa upp sitt team." },
+      { "value": "1 av 5", "key": "ärenden kräver en mänsklig bedömning", "detail": "Känsliga situationer, arbetsrätt och undantag — där ett självsäkert AI-svar kostar mest." }
+    ]
+  },
+
+  "trends": [
+    {
+      "tab": "AI som svarar med källor",
+      "title": "Svar utan belägg är en gissning med självförtroende",
+      "desc": "Assistenten Sia svarar inte bara — den visar vilken policy, vilket avtal eller vilken artikel svaret vilar på. Det förvandlar ett påstående till något medarbetaren kan kontrollera, och chefen kan stå för.",
+      "percent": 74,
+      "forCustomer": "Medarbetaren får svaret direkt och ser var det kommer ifrån, i stället för att lita på en svart låda.",
+      "risk": "Ett välformulerat men ogrundat svar är farligare än inget svar — det låter rätt och sprids vidare.",
+      "recommendation": "Kräv källhänvisning som villkor för att ett AI-svar ska få skickas. Saknas källa: lämna över till HR."
+    },
+    {
+      "tab": "Self-service",
+      "title": "Medarbetaren löser det själv — när systemet gör det möjligt",
+      "desc": "Semesteransökan, adressändring, intyg och lönespecifikation behöver inte passera en människa. Poängen är inte att spara HR-tid, utan att medarbetaren slipper vänta på någon annans kalender.",
+      "percent": 61,
+      "forCustomer": "Ärendet blir klart samma minut, utan att någon behöver vara på plats eller vaken.",
+      "risk": "Self-service som inte täcker undantagen skickar tillbaka de svåraste fallen till en redan belastad HR-funktion — med en frustrerad medarbetare på köpet.",
+      "recommendation": "Mät andelen ärenden som avslutas utan handpåläggning, och följ särskilt de som faller ur flödet."
+    },
+    {
+      "tab": "Automatiserade processer",
+      "title": "Onboarding och offboarding är checklistor, inte konstverk",
+      "desc": "En anställning startar och avslutas med samma steg varje gång: konton, utrustning, avtal, behörigheter, introduktion. Det är precis den sortens process som mår bra av att köras likadant varje gång.",
+      "percent": 83,
+      "forCustomer": "Nyanställda har allt på plats dag ett, och den som slutar får ett korrekt och värdigt avslut.",
+      "risk": "Offboarding som halkar efter lämnar behörigheter öppna — ett säkerhetsproblem långt innan det blir ett HR-problem.",
+      "recommendation": "Automatisera stegen men behåll en mänsklig avstämningspunkt vid avslut, där något faktiskt står på spel."
+    },
+    {
+      "tab": "Datadriven insikt",
+      "title": "Mönster syns i mängden, inte i enskilda ärenden",
+      "desc": "Tio sjukanmälningar på samma avdelning på en månad är ett mönster. Var för sig är de tio enskilda händelser som ingen hinner koppla ihop.",
+      "percent": 47,
+      "forCustomer": "Chefen får syn på trender tidigt nog att kunna göra något åt dem.",
+      "risk": "Aggregerad data om få personer är inte anonym. Ett diagram över en avdelning med fyra medlemmar pekar ut individer.",
+      "recommendation": "Sätt en lägsta gruppstorlek innan siffror visas, och besluta den innan någon efterfrågar undantag."
+    },
+    {
+      "tab": "Transparens i beslut",
+      "title": "Om AI påverkar ett beslut ska det gå att förklara",
+      "desc": "Rekommendationer som rör anställning, lön eller uppföljning måste kunna motiveras för den de gäller — inte bara för den som fattar beslutet.",
+      "percent": 92,
+      "forCustomer": "Medarbetaren kan ifrågasätta ett beslut på riktiga grunder i stället för att möta ett system.",
+      "risk": "Ett beslut som ingen kan förklara går heller inte att försvara — vare sig inför medarbetaren eller inför en granskning.",
+      "recommendation": "Logga vad AI:n föreslog, vad människan ändrade och varför. Det är både spårbarhet och lärande."
+    }
+  ],
+
+  "journeys": [
+    {
+      "id": "semester",
+      "label": "Semesteransökan",
+      "tagline": "Det enklaste ärendet — och därför det som aldrig borde nå HR.",
+      "steps": [
+        { "title": "Medarbetaren ansöker", "desc": "Öppnar Simployer One och väljer datum.", "friction": 10 },
+        { "title": "Saldo kontrolleras", "desc": "Systemet räknar automatiskt kvarvarande dagar.", "friction": 5 },
+        { "title": "Chefen får notis", "desc": "Godkänner direkt i mobilen.", "friction": 20 },
+        { "title": "Bekräftelse", "desc": "Kalender och lönesystem uppdateras utan mellanhand.", "friction": 5 },
+        { "title": "Avslutat", "desc": "Ingen människa har behövt läsa ärendet.", "friction": 0 }
+      ],
+      "indicators": { "speed": 95, "effort": 12, "trust": 88 },
+      "complexity": 12,
+      "sensitivity": 10,
+      "recommendedPath": "Helautomatiserad. Låt AI bekräfta direkt och eskalera bara vid kollision med bemanningskrav."
+    },
+    {
+      "id": "lon",
+      "label": "Lönefråga",
+      "tagline": "Ofta enkel att svara på, men aldrig oviktig för den som frågar.",
+      "steps": [
+        { "title": "Frågan ställs", "desc": "\"Varför skiljer sig min lön den här månaden?\"", "friction": 25 },
+        { "title": "AI läser lönespecen", "desc": "Identifierar avvikelsen — retroaktiv justering.", "friction": 15 },
+        { "title": "Svar med underlag", "desc": "Visar posten och vilket avtal den vilar på.", "friction": 20 },
+        { "title": "Medarbetaren följer upp", "desc": "Undrar om det påverkar semesterersättningen.", "friction": 45 },
+        { "title": "HR bekräftar", "desc": "En kort mänsklig avstämning avslutar ärendet.", "friction": 30 }
+      ],
+      "indicators": { "speed": 74, "effort": 34, "trust": 71 },
+      "complexity": 45,
+      "sensitivity": 58,
+      "recommendedPath": "AI svarar med underlag, men lämnar alltid en synlig väg till en människa. Pengar tål inte gissningar."
+    },
+    {
+      "id": "sjuk",
+      "label": "Sjukanmälan",
+      "tagline": "Måste vara friktionsfri — den görs av någon som mår dåligt.",
+      "steps": [
+        { "title": "Anmälan görs", "desc": "Två knapptryck, ingen inloggning i onödan.", "friction": 8 },
+        { "title": "Chef och lön informeras", "desc": "Rätt personer, automatiskt, utan vidarebefordran.", "friction": 5 },
+        { "title": "Dag 8 närmar sig", "desc": "Systemet påminner om läkarintyg.", "friction": 30 },
+        { "title": "Rehab-flagga", "desc": "Upprepad frånvaro flaggas för chefens uppmärksamhet.", "friction": 55 },
+        { "title": "Uppföljningssamtal", "desc": "Bokas av chefen — inte av systemet.", "friction": 40 }
+      ],
+      "indicators": { "speed": 91, "effort": 18, "trust": 79 },
+      "complexity": 38,
+      "sensitivity": 76,
+      "recommendedPath": "Automatisera anmälan och påminnelser. Låt aldrig AI tolka orsaken eller föreslå åtgärder om hälsa."
+    },
+    {
+      "id": "samtal",
+      "label": "Medarbetarsamtal",
+      "tagline": "AI kan förbereda samtalet. Det kan inte föra det.",
+      "steps": [
+        { "title": "Underlag samlas", "desc": "Mål, tidigare samtal och utvecklingsplan hämtas ihop.", "friction": 20 },
+        { "title": "AI föreslår teman", "desc": "Utifrån vad som faktiskt förändrats sedan sist.", "friction": 25 },
+        { "title": "Chefen justerar", "desc": "Lägger till det som inte står i något system.", "friction": 35 },
+        { "title": "Samtalet hålls", "desc": "Helt mänskligt, utan lyssnande assistent.", "friction": 15 },
+        { "title": "Sammanfattning", "desc": "Chefen godkänner innan något sparas.", "friction": 30 }
+      ],
+      "indicators": { "speed": 62, "effort": 44, "trust": 83 },
+      "complexity": 62,
+      "sensitivity": 68,
+      "recommendedPath": "AI förbereder och sammanfattar. Människan äger samtalet och det som skrivs ned."
+    },
+    {
+      "id": "risk",
+      "label": "Uppsägningsrisk",
+      "tagline": "Högsta insats för individen. Lägsta tolerans för fel.",
+      "steps": [
+        { "title": "Signaler samlas", "desc": "Frånvaro, engagemang och rörlighet i teamet.", "friction": 40 },
+        { "title": "Mönster indikeras", "desc": "Systemet pekar på en förhöjd risk — utan att dra slutsatser.", "friction": 60 },
+        { "title": "HR granskar", "desc": "En människa avgör om signalen betyder något.", "friction": 55 },
+        { "title": "Samtal förbereds", "desc": "Chefen får stöd i hur samtalet kan inledas.", "friction": 45 },
+        { "title": "Åtgärd beslutas", "desc": "Alltid av en människa, alltid dokumenterat.", "friction": 70 }
+      ],
+      "indicators": { "speed": 41, "effort": 68, "trust": 64 },
+      "complexity": 84,
+      "sensitivity": 92,
+      "recommendedPath": "AI får indikera, aldrig avgöra. Varje steg som rör en enskild anställning ska bära ett mänskligt namn."
+    }
+  ],
+
+  "contextLayers": [
+    { "id": "historik", "label": "Anställningshistorik", "desc": "Roll, avdelning, anställningstid och tidigare förändringar.", "frictionReduction": 14 },
+    { "id": "arenden", "label": "Tidigare ärenden", "desc": "Vad personen frågat om förut, och hur det löstes.", "frictionReduction": 18 },
+    { "id": "avtal", "label": "Avtals- och lönedata", "desc": "Kollektivavtal, lönemodell och gällande villkor.", "frictionReduction": 22 },
+    { "id": "summering", "label": "AI-sammanfattning", "desc": "En kort lägesbild i stället för hela ärendehistoriken.", "frictionReduction": 12 },
+    { "id": "sentiment", "label": "Engagemang och sentiment", "desc": "Signaler om hur personen mår i sin roll över tid.", "frictionReduction": 9 }
+  ],
+
+  "matrixCases": [
+    { "id": "semester", "label": "Semesteransökan", "complexity": 12, "sensitivity": 10, "quadrant": "Automatisera", "recommendation": "Regelstyrt och opersonligt. Låt systemet avsluta ärendet självt och mät bara undantagen." },
+    { "id": "intyg", "label": "Anställningsintyg", "complexity": 18, "sensitivity": 28, "quadrant": "Automatisera", "recommendation": "Standardiserat dokument med kända fält. Automatisera, men logga varje utfärdande." },
+    { "id": "lon", "label": "Lönefråga", "complexity": 45, "sensitivity": 58, "quadrant": "Automatisera med mänskligt stöd", "recommendation": "AI svarar med underlag och en synlig väg vidare. Fel om lön kostar förtroende långt utöver beloppet." },
+    { "id": "sjuk", "label": "Sjukfrånvaro", "complexity": 38, "sensitivity": 76, "quadrant": "Låt AI stötta HR", "recommendation": "Automatisera det administrativa, men låt aldrig AI tolka hälsa eller föreslå åtgärder." },
+    { "id": "arbetsratt", "label": "Arbetsrättslig fråga", "complexity": 88, "sensitivity": 90, "quadrant": "Prioritera mänsklig HR-expert", "recommendation": "Beror på omständigheter som inte finns i något system. AI får sammanfatta underlaget, inget mer." },
+    { "id": "risk", "label": "Uppsägningsrisk", "complexity": 84, "sensitivity": 92, "quadrant": "Prioritera mänsklig HR-expert", "recommendation": "AI indikerar mönster. En människa avgör, och står för beslutet med sitt namn." }
+  ],
+
+  "sources": [
+    { "org": "Europeiska unionen", "title": "AI-förordningen (AI Act)", "desc": "Klassificerar AI-system som används i anställning och personalhantering som högrisk, med krav på mänsklig tillsyn och spårbarhet.", "published": "2024", "url": "https://eur-lex.europa.eu/legal-content/SV/TXT/?uri=OJ:L_202401689" },
+    { "org": "Integritetsskyddsmyndigheten", "title": "Personuppgifter i arbetslivet", "desc": "Vägledning om behandling av anställdas personuppgifter — relevant för allt som rör frånvaro, hälsa och sentiment.", "published": "Löpande", "url": "https://www.imy.se/" },
+    { "org": "Simployer", "title": "Simployer One och Sia", "desc": "Produktunderlag för self-service, chefsstöd och AI-assistans i HR-processer.", "published": "2026", "url": "https://www.simployer.se/" }
+  ],
+
+  "scope": {
+    "title": "Omfattning och avgränsning",
+    "body": [
+      "Sidan är en interaktiv modell, inte en mätning. Den visar hur ärenden fördelar sig över komplexitet och känslighet, och vilka slutsatser den fördelningen leder till.",
+      "Friktionspoängen är en relativ skala inom sidan. Den är konstruerad för att göra skillnader mellan ärendetyper jämförbara — den motsvarar inte minuter, kostnad eller något externt mått."
+    ]
+  }
+}

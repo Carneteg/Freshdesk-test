@@ -516,6 +516,8 @@ export interface NoteData {
   sources: SourceDoc[];
   qaAnswered: number;
   qaTotal: number;
+  /** Per-question coverage — drives the breakdown block and the header count. */
+  coverage?: Array<{ question: string; answered: boolean }>;
   unsupportedNote?: string;
   // Read-only Freshworks CRM context. This is rendered directly into the
   // private note and is deliberately NOT part of the LLM prompt.
@@ -586,6 +588,20 @@ export function deriveCoachMode(s: {
    * model's word. Only gates the two ASSERTING strategies — see below.
    */
   groundingVerified?: boolean;
+  /**
+   * Per-question coverage from the verify call: did the reply actually resolve
+   * EACH question the customer asked?
+   *
+   * THE STATUS FOLLOWS THE WEAKEST PART, NEVER THE AVERAGE (v5 spec). A note
+   * that answers two of three is worse than one that answers none — the agent
+   * trusts the green badge, sends two answers out of three, and the ticket comes
+   * back. Averaging also rewards skipping the hard question, because dropping it
+   * raises the score.
+   *
+   * Optional: absent means "not recorded", which leaves the old behaviour
+   * untouched for historical rows.
+   */
+  coverage?: Array<{ question: string; answered: boolean }>;
 }): CoachMode {
   // 🔴 the agent must DO something before anything can reach the customer: check the
   // system / roles, verify identity for a sensitive action, open an attachment
@@ -612,7 +628,18 @@ export function deriveCoachMode(s: {
     s.answerStrategy === "REQUEST_MISSING_INFORMATION";
   const sendReady = askingStrategy ||
     (assertingStrategy && s.groundingVerified === true);
-  if (s.hasReply && s.confidence === "high" && sendReady) return "REPLY_READY";
+
+  // An unanswered question blocks the green band even when everything else
+  // qualifies. Deliberately NOT a proportion and NOT a threshold: one gap is
+  // enough, because the cost is the agent sending a partial answer believing it
+  // was complete.
+  const anyUnanswered = Array.isArray(s.coverage) &&
+    s.coverage.length > 0 &&
+    s.coverage.some((c) => c && c.answered === false);
+
+  if (s.hasReply && s.confidence === "high" && sendReady && !anyUnanswered) {
+    return "REPLY_READY";
+  }
 
   // 🟡 otherwise: useful coaching / a hedged direction, but not send-ready as-is
   // (e.g. a routing message the agent must forward, or a low-confidence draft).
@@ -624,6 +651,29 @@ export const MODE_BADGE: Record<CoachMode, string> = {
   COACH_AGENT: "🟡 COACH THE AGENT",
   AGENT_ACTION_REQUIRED: "🔴 AGENT ACTION REQUIRED",
 };
+
+/**
+ * The per-question breakdown.
+ *
+ * Customers rarely ask one thing, and a note that answers two of three is the
+ * dangerous case: the agent trusts it and replies half. Showing a Q/A SCORE
+ * hides which one is missing; showing the questions makes the gap unskippable.
+ *
+ * Only rendered when there is genuinely more than one question — on a
+ * single-question ticket this block is noise.
+ */
+function renderCoverage(coverage: Array<{ question: string; answered: boolean }>): string {
+  if (!Array.isArray(coverage) || coverage.length < 2) return "";
+  const open = coverage.filter((c) => !c.answered).length;
+  const head = open === 0
+    ? `All ${coverage.length} questions answered`
+    : `${open} of ${coverage.length} still needs you`;
+  const items = coverage.map((c) =>
+    `<li>${c.answered ? "✅" : "⚠️"} <strong>${esc(c.question)}</strong>` +
+    `${c.answered ? " — answered" : " — not answered in this draft"}</li>`
+  ).join("");
+  return `<p><strong>❓ ${esc(head)}</strong></p><ul>${items}</ul>`;
+}
 
 // One line item per source, hyperlinked: KB solutions link to the article, past
 // tickets link to the ticket (agent-facing URLs). Falls back to plain text if no
@@ -720,9 +770,16 @@ export function renderNote(r: NoteData): string {
   // show the coach status instead (QA feedback).
   const isAnswer = r.answerStrategy === "DIRECT_ANSWER" ||
     r.answerStrategy === "PROVIDE_KNOWLEDGE_BASE_INSTRUCTIONS";
-  const scorePart = isAnswer
-    ? `Q/A: answers ${r.qaAnswered} of ${r.qaTotal} question(s)`
-    : `Coach action (verify / route / clarify — not a direct answer)`;
+  // Count, do not average. "1 of 3 needs you" tells the agent what to do next;
+  // "answers 2 of 3" reads as mostly-done and gets sent.
+  const openCount = Array.isArray(r.coverage)
+    ? r.coverage.filter((c) => !c.answered).length
+    : 0;
+  const scorePart = !isAnswer
+    ? `Coach action (verify / route / clarify — not a direct answer)`
+    : (Array.isArray(r.coverage) && r.coverage.length > 1 && openCount > 0)
+    ? `${openCount} of ${r.coverage.length} question(s) still needs you`
+    : `Q/A: answers ${r.qaAnswered} of ${r.qaTotal} question(s)`;
   // Mode line (Fas 3.1): the single most important thing for the agent to see —
   // can I send this, should I use it as coaching, or must I act first?
   const modePart = r.coachMode ? `Mode: ${esc(MODE_BADGE[r.coachMode])} · ` : "";
@@ -740,6 +797,9 @@ export function renderNote(r: NoteData): string {
         `do not send a customer reply until it is done.</p>`,
     );
   }
+
+  // Which question is unanswered, before anything else the agent might act on.
+  if (r.coverage) out.push(renderCoverage(r.coverage));
 
   // Verified account context is shown before any AI interpretation. Only the
   // three approved fields are accepted by the renderer.

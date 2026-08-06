@@ -243,6 +243,8 @@ export interface Suggestion {
   grounded_in: string;
   grounding_verified: boolean;
   source_refs: string[];
+  /** Per-question coverage: which of the customer's questions the reply resolved. */
+  coverage: Coverage[];
   article_opportunity: ArticleOpportunity;
   draft: string | null;
   resolution_steps: string[];
@@ -755,6 +757,8 @@ export async function runPipeline(
     sensitiveActionRequest: a.sensitive_action_request,
     resolutionStepCount: draft.resolution_steps.length,
     groundingVerified,
+    // The status follows the weakest question, not the average of them.
+    coverage: draft.coverage,
   });
 
   const resolvedCustomerSubscriptions = await customerSubscriptions;
@@ -779,6 +783,7 @@ export async function runPipeline(
     sources,
     qaAnswered,
     qaTotal,
+    coverage: draft.coverage,
     unsupportedNote,
     customerSubscriptions: resolvedCustomerSubscriptions,
     reviewUrl: deps.reviewUrl
@@ -809,6 +814,7 @@ export async function runPipeline(
     grounded_in: draft.grounded_in,
     grounding_verified: groundingVerified,
     source_refs: draft.source_refs,
+    coverage: draft.coverage,
     article_opportunity: draft.article_opportunity,
     draft: draft.reply || null,
     resolution_steps: draft.resolution_steps,
@@ -951,6 +957,7 @@ export function toRow(
     grounded_in: s.grounded_in,
     grounding_verified: s.grounding_verified,
     source_refs: s.source_refs,
+    coverage: s.coverage,
     article_opportunity: s.article_opportunity,
     draft: s.draft,
     resolution_steps: s.resolution_steps,

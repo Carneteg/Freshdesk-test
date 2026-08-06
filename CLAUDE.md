@@ -466,6 +466,66 @@ are still separate tabs, per the explicit correction on 2026-07-23. The separati
   and by status on article cards. The rail is set from `deriveCoachMode`'s output — the state
   is still decided in code, the card only paints it.
 
+**Per-question coverage — the status follows the weakest part (2026-08-05).** From the
+v5 note mockup. The verify call had ALWAYS returned `coverage` (one row per customer
+question, `answered` true/false); the pipeline collapsed it to two integers (a Q/A
+score) and discarded the array. That lost which question was open, and let a partial
+answer reach the green band — a note reading "answers 2 of 3" under a 🟢 REPLY_READY
+badge is the dangerous case, because the agent trusts the badge and sends two thirds
+of an answer.
+- `deriveCoachMode` now blocks REPLY_READY when **any** question is unanswered. One
+  gap is enough — deliberately not a proportion and not a threshold, so 9 of 10 does
+  not pass. Averaging rewards skipping the hard question, since dropping it raises
+  the score.
+- `renderNote` shows a per-question breakdown (✅/⚠️) and the header **counts** rather
+  than averages: "1 of 3 question(s) still needs you". Suppressed below two questions.
+- `coverage` is stored (migration 45) — that is what makes it measurable. Views:
+  `question_coverage_scorecard` (its `partial_but_green` cell must be 0, and is now
+  structurally so) and `unanswered_questions` (a topic recurring there is a knowledge
+  gap with a name).
+- **No prompt change** — the field already existed in the verify output, so
+  PROMPT_VERSION is untouched and the golden set stays comparable. Absent/empty
+  coverage leaves the old behaviour intact, so historical rows are not re-graded.
+
+**Demo actions: Scribe / Planhat / Linear (2026-08-05).** Per Tobias: hold Intercom and
+Slack; hold Scribe but give it a demo record button; same for Planhat and Linear. None
+has a client here, and Scribe additionally needs **MBL consultation and a DPA** before a
+single recording may be made (the decision paper says so itself). The buttons show the
+documentation loop end to end and change nothing outside the page: Scribe runs a real
+timer and reports a Confluence draft; Linear attaches and reports a vote count; Planhat
+copies the CSM by name. **Send reply / Edit first stay INERT** — a customer reply is a
+real external write §3 does not have, so it must never become a demo that looks like it
+worked. That line is the rule: a demo may act only where the action is confined to the
+page.
+
+**Palette provenance — copy, do not derive (2026-08-05).** Six tokens had drifted from
+the uploaded mockups, two of them plainly visible: the page background was a full step
+too dark and the note's cream far too pale. Cause: when the palette was unified the
+values were derived by hand, and `--line2` (#EDF1F2) was taken where the coaching
+mockup's `--bg` (#F6F8F9) belonged — two different tokens in the same file. The shell
+palette now comes verbatim from `coach_review_coaching_tab.html` and the note's paper
+from `private_note_freshdesk_v5.html`; the note keeps its own darker canvas (#EEF1F2)
+rather than aliasing `--bg`, because aliasing flattened the lift the paper is meant to
+have. Check palette changes by comparing values, not by eye.
+
+**Deferred from the August decision papers (2026-08-05).** The uploaded decks describe a
+much larger programme than Gate 1 — read access to Confluence/Jira/Slack/Intercom,
+Scribe screen recording, queue triage, second-line handover, handling thresholds. Per
+Tobias: **Intercom and Slack are on hold** (Intercom was already dropped on 2026-08-04
+as the wrong channel, see above — the decks predate that); Scribe, Planhat and Linear
+are demo-only for now; the QA coach is on hold. Nothing here is a rejection of the
+programme; it is the scope §3 keeps narrow, unchanged.
+
+**`web/hr-ai-trends/` — a separate marketing-style page (2026-08-05).** A scroll-based
+single-page site on HR in the AI era, in Simployer's purple brand (`#9773FF`), built to
+its own brief. It shares nothing with the Gate 1 pipeline and is not part of it. Fully
+data-driven: `loadData()` fetches a configurable `DATA_URL` and falls back to
+`getDummyData()` on empty URL, 5 s timeout, network/CORS failure, non-2xx, empty body,
+invalid JSON or a schema that does not validate — always logging why, never showing the
+user a broken view. Demo mode is disclosed in a banner and in the sources section. Its
+own README covers repointing the data source and swapping colours/logo/fonts. Parked at
+Tobias's request; left in place because it is self-contained.
+
 **Coaching tab demo mode (2026-08-05).** Per Tobias, the Coaching tab must be
 demonstrable even though **Linear and Planhat have no client in this codebase** —
 three of the eight step types (`link_linear`, `copy_csm`, `offer_meeting`) get their

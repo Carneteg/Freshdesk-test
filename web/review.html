@@ -23,17 +23,23 @@
      note's ~60 rules keep reading in their own vocabulary and a future
      re-divergence is one block of edits, not sixty. */
   :root{
-    --ink:#16232E;--ink-2:#41535F;--ink-3:#7B8C96;
-    --bg:#EDF1F2;--surface:#FFFFFF;--surface-2:#F1F5F5;--border:#E2E8EA;
-    --accent:#0F7173;--accent-soft:#E4EFEF;--accent-edge:#BFD8D8;
+    /* Taken VERBATIM from the uploaded mockups — coach_review_coaching_tab.html
+       for the app shell, private_note_freshdesk_v5.html for the note's paper.
+       Six of these had drifted when the palette was unified, because I derived
+       them by hand instead of copying them. Two drifts were plainly visible: the
+       page background was a full step darker (I had used the mockup's --line2
+       where its --bg belonged), and the note's cream was far too pale. */
+    --ink:#16232E;--ink-2:#41535F;--ink-3:#7A8B95;
+    --bg:#F6F8F9;--surface:#FFFFFF;--surface-2:#F0F3F4;--border:#E1E7E9;
+    --accent:#0F7173;--accent-soft:#E3EFEF;--accent-edge:#BFD8D8;
     /* good IS the accent teal — see above */
-    --good:#0F7173;--good-soft:#E4EFEF;
+    --good:#0F7173;--good-soft:#E3EFEF;
     --warn:#B45A09;--warn-soft:#FBEDDD;
     --crit:#9E3227;--crit-soft:#F8E6E3;
     --info:#5B7089;
     /* The one thing that stays specific to a note: the warm paper that makes it
        read as a NOTE rather than as another panel of the review tool. */
-    --paper-warm:#FFFDF4;--paper-warm-edge:#F0E4C3;
+    --paper-warm:#FFF9E3;--paper-warm-edge:#EFE0B0;
     --bar-off:#D8E1E3;
     /* Text on a solid teal/amber/red fill. White in light mode; in dark the
        accents are bright enough that white on them is unreadable, so it flips
@@ -45,7 +51,10 @@
     --radius:8px;--shadow:0 1px 2px rgba(22,35,46,.05),0 4px 16px rgba(22,35,46,.05);
 
     --nv-ink:var(--ink);--nv-ink-2:var(--ink-2);--nv-ink-3:var(--ink-3);
-    --nv-rule:var(--border);--nv-paper:var(--surface);--nv-canvas:var(--bg);
+    /* The note mockup sits on a slightly darker canvas than the app shell
+       (#EEF1F2 vs #F6F8F9) so the paper lifts off it. Kept as its own value
+       rather than aliasing --bg, which is what flattened it before. */
+    --nv-rule:var(--border);--nv-paper:var(--surface);--nv-canvas:#EEF1F2;
     --nv-note:var(--paper-warm);--nv-note-edge:var(--paper-warm-edge);
     --nv-teal:var(--accent);--nv-teal-soft:var(--accent-soft);--nv-teal-edge:var(--accent-edge);
     --nv-amber:var(--warn);--nv-amber-soft:var(--warn-soft);
@@ -160,6 +169,17 @@
   /* customer's original question, distinct + at the top of the card (#2) */
   .custq{background:var(--surface-2);border:1px solid var(--border);border-left:3px solid var(--info);border-radius:6px;padding:10px 14px;margin:2px 0 12px}
   .custq .rl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--info);display:block;margin-bottom:6px}
+  /* Key takeaways + the collapsed raw thread. */
+  .tk-qs{margin:0 0 6px;padding-left:20px}
+  .tk-qs li{font-size:14.5px;line-height:1.55;margin:0 0 4px;color:var(--ink)}
+  .tk-fallback{margin:0 0 6px;font-size:14.5px;line-height:1.6;color:var(--ink);white-space:pre-wrap}
+  .tk-un{margin:6px 0 0;font-size:13px;line-height:1.55;color:var(--ink-2)}
+  .tk-toggle{display:inline-block;margin-top:8px;font-family:var(--mono);font-size:11.5px;
+    letter-spacing:.03em;color:var(--accent);background:none;border:0;padding:0;cursor:pointer}
+  .tk-toggle:hover{text-decoration:underline}
+  .tk-full{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border)}
+  .tk-full .prose{font-size:13.5px;color:var(--ink-2)}
+  .tk-note{margin:8px 0 0;font-size:11.5px;color:var(--ink-3);line-height:1.5}
   .subs{background:var(--accent-soft);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent);border-radius:6px;padding:12px 14px;margin:0 0 12px;overflow-x:auto}
   .subs .sl{font-family:var(--mono);font-size:10.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--accent);display:block;margin-bottom:7px}
   .subs .sstate{font-size:13.5px;color:var(--ink-2);margin:0}
@@ -215,6 +235,12 @@
   .cbudget{border:1px solid var(--border);border-left:3px solid var(--good);border-radius:6px;
     padding:10px 14px;margin-bottom:10px;font-size:12.5px;background:var(--surface);line-height:1.55}
   .cbudget.over{border-left-color:var(--crit)}
+  /* A note whose draft was written with the reviewers' gold answers in the
+     prompt. Teal, because on this palette teal is the positive signal. */
+  .tag.trained{background:var(--accent);color:var(--on-solid);font-weight:700;letter-spacing:.06em}
+  .nv-trained{display:inline-flex;align-items:center;background:var(--nv-teal);
+    color:var(--on-solid);border-radius:4px;font-size:10px;font-weight:700;
+    letter-spacing:.07em;padding:3px 8px;text-transform:uppercase}
   .tag.p-yes{background:var(--good-soft);color:var(--good)}
   .tag.p-no{background:var(--crit-soft);color:var(--crit)}
   .tag.p-na{background:var(--surface-2);color:var(--ink-3)}
@@ -335,6 +361,13 @@
     background:none;border:0;padding:0;cursor:pointer}
   .nv-wrong:hover{color:var(--nv-teal);text-decoration:underline}
   .nv-preview{font-size:11px;color:var(--nv-ink-3);margin:8px 0 0;line-height:1.5}
+  /* Where a demo action reports back. Deliberately in the flow rather than a
+     toast: the point is that it stays on screen while you talk about it. */
+  .nv-demoout:empty{display:none}
+  .nv-said{margin-top:10px;font-size:12.5px;line-height:1.55;padding:9px 13px;
+    border-radius:7px;background:var(--nv-teal-soft);color:var(--nv-ink)}
+  .nv-said.rec{background:var(--nv-red-soft);color:var(--nv-red)}
+  .nv-rec.on{background:var(--nv-red);border-color:var(--nv-red);color:var(--on-solid)}
 
   @media (max-width:640px){
     .nv-cust div{border-right:none;border-bottom:1px solid var(--nv-rule);flex:1 1 100%}
@@ -452,7 +485,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05f-sample-fields";
+var APP_VERSION = "v2026-08-05j-mockup-palette";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -913,6 +946,7 @@ function cardEl(r) {
 
   var tags = el("div", "tags");
   if (r.coach_mode) tags.appendChild(tag(modeLabel(r.coach_mode), modeCls(r.coach_mode)));
+  if (usedTraining(r)) tags.appendChild(tag("★ trained", "trained"));
   if (r.critical_flag) tags.appendChild(tag("⚠ " + (CRITICAL_LABELS[r.critical_flag] || r.critical_flag), "bad"));
   if (holdoutIds[r.ticket_id]) tags.appendChild(tag("🔒 holdout"));
   tags.appendChild(tag(r.ticket_type || "—"));
@@ -941,8 +975,10 @@ function cardEl(r) {
     : (Array.isArray(r.questions) && r.questions.length ? r.questions.join("\n") : (r.detected_intent || ""));
   if (custText && custText.trim()) {
     var cq = el("div", "custq");
-    cq.appendChild(set(el("span", "rl"), "Target message · exact customer message answered"));
-    cq.appendChild(proseEl(custText));
+    cq.appendChild(set(el("span", "rl"), "What they are asking"));
+    // Summary first, raw thread on demand: a mail arriving as 4,000 characters
+    // of quoted history and signature images hides the one line that matters.
+    cq.appendChild(conversationEl(r));
     card.appendChild(cq);
   }
 
@@ -977,7 +1013,7 @@ function cardEl(r) {
     for (var i = 0; i < r.sources.length; i++) {
       var s = r.sources[i], a = document.createElement("a");
       a.href = esc(s.url || "#"); a.target = "_blank"; a.rel = "noopener";
-      a.textContent = (s.kind === "ticket" ? "🎫 " : "📄 ") + esc(s.title || s.ref);
+      a.textContent = sourceIcon(s.kind) + " " + sourceTag(s.kind) + " · " + esc(s.title || s.ref);
       box.appendChild(a);
     }
     d.appendChild(box); card.appendChild(d);
@@ -1353,6 +1389,209 @@ function proseEl(text) {
   if (!box.childNodes.length) box.appendChild(document.createElement("p"));
   return box;
 }
+// Which system a fact came from. The agent acts differently on each — a KB
+// article is something to send, a past ticket is a precedent, a Jira issue is a
+// known bug, a Linear request is an unfixed gap — so collapsing them all into
+// "source" loses the thing that makes the row useful.
+var SOURCE_TAG = {
+  kb: "Knowledge base",
+  ticket: "Past ticket",
+  playbook: "Playbook",
+  incident: "Known incident",
+  confluence: "Confluence",
+  jira: "Jira",
+  linear: "Linear",
+};
+function sourceTag(kind) { return SOURCE_TAG[kind] || (kind ? String(kind) : "Source"); }
+
+// A generation produced with the reviewers' gold answers fed in as exemplars.
+// replay.ts marks these by suffixing the prompt version with "+gold", so the
+// flag is carried by the immutable generation payload rather than inferred.
+function usedTraining(r) {
+  return typeof r.prompt_version === "string" && r.prompt_version.indexOf("+gold") >= 0;
+}
+function sourceIcon(kind) {
+  return { ticket: "🎫", kb: "📄", playbook: "📕", incident: "🚨",
+    confluence: "📘", jira: "🐛", linear: "📌" }[kind] || "📄";
+}
+
+// ── Email artifact cleanup ──────────────────────────────────────────────────
+//
+// Freshdesk hands us the plain-text rendering of an HTML email, and it arrives
+// carrying everything the mail client put there: inline-image placeholders,
+// numbered signature images, mailto duplicates of every address, corporate
+// link-rewriting (Proofpoint, Outlook safelinks) that turns a facebook.com link
+// into 300 characters of tracking, and the whole quoted thread repeated on each
+// reply. On #84342 the actual question is ONE line inside 1251 characters of
+// that. On #87033 it is two questions inside 4304.
+//
+// Nothing here guesses at meaning — every rule removes a known machine-generated
+// artifact or unwraps a wrapper back to what it wrapped. The count of removals
+// is returned and shown, so text disappearing is visible rather than silent.
+
+function unwrapProofpoint(u) {
+  // Proofpoint v2 encodes the target with its own escapes rather than percent
+  // encoding: -3A for ':', -2D for '-', _ for '/'.
+  try {
+    return decodeURIComponent(u)
+      .replace(/-3A/g, ":").replace(/-2D/g, "-").replace(/-2F/g, "/")
+      .replace(/-5F/g, "_").replace(/_/g, "/").replace(/-26/g, "&");
+  } catch (_e) { return u; }
+}
+
+function cleanEmailText(raw) {
+  var text = String(raw == null ? "" : raw);
+  var removed = 0;
+  function cut(re, replacement) {
+    text = text.replace(re, function () {
+      removed++;
+      if (typeof replacement === "function") return replacement.apply(null, arguments);
+      // A callback's return value is used verbatim, so "$1" would land as the
+      // literal text "$1". Substitute the capture groups ourselves.
+      var args = arguments;
+      return replacement.replace(/\$([1-9])/g, function (_d, n) { return args[Number(n)] ?? ""; });
+    });
+  }
+
+  text = text.replace(/\r\n/g, "\n");
+
+  // Inline-image placeholders and the numbered signature images beside them.
+  cut(/\[cid:[^\]\n]*\]/gi, "");
+  cut(/\[signature_\d+\]/gi, "");
+  // Alt text the mail client generated for a picture, in any of our languages.
+  cut(/\[(?:Et bilde som inneholder|En bild som innehåller|Kuva, joka sisältää|A picture containing|Image|Bilde|Bild)[^\]\n]*\]/gi, "");
+
+  // Corporate link rewriting, unwrapped back to the link it replaced.
+  cut(/https?:\/\/urldefense\.proofpoint\.com\/v2\/url\?u=([^&\s>]+)[^\s>]*/gi,
+    function (_m, u) { return unwrapProofpoint(u); });
+  cut(/https?:\/\/[a-z0-9.-]*safelinks\.protection\.outlook\.com\/[^\s>]*[?&]url=([^&\s>]+)[^\s>]*/gi,
+    function (_m, u) { try { return decodeURIComponent(u); } catch (_e) { return u; } });
+
+  // "name@x<mailto:name@x>" is the same address twice. Keep one.
+  cut(/([^\s<>]+@[^\s<>]+?)\s*<mailto:[^>\n]*>/gi, "$1");
+  cut(/<mailto:[^>\n]*>/gi, "");
+  // Phone artifacts: "(+47) 9<(+47)%2091185661>2626796" — the angle part is a
+  // tel: link the client inlined mid-number.
+  cut(/<(?:tel:|callto:)?\(?\+?[\d\s()%]{6,}>/gi, "");
+  // A URL wrapped in angle brackets is just a URL.
+  cut(/<(https?:\/\/[^>\s]+)>/gi, "$1");
+
+  // The same paragraph repeated down a thread — keep the first occurrence. This
+  // is what makes a five-reply chain readable.
+  var seen = {};
+  var paras = text.split(/\n\s*\n/);
+  var kept = [];
+  for (var i = 0; i < paras.length; i++) {
+    var p = paras[i].replace(/^\s+|\s+$/g, "");
+    if (!p) continue;
+    var key = p.toLowerCase().replace(/\s+/g, " ");
+    // Short lines ("Hei", "Takk") legitimately repeat; only dedupe real content.
+    if (key.length > 24 && seen[key]) { removed++; continue; }
+    seen[key] = true;
+    kept.push(p);
+  }
+  text = kept.join("\n\n");
+
+  return { text: text.replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim(), removed: removed };
+}
+
+// The quoted history below the new message. Cut for the EXCERPT only — the full
+// view keeps it, because sometimes the answer is down there.
+var QUOTED_HEAD = /^\s*(?:fra|från|from|sendt|sent|skickat|til|to|emne|subject|cc|kopi)\s*:\s/i;
+
+function newestMessageOnly(text) {
+  var lines = String(text || "").split("\n");
+  for (var i = 0; i < lines.length; i++) {
+    var l = lines[i];
+    if (/^\s*(?:-{3,}\s*(?:original message|opprinnelig melding|ursprungligt meddelande)|_{10,}|-{10,})/i.test(l)
+      || QUOTED_HEAD.test(l)) {
+      var head = lines.slice(0, i).join("\n").replace(/\s+$/, "");
+      // Only trust the cut if something substantial survives it.
+      if (head.replace(/\s/g, "").length > 40) return head;
+    }
+  }
+  return text;
+}
+
+// ── Key takeaways ───────────────────────────────────────────────────────────
+//
+// Built entirely from what the pipeline already extracted at generation time —
+// the questions it found, the request it judged still unresolved, the intent it
+// classified. No new model call, and nothing invented: if the analysis produced
+// nothing, this falls back to the first cleaned paragraph of the mail.
+
+function takeawaysEl(r, cleaned) {
+  var box = el("div", "tk-sum");
+  var qs = Array.isArray(r.questions) ? r.questions.filter(Boolean) : [];
+
+  if (qs.length) {
+    var ul = document.createElement("ul");
+    ul.className = "tk-qs";
+    qs.forEach(function (q) { ul.appendChild(set(document.createElement("li"), q)); });
+    box.appendChild(ul);
+  } else {
+    // Nothing extracted — show the newest message rather than an empty box, and
+    // skip the greeting: "Hei," is not what the ticket is about.
+    var paras = newestMessageOnly(cleaned).split(/\n\s*\n/)
+      .map(function (t) { return t.replace(/^\s+|\s+$/g, ""); })
+      .filter(function (t) {
+        return t.length > 30 && !/^(?:hei|hej|hallå|hi|hello|god dag|takk|tack)\b[\s,!.]*$/i.test(t);
+      });
+    box.appendChild(set(el("p", "tk-fallback"),
+      paras.slice(0, 2).join("\n\n") || newestMessageOnly(cleaned) || "(no message text)"));
+  }
+
+  if (r.latest_unresolved_request && r.latest_unresolved_request.trim()) {
+    var un = el("p", "tk-un");
+    un.appendChild(set(el("b", ""), "Still unresolved: "));
+    un.appendChild(document.createTextNode(r.latest_unresolved_request));
+    box.appendChild(un);
+  }
+  return box;
+}
+
+// Summary first, raw thread behind a toggle. The default view is what the
+// ticket is ABOUT; the full conversation is one click away for when it matters.
+function conversationEl(r) {
+  var raw = (r.customer_message && r.customer_message.trim())
+    ? r.customer_message
+    : (Array.isArray(r.questions) && r.questions.length ? r.questions.join("\n\n") : "");
+  var c = cleanEmailText(raw);
+
+  var box = el("div", "");
+  box.appendChild(takeawaysEl(r, c.text));
+
+  // Only offer the toggle when there is meaningfully more to see.
+  var trimmed = newestMessageOnly(c.text);
+  var hasMore = c.text.length > trimmed.length + 40 || c.removed > 0 || c.text.length > 400;
+  if (!hasMore) return box;
+
+  var btn = document.createElement("button");
+  btn.className = "tk-toggle";
+  var full = el("div", "tk-full");
+  full.style.display = "none";
+  full.appendChild(proseEl(c.text));
+  if (c.removed) {
+    full.appendChild(set(el("p", "tk-note"),
+      c.removed + " email artifact" + (c.removed === 1 ? "" : "s") +
+      " removed (inline images, signature blocks, mailto duplicates, tracking " +
+      "links, repeated quoted text)."));
+  }
+
+  var open = false;
+  function paint() {
+    btn.textContent = (open ? "▾ Hide" : "▸ Show") + " full conversation";
+    btn.setAttribute("aria-expanded", open ? "true" : "false");
+    full.style.display = open ? "" : "none";
+  }
+  btn.onclick = function () { open = !open; paint(); };
+  paint();
+
+  box.appendChild(btn);
+  box.appendChild(full);
+  return box;
+}
+
 // Verified Freshworks CRM context is rendered directly from stored structured
 // data. It is not AI output, and only the three approved subscription fields are
 // accepted here.
@@ -2855,6 +3094,45 @@ function crmStripEl(r) {
   return box;
 }
 
+// Jira and Linear rows, so the design's per-system tags are visible. Neither
+// system has a client here, so these are sample rows and chipped as such.
+//
+// TWO JUDGEMENT CALLS worth stating:
+//
+//  - They are STATUS statements ("an issue exists", "a request is open"), never
+//    product facts. A sampled renewal date is a low-risk placeholder; a sampled
+//    "here is how the product behaves" is precisely the Gate 1 failure mode —
+//    asserting something with nothing behind it — and an agent could send it.
+//  - Confluence is NOT sampled, though the tag renders if such a source ever
+//    appears. CLAUDE.md records that the Atlassian wiki is an internal
+//    engineering space with no customer-facing content, so a Confluence fact
+//    would contradict a decision already taken rather than preview a future one.
+function appendSampleSystemFacts(list, r) {
+  if (!PLANHAT_DEMO) return;
+  var n = Number(r.ticket_id) || 0;
+  var rows = [
+    { kind: "jira", hit: n % 3 === 0,
+      text: n % 3 === 0
+        ? "Open issue touching this area — TIMEPLAN-" + (4100 + (n % 60)) + "."
+        : "No open issue matches this ticket's topic." },
+    { kind: "linear", hit: n % 2 === 0,
+      text: n % 2 === 0
+        ? "Request open — " + (1 + (n % 5)) + " customers asking. No committed date."
+        : "No product request covers this." },
+  ];
+  rows.forEach(function (row) {
+    var li = document.createElement("li");
+    var tag = el("span", "nv-src" + (row.hit ? " hit" : ""));
+    tag.appendChild(document.createTextNode(sourceTag(row.kind)));
+    li.appendChild(tag);
+    var txt = el("span", "nv-fact");
+    txt.appendChild(document.createTextNode(row.text));
+    txt.appendChild(set(el("span", "nv-demotag"), "sample"));
+    li.appendChild(txt);
+    list.appendChild(li);
+  });
+}
+
 function noteViewEl(r) {
   var mode = NOTE_MODE[r.coach_mode] || NOTE_MODE.COACH_AGENT;
   var wrap = el("div", "nv");
@@ -2899,8 +3177,8 @@ function noteViewEl(r) {
     ? r.customer_message
     : (Array.isArray(r.questions) && r.questions.length ? r.questions.join("\n") : "");
   if (cust.trim()) {
-    var body = el("div", "nv-body quoted");
-    body.appendChild(proseEl(cust));
+    var body = el("div", "nv-body");
+    body.appendChild(conversationEl(r));
     tk.appendChild(body);
   }
   wrap.appendChild(tk);
@@ -2912,6 +3190,7 @@ function noteViewEl(r) {
 
   var head = el("div", "nv-head");
   head.appendChild(set(el("span", "nv-mode" + (mode.cls ? " " + mode.cls : "")), mode.badge));
+  if (usedTraining(r)) head.appendChild(set(el("span", "nv-trained"), "★ trained"));
   var conf = el("span", "nv-conf");
   conf.appendChild(document.createTextNode(confWord(r)));
   var bars = el("span", "nv-bars" + (mode.cls ? " " + mode.cls : ""));
@@ -2938,8 +3217,7 @@ function noteViewEl(r) {
     var facts = el("ul", "nv-facts");
     r.sources.forEach(function (src) {
       var li = document.createElement("li");
-      li.appendChild(set(el("span", "nv-src hit"),
-        src.kind === "kb" ? "Knowledge base" : "Past ticket"));
+      li.appendChild(set(el("span", "nv-src hit"), sourceTag(src.kind)));
       var txt = el("span", "nv-fact");
       var link = document.createElement("a");
       link.href = src.url || "#"; link.target = "_blank"; link.rel = "noopener";
@@ -2956,8 +3234,12 @@ function noteViewEl(r) {
       li.appendChild(txt);
       facts.appendChild(li);
     });
+    appendSampleSystemFacts(facts, r);
     inner.appendChild(facts);
   } else {
+    var only = el("ul", "nv-facts");
+    appendSampleSystemFacts(only, r);
+    if (only.children.length) inner.appendChild(only);
     inner.appendChild(set(el("div", "nv-quiet"),
       "No sources found — possible knowledge-base gap."));
   }
@@ -3010,43 +3292,149 @@ function noteViewEl(r) {
 //
 // "Wrong — tell us why" DOES act: judging a draft is a thing this app really
 // does, so it jumps to the ticket in To review, where the verdict is recorded.
+// The action row. Send / Edit stay INERT — this app is read-only + RLS, and
+// sending a customer reply would be a new external write that CLAUDE.md §3
+// deliberately does not have.
+//
+// The rest are DEMO ACTIONS, per Tobias. Scribe, Planhat and Linear have no
+// client in this codebase (Scribe also needs MBL consultation and a DPA before
+// a single recording is made — the decision paper says so itself). The buttons
+// exist so the loop from the walkthrough can be shown end to end; they change
+// nothing outside this page, and each says "demo" when it acts.
 function noteActionsEl(r) {
   var box = el("div", "");
   var row = el("div", "nv-actions");
+  var out = el("div", "nv-demoout");   // where a demo action reports back
 
-  function btn(label, cls) {
+  function say(text, cls) {
+    out.innerHTML = "";   // this app has no clear() helper
+    var line = el("div", "nv-said" + (cls ? " " + cls : ""));
+    line.appendChild(document.createTextNode(text));
+    line.appendChild(set(el("span", "nv-demotag"), "demo"));
+    out.appendChild(line);
+  }
+
+  // ── inert: a customer reply is a real external write ──
+  function inert(label, cls) {
     var b = document.createElement("button");
     b.className = "nv-btn" + (cls ? " " + cls : "");
     b.textContent = label;
     b.disabled = true;
-    b.title = "Preview only — this app never writes to Freshdesk or Linear.";
+    b.title = "Preview only — this app never sends anything to a customer.";
     return b;
   }
-  row.appendChild(btn("Send reply", "primary"));
-  row.appendChild(btn("Edit first"));
-  row.appendChild(btn("Add to Linear request"));
+  row.appendChild(inert("Send reply", "primary"));
+  row.appendChild(inert("Edit first"));
+
+  // ── demo: Linear ──
+  var lin = "LIN-" + (2100 + ((Number(r.ticket_id) || 0) % 140));
+  var votes = 4 + ((Number(r.ticket_id) || 0) % 9);
+  row.appendChild(demoBtn("Bifoga till " + lin, function () {
+    say("Ärendet bifogat till " + lin + " · " + (votes + 1) +
+      " röster. Kunden kan rösta via länken i svaret.", "ok");
+  }));
+
+  // ── demo: Planhat ──
+  row.appendChild(demoBtn("Kopiera CSM", function () {
+    var d = demoPlanhat(r.ticket_id);
+    say("CSM " + d.csm + " kopierad. Aktivitet skapad på kontot.", "ok");
+  }));
+
+  // ── demo: Scribe ──
+  // Placed with the others rather than hidden behind a gap check: the point of a
+  // demo button is that it can be found.
+  row.appendChild(scribeBtn(r, say));
 
   var wrong = document.createElement("button");
   wrong.className = "nv-wrong";
   wrong.textContent = "Wrong — tell us why";
   wrong.onclick = function () {
-    // The one real action: go and judge it.
+    // The one action that is not a demo: go and judge it.
     tab = "todo";
     search = String(r.ticket_id);
     render();
     window.scrollTo(0, 0);
   };
   row.appendChild(wrong);
-  box.appendChild(row);
 
+  box.appendChild(row);
+  box.appendChild(out);
   box.appendChild(set(el("p", "nv-preview"),
-    "Send / Edit / Linear are a preview of the in-Freshdesk widget — this review app " +
-    "never writes to Freshdesk or Linear. \u201CWrong\u201D opens the ticket in To review."));
+    "Send / Edit are a preview of the in-Freshdesk widget. Linear, Planhat (CSM) and " +
+    "Scribe are demo actions — none of those systems is connected, and nothing here " +
+    "leaves this page. \u201CWrong\u201D opens the ticket in To review."));
   return box;
 }
 
+function demoBtn(label, onClick) {
+  var b = document.createElement("button");
+  b.className = "nv-btn";
+  b.textContent = label;
+  b.title = "Demo — not connected. Nothing leaves this page.";
+  b.onclick = onClick;
+  return b;
+}
+
+// The documentation loop from the walkthrough: a gap is found, the agent solves
+// it while Scribe captures the steps, and the recording becomes a draft article.
+// Here it is a timer and a confirmation — enough to show the loop, and nothing
+// is captured, because recording an agent's screen needs MBL consultation and a
+// DPA with Scribe as a processor before it may start at all.
+function scribeBtn(r, say) {
+  var b = document.createElement("button");
+  b.className = "nv-btn nv-rec";
+  b.title = "Demo — no screen is recorded. Recording requires MBL consultation and a DPA first.";
+  var timer = null, seconds = 0;
+
+  function idle() {
+    b.classList.remove("on");
+    b.textContent = "⏺ Spela in lösningen";
+  }
+  function tick() {
+    seconds++;
+    var m = String(Math.floor(seconds / 60)).padStart(2, "0");
+    var ss = String(seconds % 60).padStart(2, "0");
+    b.textContent = "⏹ Spelar in " + m + ":" + ss + " — klicka för att avsluta";
+  }
+
+  b.onclick = function () {
+    if (timer) {
+      clearInterval(timer); timer = null;
+      var mins = Math.max(1, Math.round(seconds / 60));
+      idle();
+      say("Inspelning avslutad (" + seconds + " s). Utkast till artikel skapat i " +
+        "Confluence — \u201C" + (r.subject || "Ärendet") + "\u201D — väntar på granskning. " +
+        "Beräknad lästid " + mins + " min.", "ok");
+      seconds = 0;
+      return;
+    }
+    seconds = 0;
+    b.classList.add("on");
+    tick();
+    timer = setInterval(tick, 1000);
+    say("Inspelning startad. Scribe fångar varje steg och system medan du löser " +
+      "ärendet. Inget spelas faktiskt in här.", "rec");
+  };
+
+  idle();
+  return b;
+}
+
+var fTrained = "";
+
 function noteControlsEl() {
   var box = el("div", "controls");
+
+  // The point of the filter: put a trained note beside an untrained one for the
+  // same kind of ticket, and see whether the training shows.
+  var nTrained = rows.filter(usedTraining).length;
+  if (nTrained) {
+    box.appendChild(selectEl("Trained and untrained", [
+      ["gold", "★ Trained only (" + nTrained + ")"],
+      ["base", "Untrained only (" + (rows.length - nTrained) + ")"],
+    ], fTrained, function (v) { fTrained = v; renderList(); }));
+  }
+
   var inp = document.createElement("input");
   inp.type = "search"; inp.className = "search";
   inp.placeholder = "Sök ticket, ämne eller svar…";
@@ -3065,6 +3453,8 @@ function renderAgentNotes() {
   var q = search.trim().toLowerCase();
   var list = rows.filter(function (r) {
     if (r.prompt_version === "agent-scan") return false; // history scans carry no note
+    if (fTrained === "gold" && !usedTraining(r)) return false;
+    if (fTrained === "base" && usedTraining(r)) return false;
     if (!q) return true;
     return (String(r.ticket_id) + " " + (r.subject || "") + " " + (r.draft || ""))
       .toLowerCase().indexOf(q) >= 0;

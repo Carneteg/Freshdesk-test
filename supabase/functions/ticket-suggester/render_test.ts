@@ -102,6 +102,61 @@ Deno.test("deriveCoachMode: three-way classification (Fas 3.1)", () => {
   );
 });
 
+Deno.test("deriveCoachMode: the status follows the weakest question, not the average", () => {
+  // Everything else qualifies for the green band — only the coverage differs.
+  const green = {
+    answerStrategy: "DIRECT_ANSWER",
+    confidence: "high" as const,
+    hasReply: true,
+    requiresManualCheck: false,
+    sensitiveActionRequest: false,
+    resolutionStepCount: 0,
+    groundingVerified: true,
+  };
+  assertEquals(deriveCoachMode(green), "REPLY_READY", "no coverage recorded → unchanged");
+
+  assertEquals(
+    deriveCoachMode({
+      ...green,
+      coverage: [
+        { question: "Remove two people from Onboarding", answered: true },
+        { question: "Which address the portal invite uses", answered: true },
+        { question: "Absence overview tab for everyone", answered: false },
+      ],
+    }),
+    "COACH_AGENT",
+    "two of three answered is the dangerous case — the agent trusts green and sends half",
+  );
+
+  // One gap is enough. Deliberately not a proportion: 9 of 10 must not pass.
+  assertEquals(
+    deriveCoachMode({
+      ...green,
+      coverage: Array.from({ length: 10 }, (_, i) => ({
+        question: "q" + i,
+        answered: i !== 9,
+      })),
+    }),
+    "COACH_AGENT",
+    "90% answered is still a partial answer",
+  );
+
+  assertEquals(
+    deriveCoachMode({
+      ...green,
+      coverage: [
+        { question: "a", answered: true },
+        { question: "b", answered: true },
+      ],
+    }),
+    "REPLY_READY",
+    "every question answered stays send-ready",
+  );
+
+  // An empty array carries no information and must not block the green band.
+  assertEquals(deriveCoachMode({ ...green, coverage: [] }), "REPLY_READY");
+});
+
 Deno.test("draftPrompt: injects the known-incidents playbook, outranking generic KB", () => {
   const { system, user } = draftPrompt({
     subject: "AI search 404",
@@ -1177,4 +1232,48 @@ Deno.test("renderNote: a proposed KB article is surfaced, and only when proposed
     }).includes("Worth a knowledge-base article?"),
     false,
   );
+});
+
+Deno.test("renderNote: an unanswered question is visible per question, not as a score", () => {
+  const html = renderNote({
+    confidence: "high",
+    coachMode: "COACH_AGENT",
+    answerStrategy: "DIRECT_ANSWER",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    draft: "Hej Anna!\n1. Ta bort dem under Onboarding.\n3. [Fyll i efter kontroll]",
+    qaAnswered: 2,
+    qaTotal: 3,
+    coverage: [
+      { question: "Remove two people from Onboarding", answered: true },
+      { question: "Which address the portal invite uses", answered: true },
+      { question: "Absence overview tab for everyone", answered: false },
+    ],
+  });
+  // The header counts what is left, rather than reporting a mostly-done score.
+  assertStringIncludes(html, "1 of 3 question(s) still needs you");
+  // And the breakdown names WHICH one, so it cannot be skimmed past.
+  assertStringIncludes(html, "1 of 3 still needs you");
+  assertStringIncludes(html, "⚠️");
+  assertStringIncludes(html, "Absence overview tab for everyone");
+  assertStringIncludes(html, "not answered in this draft");
+});
+
+Deno.test("renderNote: a single question renders no breakdown block", () => {
+  const html = renderNote({
+    confidence: "high",
+    draft: "Hej!",
+    answerStrategy: "DIRECT_ANSWER",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 1,
+    qaTotal: 1,
+    coverage: [{ question: "How do I remove a manager?", answered: true }],
+  });
+  // One question needs no list — the block would be noise on most tickets.
+  assertEquals(html.includes("still needs you"), false);
+  assertEquals(html.includes("All 1 questions answered"), false);
+  assertStringIncludes(html, "Q/A: answers 1 of 1 question(s)");
 });
