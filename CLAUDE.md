@@ -498,6 +498,38 @@ real external write §3 does not have, so it must never become a demo that looks
 worked. That line is the rule: a demo may act only where the action is confined to the
 page.
 
+**Agent-note view rebuilt — the card answers one question at a time (2026-08-06).** Per
+Tobias's structured brief, the note view in `web/review.html` was rebuilt around what an
+agent actually decides. It is presentation only — no pipeline, prompt or schema change,
+so `PROMPT_VERSION` is untouched and the golden set stays comparable.
+
+- **ONE status chip, not three parallel states.** Mode + grounding + confidence were
+  rendered side by side and could contradict each other in words ("Confident, sources
+  unverified"). Now one chip carries icon + Swedish text (colour is reinforcement, not
+  the signal), grounding is a subordinate clause (`groundingPhrase`), and the 5-bar meter
+  has a tooltip and an `aria-label` — "4 of 5 bars" means nothing on its own.
+- **Health is an INSTRUCTION, not four numbers.** Amber/red account or open tickets now
+  render a "⚠️ Var uppmärksam på" box ABOVE the reply with what to do about it. A figure
+  in a strip below the answer is read after the decision it should have informed.
+- **Sample data lives in ONE collapsed box** (`demoContextEl`), never interleaved with
+  verified facts. The old CRM strip rendered a full-looking row of placeholders when
+  nothing was connected; it now returns nothing.
+- **HITTAD ≠ ANVÄND.** `source_refs` is matched against `sources[].ref` — the same keys
+  `verifyGroundingRefs` uses in the pipeline, so the app and the gate read the same
+  thing. The field is new (14 of 168 generations), so older rows say **"ej registrerat"**
+  explicitly and get their own dashed shape: an empty list and a non-existent list mean
+  different things, and "don't know" is not a weaker degree of "no".
+- **Two button groups** — "Svara kund" vs "Rapportera vidare" — with one standard label
+  per button (`demo` = system not connected, `på sidan` = real but stays in the browser).
+  That replaces a four-line prose footnote the reader had to match back against the
+  buttons by hand. **Send reply is still inert**, per the rule above.
+- **Ett kort åt gången.** A hundred expanded cards is not a list. Collapsed, a row carries
+  mode, customer, subject and ONE sentence; click opens one and closes the previous, arrow
+  keys / j / k move. Click and keyboard share one index — otherwise the first arrow press
+  after a click jumps back to wherever the keyboard last was. The one-liner skips the
+  greeting, since nearly every draft opens "Hej!".
+- "Read of the situation" is collapsed as secondary: background, not a decision.
+
 **Palette provenance — copy, do not derive (2026-08-05).** Six tokens had drifted from
 the uploaded mockups, two of them plainly visible: the page background was a full step
 too dark and the note's cream far too pale. Cause: when the palette was unified the
