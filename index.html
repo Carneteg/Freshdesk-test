@@ -50,11 +50,20 @@
     --sans:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
     --radius:8px;--shadow:0 1px 2px rgba(22,35,46,.05),0 4px 16px rgba(22,35,46,.05);
 
-    --nv-ink:var(--ink);--nv-ink-2:var(--ink-2);--nv-ink-3:var(--ink-3);
-    /* The note mockup sits on a slightly darker canvas than the app shell
-       (#EEF1F2 vs #F6F8F9) so the paper lifts off it. Kept as its own value
-       rather than aliasing --bg, which is what flattened it before. */
-    --nv-rule:var(--border);--nv-paper:var(--surface);--nv-canvas:#EEF1F2;
+    /* THE TWO MOCKUPS DISAGREE, AND BOTH ARE RIGHT.
+       private_note_freshdesk_v5.html and coach_review_coaching_tab.html use the
+       same token NAMES with different values: the note's secondary ink, tertiary
+       ink and rule are each a shade warmer and softer than the shell's. Unifying
+       the palette made --nv-* alias the shell, which quietly overwrote all three
+       — the note was drawn in the app's greys instead of its own.
+       These four therefore carry the note mockup's own values, not aliases. */
+    --nv-ink:var(--ink);           /* #16232E — the one both mockups agree on */
+    --nv-ink-2:#42545F;            /* shell has #41535F */
+    --nv-ink-3:#7C8D97;            /* shell has #7A8B95 */
+    --nv-rule:#DDE4E6;             /* shell has #E1E7E9 */
+    /* The note sits on a slightly darker canvas than the app shell (#EEF1F2 vs
+       #F6F8F9) so the paper lifts off it. */
+    --nv-paper:var(--surface);--nv-canvas:#EEF1F2;
     --nv-note:var(--paper-warm);--nv-note-edge:var(--paper-warm-edge);
     --nv-teal:var(--accent);--nv-teal-soft:var(--accent-soft);--nv-teal-edge:var(--accent-edge);
     --nv-amber:var(--warn);--nv-amber-soft:var(--warn-soft);
@@ -485,7 +494,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05j-mockup-palette";
+var APP_VERSION = "v2026-08-05k-note-palette";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
