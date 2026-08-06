@@ -437,6 +437,8 @@
   .tlink:hover{text-decoration:underline}
   .artbtns{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
   .artbox .st{font-size:12px;color:var(--ink-3);margin-left:8px}
+  .tag.a-dest{background:#E7EDEF;color:var(--ink-2);text-transform:none;letter-spacing:0}
+  .tag.a-sample{background:var(--warn-soft);color:var(--warn)}
   .tag.a-approved{background:var(--good-soft);color:var(--good)}
   .tag.a-drafted{background:var(--accent-soft);color:var(--accent)}
   .tag.a-requested{background:var(--surface-2);color:var(--ink-3)}
@@ -530,7 +532,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-06b-two-column";
+var APP_VERSION = "v2026-08-06c-confluence-loop";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -756,6 +758,10 @@ async function loadArticles() {
     if (!res.ok) return;
     var data = await res.json();
     articles = Array.isArray(data) ? data : [];
+    // Dokumentationsloopen är hela poängen med den här fliken, och den är
+    // osynlig när inga artiklar begärts än. Samma regel som överallt annars:
+    // demodata bara när det inte finns någon riktig, och alltid märkt.
+    if (!articles.length && PLANHAT_DEMO) articles = demoArticles();
     articles.forEach(function (a) {
       a.steps = a.steps || []; a.notes = a.notes || [];
       a.removed_specifics = a.removed_specifics || [];
@@ -2634,6 +2640,11 @@ function articleCardEl(a) {
 
   var head = el("div", "arthead");
   head.appendChild(tag(ART_LABEL[a.status] || a.status, "a-" + a.status));
+  // VART artikeln tar vägen är loopens viktigaste fält och saknades helt:
+  // Confluence är den interna sidan agenter läser, hjälpcentret är den kunden
+  // läser. Utan det står det bara "artikel" och läsaren vet inte vilken.
+  if (a.destination) head.appendChild(tag(a.destination, "a-dest"));
+  if (a.is_demo) head.appendChild(tag("sample", "a-sample"));
   if (a.language) head.appendChild(tag(a.language));
   if (a.audience) head.appendChild(tag(a.audience === "agent" ? "för agent" : "för kund"));
   var link = document.createElement("a");
@@ -2911,6 +2922,59 @@ function articlePanel(r) {
   box.appendChild(btns);
   box.appendChild(st);
   return box;
+}
+
+// Dokumentationsloopen som decket beskriver: en lucka hittas, agenten löser den
+// med Scribe igång, utkastet hamnar i Confluence, en människa godkänner, och
+// nästa ärende besvaras från sidan. Utan rader syns inget av det.
+//
+// Tre rader, ett läge var, så loopen går att läsa av i en blick. Fast innehåll —
+// en demo som ändrar sig mellan omladdningar läses som en bugg.
+function demoArticles() {
+  return [
+    {
+      article_id: "demo-1", ticket_id: 87111, is_demo: true,
+      ticket_subject: "Sletting av mail adresse til sluttet ansatt",
+      status: "drafted", language: "no", audience: "agent",
+      destination: "Confluence · Customer Care",
+      proposed_title: "Slette e-postadresse for en ansatt som har sluttet",
+      proposed_reason: "Tredje gången samma fråga ställs detta kvartal, och inget täcker den.",
+      title: "Slette e-postadresse for en ansatt som har sluttet",
+      summary: "Hur du tar bort en e-postadress för en avslutad anställd, och vad som måste verifieras innan du gör det.",
+      steps: ["Verifiera beställarens identitet och behörighet.",
+              "Bekräfta exakt vilken adress som ska tas bort.",
+              "Ta bort användaren i Simployer One — inte i den synkade tjänsten."],
+      notes: ["Identitetskontrollen är inte valfri: det här är en känslig åtgärd."],
+      gap_filled: "Ingen sida täckte avslut av e-post för avslutad anställd.",
+      removed_specifics: ["kundnamn", "knut@hurma4u.com", "May Ann Johansen"],
+      resolution_source: "agent_reply", requested_by: "tobias@simployer.com",
+      requested_at: "2026-08-05T17:34:00Z", drafted_at: "2026-08-05T17:41:00Z",
+      publishable: true, article_version: "art-2026-08-03a",
+    },
+    {
+      article_id: "demo-2", ticket_id: 84875, is_demo: true,
+      ticket_subject: "Kontraktmodul", status: "requested", language: "no",
+      destination: "Confluence · Customer Care",
+      proposed_title: "Avtalemal: hvorfor felter blir tomme",
+      proposed_reason: "Fyra ärenden på nio månader från fyra olika kunder.",
+      requested_by: "johanna@simployer.com", requested_at: "2026-08-06T05:02:00Z",
+    },
+    {
+      article_id: "demo-3", ticket_id: 86871, is_demo: true,
+      ticket_subject: "Skru av ferie", status: "approved", language: "no",
+      audience: "customer", destination: "Freshdesk hjälpcenter (kundvänd)",
+      title: "Slå av ferieregistrering for en avdeling",
+      summary: "Så stänger du av ferieregistrering för en avdelning utan att påverka övriga.",
+      steps: ["Gå till Administrasjon → Faste registre → Ferie.",
+              "Välj avdelningen och avmarkera Aktiv.", "Spara."],
+      notes: [], gap_filled: "Frågan besvarades muntligt varje gång.",
+      removed_specifics: ["kundnamn"], resolution_source: "gold_answer",
+      requested_by: "johanna@simployer.com", requested_at: "2026-08-04T09:12:00Z",
+      drafted_at: "2026-08-04T09:20:00Z", reviewed_by: "tobias@simployer.com",
+      reviewed_at: "2026-08-04T14:03:00Z", publishable: true,
+      article_version: "art-2026-08-03a",
+    },
+  ];
 }
 
 var ART_LABEL = {
@@ -3424,6 +3488,16 @@ function noteActionsEl(r) {
     say("CSM " + d.csm + " kopierad. Aktivitet skapad på kontot.", "ok");
   }));
 
+  // ── demo: Confluence ──
+  // Från genomgången: "Start Confluence draft" står på tre av scenarioslidesen.
+  // Det är loopens första steg — luckan blir en uppgift i samma ögonblick den
+  // hittas, i stället för att glömmas bort när ärendet stängs.
+  row.appendChild(demoBtn("Starta Confluence-utkast", function () {
+    say("Utkast påbörjat i Confluence · Customer Care — \u201C" +
+      (r.subject || "Ärendet") + "\u201D. Det ligger under 📝 Artiklar tills " +
+      "någon granskar och godkänner det.", "ok");
+  }));
+
   // ── demo: Scribe ──
   // Placed with the others rather than hidden behind a gap check: the point of a
   // demo button is that it can be found.
@@ -3444,9 +3518,9 @@ function noteActionsEl(r) {
   box.appendChild(row);
   box.appendChild(out);
   box.appendChild(set(el("p", "nv-preview"),
-    "Send / Edit are a preview of the in-Freshdesk widget. Linear, Planhat (CSM) and " +
-    "Scribe are demo actions — none of those systems is connected, and nothing here " +
-    "leaves this page. \u201CWrong\u201D opens the ticket in To review."));
+    "Send / Edit are a preview of the in-Freshdesk widget. Linear, Planhat (CSM), " +
+    "Confluence and Scribe are demo actions — none of those systems is connected, " +
+    "and nothing here leaves this page. \u201CWrong\u201D opens the ticket in To review."));
   return box;
 }
 
