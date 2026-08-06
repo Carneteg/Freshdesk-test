@@ -529,6 +529,50 @@ so `PROMPT_VERSION` is untouched and the golden set stays comparable.
   after a click jumps back to wherever the keyboard last was. The one-liner skips the
   greeting, since nearly every draft opens "Hej!".
 - "Read of the situation" is collapsed as secondary: background, not a decision.
+- **Follow-up (2026-08-06):** the sample-data box was too well hidden — health and
+  CSM could not be found by someone who did not already know they were in there.
+  The summary row now carries the VALUES (health dot · CSM · plan · renewal · open
+  tickets); expanding adds the explanation, not the data. The point was never to
+  hide the numbers, only to stop them looking verified. It also moved up beside
+  the sources, where it is context rather than an afterword. **Real CRM data always
+  overrides the sample** and the row then reads "delvis sample" with per-field
+  CRM/sample chips — otherwise a fabricated plan could sit next to a real upsell
+  signal contradicting it, two claims about one account on one screen.
+
+**Upsell detection — the customer asked for something they do not have (2026-08-06).**
+Per Tobias. A ticket is often where a customer describes a need in their own words;
+if that capability is not in what the account pays for, that is a commercial signal,
+and today it dies in the ticket. Freshworks CRM already says what they hold (§12,
+read-only); the missing half was what they ASKED for.
+
+- **The split that makes it safe.** The model reads the TICKET TEXT and answers with
+  capability keys from a closed, curated list. TypeScript joins those against the CRM
+  subscriptions and decides what is an opportunity. **The model never sees the
+  subscriptions** — §12 is explicit that CRM data enters no prompt, and a model that
+  could see the list would be free to invent a gap in it. Same stance as
+  `deriveCoachMode` / `verifyGroundingRefs` / the QA validator.
+- **It is not a pitch.** Nothing here touches the customer draft, and no upsell wording
+  is ever written toward a customer — the note tells the agent to hand the account to
+  sales/CSM *after* answering, which is the routing behaviour the coach framing already
+  asks for. A ready-made sentence is exactly what gets sent by accident.
+- **`product_catalog` (migration 46) is curated and SEEDED INACTIVE.** The seed rows'
+  capability descriptions are a plausible reading of product names evidenced in this
+  repo, **not verified product documentation** — no product sheet was available. An
+  empty/inactive catalogue turns the detector off entirely, so nothing can be proposed
+  off unverified product claims. A product owner must confirm the wording before
+  `active = true`. An invented product in front of a customer beats a missed upsell.
+- **Unknown ≠ absent.** A CRM that did not resolve (or resolved to an account with no
+  subscription rows) yields `owned: null` and status `unknown_subscription`, never
+  "they do not have it". `upsellStatus` precedence: a confirmed gap wins; otherwise any
+  unknown beats "owned". Unit-tested — the loose-match and null cases are what would
+  silently make the signal worthless.
+- Modular and versioned separately (`UPSELL_VERSION`), **outside** analyse→draft→verify
+  like the QA coach and article writer, so **PROMPT_VERSION is untouched** and the
+  golden set stays comparable. One extra LLM call per ticket, only when the catalogue
+  is non-empty.
+- Measure with `upsell_scorecard` (a high `opportunity_pct` is a WARNING — the
+  catalogue descriptions are too broad) and `upsell_opportunities` (demand with a
+  name). `crm_unresolved` there is a CRM-matching problem, not an upsell one.
 
 **Palette provenance — copy, do not derive (2026-08-05).** Six tokens had drifted from
 the uploaded mockups, two of them plainly visible: the page background was a full step

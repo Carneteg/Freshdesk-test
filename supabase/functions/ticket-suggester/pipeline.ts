@@ -25,6 +25,7 @@ import {
   QA_COACH_VERSION,
 } from "./qa-system-prompt.ts";
 import { QA_ASSESSMENT_JSON_SCHEMA } from "./qa-schema.ts";
+import { type CatalogEntry, detectUpsell, type UpsellResult } from "./upsell.ts";
 import type { QaAssessment } from "./qa-types.ts";
 import { validateAndNormalizeAssessment } from "./qa-validator.ts";
 import {
@@ -190,6 +191,9 @@ export interface PipelineDeps {
   excludeCategories: string[];
   // Team-curated known incidents fed into the draft as an internal playbook.
   incidents?: Incident[];
+  // Curated capability → product map (migration 46). Empty or absent turns the
+  // upsell detector off entirely — no catalogue, no claims about products.
+  productCatalog?: CatalogEntry[];
   // Supabase client — enables the past-ticket semantic search (stage 2).
   db?: Db;
   // Search the past-ticket index for similar resolved tickets (default on when db set).
@@ -269,6 +273,9 @@ export interface Suggestion {
   run_variant: string;
   latency_ms: number;
   customer_subscriptions: CustomerSubscriptionContext | null;
+  // Upsell signal, or null when the detector was off / had an empty catalogue.
+  // NULL is not "nothing found" — see migration 46.
+  upsell: UpsellResult | null;
   note_html: string;
   feedback_token: string | null;
   error: string | null;
@@ -762,6 +769,23 @@ export async function runPipeline(
   });
 
   const resolvedCustomerSubscriptions = await customerSubscriptions;
+
+  // Upsell detection. Runs AFTER the CRM resolves, because ownership is decided
+  // here in code from the subscriptions — the model only ever saw the ticket
+  // text and the capability list (CLAUDE.md §12: no CRM data in any prompt).
+  //
+  // The customer's message alone, not the whole conversation: we are looking for
+  // what THEY asked for, and agent replies in the context would be a source of
+  // capabilities they never mentioned.
+  const upsell = (deps.productCatalog?.length)
+    ? await detectUpsell(deps, {
+      catalog: deps.productCatalog,
+      ticketText: customerMessage,
+      subject: ticket.subject,
+      subscriptions: resolvedCustomerSubscriptions ?? null,
+    })
+    : null;
+
   const note = renderNote({
     confidence: draft.confidence,
     coachMode,
@@ -786,6 +810,7 @@ export async function runPipeline(
     coverage: draft.coverage,
     unsupportedNote,
     customerSubscriptions: resolvedCustomerSubscriptions,
+    upsell: upsell ?? undefined,
     reviewUrl: deps.reviewUrl
       ? `${deps.reviewUrl.replace(/#.*$/, "")}#generation=${
         deps.generationId ?? ticket.id
@@ -839,6 +864,7 @@ export async function runPipeline(
     run_variant: deps.runVariant ?? "unspecified",
     latency_ms: Date.now() - start,
     customer_subscriptions: resolvedCustomerSubscriptions ?? null,
+    upsell,
     note_html: note,
     feedback_token: feedbackToken,
     error: null,
@@ -993,6 +1019,7 @@ export function toRow(
     run_variant: s.run_variant,
     latency_ms: s.latency_ms,
     customer_subscriptions: s.customer_subscriptions,
+    upsell: s.upsell,
     note_html: s.note_html,
     feedback_token: s.feedback_token,
     error: s.error,

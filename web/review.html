@@ -447,6 +447,18 @@
   .nv-watch.red .nv-watchh{color:var(--nv-red)}
   .nv-watch p{margin:0;font-size:13px;line-height:1.55;color:var(--nv-ink-2)}
 
+  /* Merförsäljning: en INTERN vidarelämning, inte ett säljförslag. Teal (samma
+     positiva signal som resten) men tydligt en egen ruta, så den aldrig läses
+     som en del av kundsvaret. */
+  .nv-upsell{border:1px solid var(--nv-teal-edge);background:var(--nv-teal-soft);
+    border-radius:8px;padding:12px 15px;margin:0 0 14px}
+  .nv-upsellh{font-size:12.6px;font-weight:700;color:var(--nv-teal);margin-bottom:6px}
+  .nv-upsellist{margin:0;padding:0;list-style:none}
+  .nv-upsellist li{font-size:13px;line-height:1.55;color:var(--nv-ink);padding-bottom:5px}
+  .nv-upquote{display:block;color:var(--nv-ink-2);font-style:italic}
+  .nv-upnote{display:block;color:var(--nv-ink-2)}
+  .nv-upfoot{margin:6px 0 0;font-size:11.5px;line-height:1.5;color:var(--nv-ink-3)}
+
   /* Demo-kontext: samlad, hopfälld och nedtonad, så den aldrig sitter mitt
      bland verifierade fakta. */
   .nv-demobox{border:1px dashed var(--nv-rule);border-radius:8px;padding:0 13px;
@@ -456,6 +468,13 @@
   .nv-demobox summary::-webkit-details-marker{display:none}
   .nv-demobox summary::before{content:"▸ ";color:var(--nv-ink-3)}
   .nv-demobox[open] summary::before{content:"▾ "}
+  /* Värdena SITTER på sammanfattningsraden. En hopfälld ruta som bara heter
+     "Demo-kontext" gömmer vad den innehåller — hälsa och CSM hittas inte om man
+     inte redan vet att de ligger där. */
+  .nv-demoline{display:inline-flex;align-items:center;gap:5px 12px;flex-wrap:wrap;
+    text-transform:none;letter-spacing:0;font-size:11.8px;font-weight:500}
+  .nv-demoline b{font-weight:700}
+  .nv-demobox .nv-dot{margin-right:0}
   .nv-demogrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding-bottom:10px}
   .nv-demogrid dt{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
     color:var(--nv-ink-3);font-weight:650;margin:0 0 1px}
@@ -659,7 +678,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-06f-one-card-at-a-time";
+var APP_VERSION = "v2026-08-06g-upsell-and-account";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -670,7 +689,7 @@ var articlesByTicket = {};   // ticket_id -> the article row, for the per-card p
 var articles = [];           // every article, for the Articles tab (article_library)
 // Coaching tab state. All read-only: the tab observes, it never writes anywhere.
 var coach = { baselines: [], dist: [], steps: [], delivery: null, mix: [], pairing: [], failed: [], knowledge: null, loaded: false };
-var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,resolution_steps,grounding_verified,source_refs,latency_ms,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,article_opportunity,prompt_version,created_at";
+var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,upsell,ticket_type,language,confidence,coach_mode,draft,resolution_steps,grounding_verified,source_refs,latency_ms,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,article_opportunity,prompt_version,created_at";
 
 // Why an edited/unusable reply fell short — slug + Swedish label (CLAUDE.md / plan 1.3).
 var REASONS = [
@@ -3592,29 +3611,105 @@ function watchOutEl(r) {
 // All platshållardata på ETT ställe, nedtonat. Förut låg den utspridd över
 // remsan och rubriken med var sitt chip, vilket gjorde att den satt mitt bland
 // riktiga fakta och kunde läsas som verifierad.
+//
+// MEN: en hopfälld ruta som bara heter "Demo-kontext" gömmer också vad den
+// innehåller — man hittar inte hälsa och CSM om man inte redan vet att de ligger
+// där. Sammanfattningsraden bär därför SJÄLVA VÄRDENA (hälsopunkt, CSM,
+// förnyelse, öppna ärenden). Det utfällda innehållet är förklaringen, inte
+// datan. Nedtoningen och sample-märkningen är kvar — poängen var aldrig att
+// dölja siffrorna, bara att de inte får se verifierade ut.
 function demoContextEl(r) {
   if (!PLANHAT_DEMO) return null;
   var d = demoPlanhat(r.ticket_id);
   var a = demoAccount(r.ticket_id);
-  var box = el("details", "nv-demobox");
+
+  // RIKTIG CRM-data slår ALLTID exempeldatan. Utan den här regeln kunde ett
+  // påhittat abonnemang ("One + Survey + Expert") stå bredvid en verklig
+  // merförsäljningssignal som säger att Survey saknas — två motstridiga
+  // påståenden om samma konto på samma skärm. Vilket som helst av dem kan då
+  // vara det agenten tror på, och exempeldatan är det som inte är sant.
+  var c = r.customer_subscriptions;
+  var subs = (c && c.status === "found" && Array.isArray(c.subscriptions)) ? c.subscriptions : [];
+  var realPlan = subs.map(function (s) { return s.productName; })
+    .filter(Boolean).join(" + ");
+  var realRenewal = subs.map(function (s) { return s.endDate || s.renewalStatus; })
+    .filter(Boolean)[0] || "";
+  var plan = realPlan || a.plan;
+  var renewal = realRenewal || a.renewal;
+  var planIsReal = !!realPlan;
+
+  var box = el("details", "nv-demobox" + (planIsReal ? " mixed" : ""));
+
   var sum = document.createElement("summary");
-  sum.appendChild(document.createTextNode("Demo-kontext"));
-  sum.appendChild(set(el("span", "nv-demotag"), "ej verifierat"));
+  var line = el("span", "nv-demoline");
+  line.appendChild(el("span", "nv-dot " + d.health.toLowerCase()));
+  line.appendChild(set(el("b", ""), "Hälsa " + d.health));
+  line.appendChild(set(el("span", ""), "CSM " + d.csm));
+  line.appendChild(set(el("span", ""), plan));
+  line.appendChild(set(el("span", ""), "förnyas " + renewal));
+  line.appendChild(set(el("span", ""),
+    d.alsoOpen ? d.alsoOpen + " öppna ärenden" : "inga andra ärenden"));
+  line.appendChild(set(el("span", "nv-demotag"), planIsReal ? "delvis sample" : "sample"));
+  sum.appendChild(line);
   box.appendChild(sum);
 
   var dl = el("div", "nv-demogrid");
-  [["Konto", a.plan], ["Förnyelse", a.renewal],
-   ["Hälsa", d.health + " · CSM " + d.csm],
-   ["Öppna ärenden", d.alsoOpen ? String(d.alsoOpen) : "inga"]].forEach(function (row) {
+  [["Konto", plan, planIsReal], ["Förnyelse", renewal, planIsReal],
+   ["Hälsa", d.health + " · CSM " + d.csm, false],
+   ["Öppna ärenden", d.alsoOpen ? String(d.alsoOpen) : "inga", false]].forEach(function (row) {
     var cell = document.createElement("div");
-    cell.appendChild(set(el("dt", ""), row[0]));
+    var dt = el("dt", "");
+    dt.appendChild(document.createTextNode(row[0]));
+    // Märkningen sitter per fält när raden är blandad — annars går det inte att
+    // se vilka två av fyra siffror som faktiskt kommer från CRM.
+    if (planIsReal) dt.appendChild(set(el("span", "nv-demotag"), row[2] ? "CRM" : "sample"));
+    cell.appendChild(dt);
     cell.appendChild(set(el("dd", ""), row[1]));
     dl.appendChild(cell);
   });
   box.appendChild(dl);
-  box.appendChild(set(el("p", "nv-demonote"),
-    "Freshworks CRM är inte påslaget och Planhat har ingen klient, så de här " +
-    "fyra fälten är exempeldata. De får inte ligga till grund för ett beslut."));
+  box.appendChild(set(el("p", "nv-demonote"), planIsReal
+    ? "Konto och förnyelse kommer från Freshworks CRM. Hälsa och CSM är exempeldata — " +
+      "Planhat har ingen klient här — och får inte ligga till grund för ett beslut."
+    : "Freshworks CRM är inte påslaget och Planhat har ingen klient, så de här " +
+      "fyra fälten är exempeldata. De får inte ligga till grund för ett beslut."));
+  return box;
+}
+
+// Merförsäljningssignalen. INTERN — den säger åt agenten att lämna vidare, och
+// innehåller med flit ingen formulering någon kan klistra in till en kund. Att
+// skriva en säljmening är inte vad det här projektet gör (§12, coach-inramningen),
+// och en färdig mening är precis vad som råkar skickas.
+//
+// Bara `opportunity` renderas. "De har det redan" och "CRM matchade inte" lagras
+// för mätningen men är inget agenten måste agera på mitt i ärendet, och ett block
+// som syns på varje notis slutar läsas.
+//
+// Rutan visas UNDER svaret: den ändrar vad agenten gör med kontot efteråt, inte
+// vad svaret säger.
+function upsellEl(r) {
+  var u = r.upsell;
+  if (!u || u.status !== "opportunity") return null;
+  var opps = Array.isArray(u.opportunities) ? u.opportunities : [];
+  if (!opps.length) return null;
+
+  var box = el("div", "nv-upsell");
+  box.appendChild(set(el("div", "nv-upsellh"), "💡 Kunden frågar efter något kontot inte har"));
+  var ul = el("ul", "nv-upsellist");
+  opps.forEach(function (o) {
+    var li = document.createElement("li");
+    li.appendChild(set(el("b", ""), o.product || o.capability || "—"));
+    if (o.evidence) {
+      li.appendChild(set(el("span", "nv-upquote"), "“" + o.evidence + "”"));
+    }
+    if (o.agentNote) li.appendChild(set(el("span", "nv-upnote"), o.agentNote));
+    ul.appendChild(li);
+  });
+  box.appendChild(ul);
+  box.appendChild(set(el("p", "nv-upfoot"),
+    "Lämna vidare till sälj/CSM EFTER att du besvarat supportfrågan — gör inte svaret " +
+    "till ett säljbrev. Bekräfta i CRM först; ett konto kan ha en produkt den här " +
+    "kontrollen inte såg."));
   return box;
 }
 
@@ -3737,6 +3832,9 @@ function noteViewEl(r) {
       "No send-ready reply — the coach abstained and handed the judgement back to you."));
   }
 
+  var ups = upsellEl(r);
+  if (ups) act.appendChild(ups);
+
   // Steg 2 och framåt: steg 1 står redan som rekommendationen ovan.
   if (recSteps.length > 1) {
     act.appendChild(set(el("h4", "nv-h"), "Then"));
@@ -3762,6 +3860,13 @@ function noteViewEl(r) {
   side.appendChild(set(el("h4", "nv-h"), "What we know"));
   side.appendChild(sourceSystemsEl(r));
 
+  // Kund- och kontokontexten hör ihop med källorna — den är underlag, inte
+  // efterord. Den låg sist av allt och hittades därför inte.
+  var crm = crmStripEl(r);
+  if (crm) side.appendChild(crm);
+  var demo = demoContextEl(r);
+  if (demo) side.appendChild(demo);
+
   // Modellens läsning av situationen är bakgrund, inte beslut. Den låg tidigare
   // i full längd direkt under källorna och konkurrerade med dem om blicken;
   // hopfälld finns den kvar för den som vill kontrollera resonemanget.
@@ -3772,13 +3877,6 @@ function noteViewEl(r) {
     an.appendChild(set(el("div", "nv-analysis"), r.agent_analysis));
     side.appendChild(an);
   }
-
-  // Sekundärt, sist och hopfällt: kontexten man vill kunna slå upp men inte
-  // läsa varje gång.
-  var crm = crmStripEl(r);
-  if (crm) side.appendChild(crm);
-  var demo = demoContextEl(r);
-  if (demo) side.appendChild(demo);
 
   cols.appendChild(act);
   cols.appendChild(side);
