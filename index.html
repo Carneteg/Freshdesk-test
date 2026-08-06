@@ -85,6 +85,9 @@
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;font-variant-numeric:tabular-nums}
   .wrap{max-width:920px;margin:0 auto;padding:24px 16px 80px}
+  /* Notisfliken är ett instrumentkort, inte löptext: den ska använda skärmen.
+     Övriga flikar behåller den smala spalten, där en mätt radlängd är poängen. */
+  body.tab-note .wrap{max-width:1320px}
   header.top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
   .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:600}
   h1{font-size:22px;margin:2px 0 0;letter-spacing:-.02em}
@@ -360,6 +363,24 @@
   .nv-draft p{margin:0 0 9px;font-size:13.4px;line-height:1.6;color:var(--nv-ink)}
   .nv-draft p:last-child{margin-bottom:0}
   .nv-analysis{font-size:13px;line-height:1.55;color:var(--nv-ink-2);margin-bottom:4px}
+  /* ── Två spalter: HANDLING till vänster, UNDERLAG till höger ──────────────
+     Kortet var en enda lång kolumn, så agenten fick scrolla förbi bevisen för
+     att nå det den skulle göra. Nu står de bredvid varandra: vad du ska göra,
+     och varför — vilket också är hur genomgången i decket ramar in det. */
+  .nv-cov{margin-bottom:14px}
+  .nv-covlist{list-style:none;margin:0;padding:0;display:flex;gap:8px;flex-wrap:wrap}
+  .nv-covlist li{font-size:12.6px;line-height:1.4;padding:6px 11px;border-radius:6px;
+    background:#E7EDEF;color:var(--nv-ink-2)}
+  .nv-covlist li.open{background:var(--nv-amber-soft);color:var(--nv-amber);font-weight:600}
+  .nv-cols{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);
+    gap:26px;align-items:start}
+  .nv-cols > div{min-width:0}
+  /* Under 1080px finns inte plats för två läsbara spalter — då är en kolumn
+     bättre än två trånga. */
+  @media (max-width:1080px){ .nv-cols{grid-template-columns:1fr;gap:0} }
+  /* Underlagsspalten är tätare: den skannas, den läses inte. */
+  .nv-side .nv-facts li{font-size:12.6px;padding-bottom:6px}
+  .nv-side .nv-src{min-width:104px;font-size:9.5px;padding:5px 9px}
   /* "RECOMMENDED · …" i bild 2: en något djupare beige ruta med kant, så att
      rekommendationen läses som slutsatsen och inte som ännu ett stycke. */
   .nv-rec{background:#FBF3D8;border:1px solid var(--nv-note-edge);border-radius:8px;
@@ -509,7 +530,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-06a-light-only";
+var APP_VERSION = "v2026-08-06b-two-column";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -780,6 +801,7 @@ function render() {
   app.appendChild(bar);
   document.getElementById("out").onclick = signOut;
 
+  document.body.classList.toggle("tab-note", tab === "note");
   if (tab === "note") {
     app.appendChild(noteControlsEl());
   } else if (tab === "articles") {
@@ -3157,6 +3179,25 @@ function appendSampleSystemFacts(list, r) {
   });
 }
 
+// Per-fråga-täckning i appen, samma regel som i notisen: räkna, medelvärdesberäkna
+// inte. Under två frågor är blocket bara brus.
+function renderCoverageEl(coverage) {
+  if (!Array.isArray(coverage) || coverage.length < 2) return document.createElement("span");
+  var open = coverage.filter(function (c) { return !c.answered; }).length;
+  var box = el("div", "nv-cov");
+  box.appendChild(set(el("div", "nv-h"),
+    open === 0 ? "All " + coverage.length + " questions answered"
+               : open + " of " + coverage.length + " still needs you"));
+  var ul = el("ul", "nv-covlist");
+  coverage.forEach(function (c) {
+    var li = el("li", c.answered ? "ok" : "open");
+    li.appendChild(document.createTextNode((c.answered ? "✅ " : "⚠️ ") + c.question));
+    ul.appendChild(li);
+  });
+  box.appendChild(ul);
+  return box;
+}
+
 function noteViewEl(r) {
   var mode = NOTE_MODE[r.coach_mode] || NOTE_MODE.COACH_AGENT;
   var wrap = el("div", "nv");
@@ -3230,20 +3271,58 @@ function noteViewEl(r) {
   head.appendChild(set(el("span", "nv-stamp"), stamp.join(" · ")));
   inner.appendChild(head);
 
+  // Header och kontextremsan går över hela bredden — de är kortets ram.
   inner.appendChild(crmStripEl(r));
+  if (r.coverage) inner.appendChild(renderCoverageEl(r.coverage));
 
-  // ── what we know ──
-  // Only systems that actually answered get a chip. A system with no client is
-  // absent entirely: "we looked and found nothing" and "we cannot look" are
-  // different claims, and the agent acts differently on each.
+  // Därefter två spalter: HANDLING till vänster, UNDERLAG till höger.
+  var cols = el("div", "nv-cols");
+  var act = el("div", "nv-act");
+  var side = el("div", "nv-side");
+
+  // ── vänster: det agenten ska göra ──
+  var recSteps = Array.isArray(r.resolution_steps) ? r.resolution_steps : [];
+  if (recSteps.length) {
+    var rec = el("div", "nv-rec");
+    rec.appendChild(set(el("span", "rl"), "Recommended · next step"));
+    rec.appendChild(set(el("p", ""), recSteps[0]));
+    act.appendChild(rec);
+  }
+
+  if (r.draft && r.draft.trim()) {
+    var h = el("h4", "nv-h");
+    h.appendChild(document.createTextNode("Suggested reply"));
+    h.appendChild(set(el("span", "nv-lang"), (r.language || "").toUpperCase()));
+    act.appendChild(h);
+    var d = el("div", "nv-draft");
+    d.appendChild(proseEl(r.draft));
+    act.appendChild(d);
+  } else {
+    act.appendChild(set(el("div", "nv-quiet"),
+      "No send-ready reply — the coach abstained and handed the judgement back to you."));
+  }
+
+  // Steg 2 och framåt: steg 1 står redan som rekommendationen ovan.
+  if (recSteps.length > 1) {
+    act.appendChild(set(el("h4", "nv-h"), "Then"));
+    var sl = el("ul", "nv-facts");
+    recSteps.slice(1).forEach(function (st, i) {
+      var li = document.createElement("li");
+      li.appendChild(set(el("span", "nv-src"), "Step " + (i + 2)));
+      li.appendChild(set(el("span", "nv-fact"), st));
+      sl.appendChild(li);
+    });
+    act.appendChild(sl);
+  }
+
+  // ── höger: varför ──
+  var nSrc = Array.isArray(r.sources) ? r.sources.length : 0;
   if (nSrc) {
-    inner.appendChild(set(el("h4", "nv-h"), "What we know"));
+    side.appendChild(set(el("h4", "nv-h"), "What we know"));
     var facts = el("ul", "nv-facts");
     r.sources.forEach(function (src) {
       var li = document.createElement("li");
       li.appendChild(set(el("span", "nv-src hit"), sourceTag(src.kind)));
-      // (en verklig källa gav alltid något — .miss används för de kontrollerade
-      //  systemen nedan som lästes utan träff)
       var txt = el("span", "nv-fact");
       var link = document.createElement("a");
       link.href = src.url || "#"; link.target = "_blank"; link.rel = "noopener";
@@ -3261,58 +3340,26 @@ function noteViewEl(r) {
       facts.appendChild(li);
     });
     appendSampleSystemFacts(facts, r);
-    inner.appendChild(facts);
+    side.appendChild(facts);
   } else {
     var only = el("ul", "nv-facts");
     appendSampleSystemFacts(only, r);
-    if (only.children.length) inner.appendChild(only);
-    inner.appendChild(set(el("div", "nv-quiet"),
+    if (only.children.length) {
+      side.appendChild(set(el("h4", "nv-h"), "What we know"));
+      side.appendChild(only);
+    }
+    side.appendChild(set(el("div", "nv-quiet"),
       "No sources found — possible knowledge-base gap."));
   }
 
-  // ── suggested reply ──
-  if (r.draft && r.draft.trim()) {
-    var h = el("h4", "nv-h");
-    h.appendChild(document.createTextNode("Suggested reply"));
-    h.appendChild(set(el("span", "nv-lang"), (r.language || "").toUpperCase()));
-    inner.appendChild(h);
-    var d = el("div", "nv-draft");
-    d.appendChild(proseEl(r.draft));
-    inner.appendChild(d);
-  } else {
-    inner.appendChild(set(el("div", "nv-quiet"),
-      "No send-ready reply — the coach abstained and handed the judgement back to you."));
-  }
-
-  // ── do this first ──
-  var steps = Array.isArray(r.resolution_steps) ? r.resolution_steps : [];
-  if (steps.length) {
-    inner.appendChild(set(el("h4", "nv-h"), "Do this first"));
-    var sl = el("ul", "nv-facts");
-    steps.forEach(function (st, i) {
-      var li = document.createElement("li");
-      li.appendChild(set(el("span", "nv-src"), "Step " + (i + 1)));
-      li.appendChild(set(el("span", "nv-fact"), st));
-      sl.appendChild(li);
-    });
-    inner.appendChild(sl);
-  }
-
   if (r.agent_analysis && r.agent_analysis.trim()) {
-    inner.appendChild(set(el("h4", "nv-h"), "Read of the situation"));
-    inner.appendChild(set(el("div", "nv-analysis"), r.agent_analysis));
+    side.appendChild(set(el("h4", "nv-h"), "Read of the situation"));
+    side.appendChild(set(el("div", "nv-analysis"), r.agent_analysis));
   }
 
-  // The recommendation, as its own conclusion block (image 2). Built from the
-  // first resolution step, because that IS the recommended action — it was
-  // previously buried as item one of a numbered list.
-  var recSteps = Array.isArray(r.resolution_steps) ? r.resolution_steps : [];
-  if (recSteps.length) {
-    var rec = el("div", "nv-rec");
-    rec.appendChild(set(el("span", "rl"), "Recommended · next step"));
-    rec.appendChild(set(el("p", ""), recSteps[0]));
-    inner.appendChild(rec);
-  }
+  cols.appendChild(act);
+  cols.appendChild(side);
+  inner.appendChild(cols);
 
   inner.appendChild(noteActionsEl(r));
 
