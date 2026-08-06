@@ -380,12 +380,87 @@
   .nv-fact a{color:var(--nv-ink);text-decoration:none;border-bottom:1px solid var(--nv-rule)}
   .nv-fact a:hover{border-bottom-color:var(--nv-teal)}
   .nv-send{font-size:11px;color:var(--nv-teal);white-space:nowrap;border-bottom:none !important}
+  /* HITTAD ≠ ANVÄND. Fylld bricka = svaret lutade sig mot källan; tonad = den
+     låg framme men användes inte; streckad = fältet fanns inte när raden
+     skapades. Den tredje är en egen form, inte en blekare andra, eftersom
+     "vet inte" inte är en svagare grad av "nej". */
+  .nv-use{display:inline-block;margin-left:7px;font-size:9px;font-weight:700;
+    letter-spacing:.05em;text-transform:uppercase;white-space:nowrap;padding:2px 6px;
+    border-radius:3px;background:var(--nv-note-bg);color:var(--nv-ink-3);
+    border:1px solid var(--nv-rule);vertical-align:1px}
+  .nv-use.on{background:var(--nv-teal-soft);color:var(--nv-teal);border-color:var(--nv-teal-edge)}
+  .nv-use.unk{border-style:dashed;background:none}
+  .nv-syshead .nv-use{flex:0 0 auto;margin-left:0}
 
   .nv-draft{background:var(--nv-paper);border:1px solid var(--nv-rule);border-radius:7px;
     padding:14px 16px;margin-bottom:14px}
   .nv-draft p{margin:0 0 9px;font-size:13.4px;line-height:1.6;color:var(--nv-ink)}
   .nv-draft p:last-child{margin-bottom:0}
   .nv-analysis{font-size:13px;line-height:1.55;color:var(--nv-ink-2);margin-bottom:4px}
+  /* ── Kompakt lista: ETT kort åt gången ────────────────────────────────────
+     Raden bär läget i vänsterkanten, precis som notisens rail och källraderna,
+     så samma färg betyder samma sak överallt. */
+  .nv-hint{font-size:12px;color:var(--ink-3);margin:0 0 12px}
+  .nv-row{border:1px solid var(--border);border-left:3px solid var(--nv-rule);
+    border-radius:0 8px 8px 0;background:var(--surface);margin-bottom:7px;overflow:hidden}
+  .nv-row.amber{border-left-color:var(--nv-amber)}
+  .nv-row.red{border-left-color:var(--nv-red)}
+  .nv-row:not(.amber):not(.red){border-left-color:var(--nv-teal)}
+  .nv-row.active{box-shadow:0 0 0 2px var(--accent-soft)}
+  .nv-row.open{margin-bottom:22px}
+  .nv-rowhead{display:flex;align-items:baseline;gap:12px;width:100%;text-align:left;
+    font-family:inherit;background:none;border:0;padding:11px 14px;cursor:pointer}
+  .nv-rowhead:hover{background:var(--surface-2)}
+  .nv-row.open>.nv-rowhead{border-bottom:1px solid var(--border);background:var(--surface-2)}
+  .nv-rowmode{flex:0 0 auto;font-size:11px;font-weight:700;white-space:nowrap;color:var(--nv-teal)}
+  .nv-rowmode.amber{color:var(--nv-amber)}
+  .nv-rowmode.red{color:var(--nv-red)}
+  .nv-rowwho{flex:0 0 auto;font-size:12.5px;font-weight:650;color:var(--ink);
+    max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nv-rowsubj{flex:0 1 auto;font-size:12.5px;color:var(--ink-2);
+    max-width:34%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  /* Rekommendationen får resten av bredden och kapas — hela poängen med raden
+     är att den är EN rad. */
+  .nv-rowrec{flex:1 1 0;min-width:0;font-size:12.2px;color:var(--ink-3);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .nv-rowbody{padding:0 4px 4px}
+  .nv-row.open .nv-caret{transform:rotate(90deg)}
+  .nv-rowhead .nv-caret{flex:0 0 auto;transition:transform .12s}
+  @media (max-width:900px){
+    .nv-rowhead{flex-wrap:wrap;gap:4px 10px}
+    .nv-rowsubj,.nv-rowrec{max-width:100%;flex:1 1 100%}
+  }
+
+  /* Sekundärt: finns kvar, men tar inte plats förrän man ber om det. */
+  .nv-secondary{border:0;background:none;margin:2px 0 12px}
+  .nv-secondary>summary{cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;
+    letter-spacing:.07em;text-transform:uppercase;color:var(--nv-ink-3);padding:6px 0;
+    list-style:none}
+  .nv-secondary>summary::-webkit-details-marker{display:none}
+  .nv-secondary>summary::before{content:"▸ ";color:var(--nv-ink-3)}
+  .nv-secondary[open]>summary::before{content:"▾ "}
+
+  /* Var uppmärksam på — en uppmaning, inte en siffra. */
+  .nv-watch{background:var(--nv-amber-soft);border-radius:8px;padding:12px 15px;margin-bottom:14px}
+  .nv-watch.red{background:var(--nv-red-soft)}
+  .nv-watchh{font-size:12.6px;font-weight:700;color:var(--nv-amber);margin-bottom:4px}
+  .nv-watch.red .nv-watchh{color:var(--nv-red)}
+  .nv-watch p{margin:0;font-size:13px;line-height:1.55;color:var(--nv-ink-2)}
+
+  /* Demo-kontext: samlad, hopfälld och nedtonad, så den aldrig sitter mitt
+     bland verifierade fakta. */
+  .nv-demobox{border:1px dashed var(--nv-rule);border-radius:8px;padding:0 13px;
+    background:transparent;margin-top:14px}
+  .nv-demobox summary{cursor:pointer;padding:10px 0;font-size:11.5px;font-weight:700;
+    letter-spacing:.07em;text-transform:uppercase;color:var(--nv-ink-3);list-style:none}
+  .nv-demobox summary::-webkit-details-marker{display:none}
+  .nv-demobox summary::before{content:"▸ ";color:var(--nv-ink-3)}
+  .nv-demobox[open] summary::before{content:"▾ "}
+  .nv-demogrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;padding-bottom:10px}
+  .nv-demogrid dt{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--nv-ink-3);font-weight:650;margin:0 0 1px}
+  .nv-demogrid dd{margin:0;font-size:12.5px;color:var(--nv-ink-3)}
+  .nv-demonote{margin:0;padding-bottom:12px;font-size:11px;line-height:1.5;color:var(--nv-ink-3)}
   /* ── Två spalter: HANDLING till vänster, UNDERLAG till höger ──────────────
      Kortet var en enda lång kolumn, så agenten fick scrolla förbi bevisen för
      att nå det den skulle göra. Nu står de bredvid varandra: vad du ska göra,
@@ -419,7 +494,16 @@
      a reply or write to Linear, and a button that silently does nothing is worse
      than no button, so these are inert and labelled. Only "Wrong — tell us why"
      acts, because judging a draft is a thing this app really does. */
-  .nv-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px}
+  .nv-actions{display:flex;align-items:flex-start;gap:10px 22px;flex-wrap:wrap;margin-top:16px;
+    padding-top:14px;border-top:1px solid var(--nv-rule)}
+  /* TVÅ GRUPPER, inte sex knappar i rad. Att svara kunden och att rapportera
+     vidare är olika beslut med olika konsekvens; låg de bredvid varandra läste
+     de som sex likvärdiga val. Gruppen bär rubriken, inte varje knapp. */
+  .nv-grp{display:flex;flex-direction:column;gap:7px}
+  .nv-grp+.nv-grp{padding-left:22px;border-left:1px solid var(--nv-rule)}
+  .nv-grp-h{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+    color:var(--nv-ink-3)}
+  .nv-grp-btns{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
   .nv-btn{font-family:inherit;font-size:12.5px;font-weight:650;padding:8px 15px;
     border-radius:6px;border:1px solid var(--nv-rule);background:var(--nv-paper);
     color:var(--nv-ink)}
@@ -430,8 +514,18 @@
   .nv-btn.used{background:var(--nv-teal-soft);border-color:var(--nv-teal-edge);
     color:var(--nv-teal);font-weight:700}
   .nv-btn.used::before{content:"✓ "}
-  .nv-wrong{margin-left:auto;font-family:inherit;font-size:12.5px;color:var(--nv-ink-3);
-    background:none;border:0;padding:0;cursor:pointer}
+  /* EN standardetikett per knapp i stället för en fyraradig fotnot under raden.
+     Fotnoten räknade upp vilka knappar som var demo och vilka som var inerta —
+     information som hör hemma på knappen den gäller, inte i en mening man måste
+     matcha mot den. */
+  .nv-btn .dm{margin-left:7px;font-size:9px;font-weight:700;letter-spacing:.07em;
+    text-transform:uppercase;padding:2px 5px;border-radius:3px;
+    background:var(--nv-note-bg);color:var(--nv-ink-3);border:1px solid var(--nv-rule)}
+  .nv-btn.primary .dm{background:rgba(255,255,255,.22);border-color:rgba(255,255,255,.35);
+    color:var(--on-solid)}
+  .nv-btn.used .dm{background:var(--nv-paper);border-color:var(--nv-teal-edge);color:var(--nv-teal)}
+  .nv-wrong{margin-left:auto;align-self:center;font-family:inherit;font-size:12.5px;
+    color:var(--nv-ink-3);background:none;border:0;padding:0;cursor:pointer}
   .nv-wrong:hover{color:var(--nv-teal);text-decoration:underline}
   .nv-preview{font-size:11px;color:var(--nv-ink-3);margin:8px 0 0;line-height:1.5}
   .nv-edit{width:100%;box-sizing:border-box;font-family:inherit;font-size:13.4px;
@@ -565,7 +659,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-06e-collapsible-sources";
+var APP_VERSION = "v2026-08-06f-one-card-at-a-time";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -576,7 +670,7 @@ var articlesByTicket = {};   // ticket_id -> the article row, for the per-card p
 var articles = [];           // every article, for the Articles tab (article_library)
 // Coaching tab state. All read-only: the tab observes, it never writes anywhere.
 var coach = { baselines: [], dist: [], steps: [], delivery: null, mix: [], pairing: [], failed: [], knowledge: null, loaded: false };
-var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,resolution_steps,grounding_verified,latency_ms,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,article_opportunity,prompt_version,created_at";
+var COLS = "id,ticket_id,ticket_url,subject,customer_message,conversation_context,latest_unresolved_request,customer_subscriptions,ticket_type,language,confidence,coach_mode,draft,resolution_steps,grounding_verified,source_refs,latency_ms,agent_analysis,rationale,sources,questions,detected_intent,qa_score,qa_verdict,qa_needs_review,qa_assessment,agent_qa_score,agent_qa_verdict,agent_qa_needs_review,agent_qa_assessment,verdict,verdict_at,verdict_by,verdict_reasons,critical_flag,review_version,agent_sent_reply,gold_answer,gold_answer_by,is_spam,crm_account_correct,crm_account_hint,article_opportunity,prompt_version,created_at";
 
 // Why an edited/unusable reply fell short — slug + Swedish label (CLAUDE.md / plan 1.3).
 var REASONS = [
@@ -985,7 +1079,13 @@ function setActive(idx) {
   if (activeIdx >= 0 && cardEls[activeIdx]) cardEls[activeIdx].classList.remove("active");
   activeIdx = idx;
   var c = cardEls[activeIdx];
-  if (c) { c.classList.add("active"); c.scrollIntoView({ block: "center", behavior: "smooth" }); }
+  if (c) {
+    c.classList.add("active");
+    // Fliken Agent notes fäller ut det aktiva kortet och stänger det förra.
+    // Andra flikar sätter ingen _activate och påverkas inte.
+    if (c._activate) c._activate();
+    c.scrollIntoView({ block: "center", behavior: "smooth" });
+  }
 }
 function moveActive(delta) {
   if (!cardEls.length) return;
@@ -995,7 +1095,9 @@ function moveActive(delta) {
   setActive(next);
 }
 document.addEventListener("keydown", function (e) {
-  if (!token || !shown.length) return;
+  // `shown` fylls bara av granskningsflikarna; Agent notes har sin egen lista,
+  // så villkoret är "finns det kort", inte "finns det granskningsrader".
+  if (!token || !cardEls.length) return;
   var t = e.target;
   if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable)) return;
   if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -1003,6 +1105,7 @@ document.addEventListener("keydown", function (e) {
   if (k === "j" || e.key === "ArrowDown") { e.preventDefault(); moveActive(1); }
   else if (k === "k" || e.key === "ArrowUp") { e.preventDefault(); moveActive(-1); }
   else if (k === "u" || k === "e" || k === "n") {
+    if (!shown.length) return;   // verdikt hör hemma i granskningsflikarna
     if (activeIdx < 0) return;
     var v = k === "u" ? "usable" : k === "e" ? "edited" : "unusable";
     var c = cardEls[activeIdx];
@@ -3034,11 +3137,37 @@ var ART_LABEL = {
 // Freshdesk itself keeps the plain HTML note; its sanitiser strips most styling,
 // so this and the posted note deliberately differ.
 
+// ETT beslut, inte tre parallella tillstånd.
+//
+// Förut bar kortet läget, ordet "Confident" och en stapelmätare bredvid
+// varandra — och kunde säga "Confident, sources unverified", vilket är två
+// påståenden som drar åt olika håll i samma andetag. Agenten ska läsa EN sak:
+// kan jag skicka det här?
+//
+// Ikon + text bär hela innebörden. Färgen är förstärkning, aldrig ensam bärare
+// (WCAG 1.4.1) — chipet är begripligt i gråskala.
 var NOTE_MODE = {
-  REPLY_READY: { cls: "", badge: "Ready to send" },
-  COACH_AGENT: { cls: "amber", badge: "Check before replying" },
-  AGENT_ACTION_REQUIRED: { cls: "red", badge: "Action required first" },
+  REPLY_READY: { cls: "", icon: "🟢", badge: "Klart att skicka" },
+  COACH_AGENT: { cls: "amber", icon: "🟡", badge: "Granska först" },
+  AGENT_ACTION_REQUIRED: { cls: "red", icon: "🔴", badge: "Åtgärd krävs innan svar" },
 };
+
+// Grundningen är en EGENSKAP hos beslutet, inte ett konkurrerande tillstånd —
+// därför en kort bisats i chipet i stället för en egen bricka. Formuleringarna
+// är entydiga: ingen av dem påstår både styrka och svaghet samtidigt.
+function groundingPhrase(r) {
+  if (r.grounding_verified === true) return "belagt i källor";
+  if (r.grounding_verified === false) return "utan belägg i källorna";
+  if (r.confidence === "high") return "belägg ej kontrollerat";
+  if (r.confidence === "low") return "delvis belagt";
+  return "inget belägg hittat";
+}
+
+// Vad mätaren faktiskt mäter — som tooltip, för det är inte självklart.
+var GROUNDING_HELP =
+  "Mätaren visar hur mycket av svaret som gick att spåra till en källa vi " +
+  "faktiskt lämnade in. Den räknas fram i koden ur pipelinens signaler — " +
+  "modellen kan inte höja sin egen siffra.";
 
 // Confidence as a five-bar meter. Grounding verification counts against it: an
 // asserting draft that never resolved a source is not a confident answer, it is
@@ -3048,13 +3177,7 @@ function confBars(r) {
   if (r.confidence === "low") return 2;
   return 0;
 }
-function confWord(r) {
-  if (r.confidence === "high") {
-    return r.grounding_verified === false ? "Confident, sources unverified" : "Grounded";
-  }
-  if (r.confidence === "low") return "Partly grounded";
-  return "Not grounded";
-}
+function confWord(r) { return groundingPhrase(r); }
 
 // Which match tier found the CRM account, and how far to trust it.
 var NV_MATCH_NOTE = {
@@ -3190,17 +3313,13 @@ function crmStripEl(r) {
 
   // With no real CRM answer we still show the strip, so the layout holds — but
   // it is then demo cells ONLY, and says so.
+  // Sample-fälten bor numera i demoContextEl, samlade och nedtonade. Den här
+  // funktionen ansvarar bara för VERIFIERAD CRM-data — och när det inte finns
+  // någon returnerar den ingenting alls, i stället för en remsa som ser full ut
+  // av platshållare.
   function demoOnlyStrip(note) {
-    var box = el("div", "nv-crm");
-    var strip = el("div", "nv-cust");
-    appendAccountCells(strip, r);
-    appendDemoCells(strip, r);
-    if (strip.children.length) box.appendChild(strip);
-    // The "we found nothing" line is worth saying when the strip is empty and
-    // misleading under a strip that is visibly full. Ambiguity still speaks up
-    // below — that one an agent has to act on.
-    else box.appendChild(set(el("div", "nv-matched"), note));
-    return box;
+    if (c && c.status === "ambiguous") return null;   // hanteras nedan
+    return null;
   }
 
   if (!c) return demoOnlyStrip("No CRM lookup for this ticket.");
@@ -3225,11 +3344,7 @@ function crmStripEl(r) {
 
   var box = el("div", "nv-crm");
   var strip = el("div", "nv-cust");
-  // appendAccountCells already condenses the subscriptions into Account +
-  // Renewal, as the design does. A cell per subscription on top of that repeated
-  // the same products twice in one strip.
   appendAccountCells(strip, r);
-  appendDemoCells(strip, r);
   box.appendChild(strip);
   if (c.matchedBy && NV_MATCH_NOTE[c.matchedBy]) {
     box.appendChild(set(el("div", "nv-matched"), "Account " + NV_MATCH_NOTE[c.matchedBy] + "."));
@@ -3295,6 +3410,34 @@ function renderCoverageEl(coverage) {
   return box;
 }
 
+// "Hittade" och "använde" är två olika saker, och skillnaden är hela poängen:
+// en källa som lades fram men inte användes förklarar inte svaret. Utkastet
+// rapporterar `source_refs` (t.ex. "kb:1042", "ticket:85703", "P2") och de
+// matchas mot `sources[].ref` — samma nycklar som verifyGroundingRefs använder
+// i pipelinen, så appen och gaten läser samma sak.
+//
+// Fältet är nytt: bara 14 av 168 genereringar har det. De äldre säger DÄRFÖR
+// uttryckligen "ej registrerat" i stället för att tigande se ut som "inte
+// använd" — en tom lista och en obefintlig lista betyder helt olika saker.
+function refUse(r) {
+  var refs = Array.isArray(r.source_refs) ? r.source_refs : null;
+  var recorded = !!refs && (refs.length > 0 || r.grounding_verified != null);
+  var set_ = {};
+  (refs || []).forEach(function (x) { set_[String(x).trim().toLowerCase()] = true; });
+  return {
+    recorded: recorded,
+    // `pos` är källans plats i sin egen grupp, 1-indexerad — playbook-poster
+    // refereras som P1/P2 i stället för med ett id.
+    used: function (src, pos) {
+      if (!recorded) return null;
+      if (src.ref && set_[String(src.ref).toLowerCase()]) return true;
+      if (src.id != null && src.kind && set_[src.kind + ":" + src.id]) return true;
+      if (pos && set_["p" + pos]) return true;
+      return false;
+    },
+  };
+}
+
 // Ett läge per system:
 //   hit   grönt  — vi hittade något att gå på
 //   bad   rött   — vi hittade något, och det är ett problem (en öppen bugg)
@@ -3327,10 +3470,16 @@ function sourceSystemsEl(r) {
   groups.push({ key: "confluence", label: "Confluence", notConnected: true,
     empty: "Not connected — this ticket's topic was never checked there." });
 
+  var use = refUse(r);
   var box = el("div", "nv-sys");
   groups.forEach(function (g) {
     var has = g.items && g.items.length;
     var state = g.notConnected ? "na" : has ? (g.bad ? "bad" : "hit") : "none";
+    // Hur många av gruppens källor svaret faktiskt lutade sig mot. Sample- och
+    // ej-anslutna rader har inga refs att matcha mot och räknas inte.
+    var nUsed = (has && !g.sample && !g.notConnected)
+      ? g.items.filter(function (s, i) { return use.used(s, i + 1) === true; }).length
+      : 0;
 
     var row = el("div", "nv-sysrow " + state);
     var head = document.createElement("button");
@@ -3350,13 +3499,20 @@ function sourceSystemsEl(r) {
       : (g.empty || "nothing found");
     head.appendChild(sum);
     if (g.sample) head.appendChild(set(el("span", "nv-demotag"), "sample"));
+    // Sammanfattningen på huvudraden, så skillnaden syns utan att fälla ut.
+    if (has && !g.sample && !g.notConnected) {
+      head.appendChild(set(el("span", "nv-use" + (use.recorded ? (nUsed ? " on" : "") : " unk")),
+        !use.recorded ? "användning ej registrerad"
+          : nUsed ? nUsed + " använd" + (nUsed === 1 ? "" : "a") + " i svaret"
+          : "ingen använd i svaret"));
+    }
     if (has) head.appendChild(set(el("span", "nv-caret"), "▸"));
     row.appendChild(head);
 
     if (has) {
       var list = el("ul", "nv-facts nv-sysbody");
       list.style.display = "none";
-      g.items.forEach(function (src) {
+      g.items.forEach(function (src, i) {
         var li = document.createElement("li");
         var txt = el("span", "nv-fact");
         if (src.url) {
@@ -3375,6 +3531,14 @@ function sourceSystemsEl(r) {
           pub.textContent = "send to customer";
           txt.appendChild(pub);
         }
+        // Per källa, ALLTID — även när svaret är "det registrerades inte".
+        if (!g.sample && !g.notConnected) {
+          var u = use.used(src, i + 1);
+          txt.appendChild(set(el("span", "nv-use" + (u === true ? " on" : u === false ? " off" : " unk")),
+            u === true ? "använd i svaret"
+              : u === false ? "inte använd"
+              : "ej registrerat"));
+        }
         li.appendChild(txt);
         list.appendChild(li);
       });
@@ -3389,6 +3553,68 @@ function sourceSystemsEl(r) {
     }
     box.appendChild(row);
   });
+  return box;
+}
+
+// Hälsan som HANDLING, inte som fyra siffror i en remsa. Gult/rött konto eller
+// öppna ärenden betyder att svaret inte är hela jobbet — och det måste stå
+// ovanför svaret, inte under det.
+//
+// Den bygger på sample-data, så notisen säger det rakt ut. Att härleda en
+// uppmaning ur påhittad hälsa och presentera den som ett faktum vore precis det
+// misstag sample-märkningen finns för att förhindra.
+function watchOutEl(r) {
+  if (!PLANHAT_DEMO) return null;
+  var d = demoPlanhat(r.ticket_id);
+  var a = demoAccount(r.ticket_id);
+  var bad = d.health !== "Green";
+  if (!bad && !d.alsoOpen) return null;
+
+  var box = el("div", "nv-watch" + (d.health === "Red" ? " red" : ""));
+  var h = el("div", "nv-watchh");
+  h.appendChild(document.createTextNode("⚠️ Var uppmärksam på"));
+  h.appendChild(set(el("span", "nv-demotag"), "sample"));
+  box.appendChild(h);
+
+  var says = [];
+  if (bad) {
+    says.push("Kontots hälsa är " + d.health.toLowerCase() + " och CSM " + d.csm +
+      " bör informeras innan svaret går ut. Förnyelse " + a.renewal + ".");
+  }
+  if (d.alsoOpen) {
+    says.push(d.alsoOpen + " annat ärende" + (d.alsoOpen === 1 ? "" : "n") +
+      " är öppna på kunden — kolla om de hänger ihop innan du svarar på det här.");
+  }
+  box.appendChild(set(el("p", ""), says.join(" ")));
+  return box;
+}
+
+// All platshållardata på ETT ställe, nedtonat. Förut låg den utspridd över
+// remsan och rubriken med var sitt chip, vilket gjorde att den satt mitt bland
+// riktiga fakta och kunde läsas som verifierad.
+function demoContextEl(r) {
+  if (!PLANHAT_DEMO) return null;
+  var d = demoPlanhat(r.ticket_id);
+  var a = demoAccount(r.ticket_id);
+  var box = el("details", "nv-demobox");
+  var sum = document.createElement("summary");
+  sum.appendChild(document.createTextNode("Demo-kontext"));
+  sum.appendChild(set(el("span", "nv-demotag"), "ej verifierat"));
+  box.appendChild(sum);
+
+  var dl = el("div", "nv-demogrid");
+  [["Konto", a.plan], ["Förnyelse", a.renewal],
+   ["Hälsa", d.health + " · CSM " + d.csm],
+   ["Öppna ärenden", d.alsoOpen ? String(d.alsoOpen) : "inga"]].forEach(function (row) {
+    var cell = document.createElement("div");
+    cell.appendChild(set(el("dt", ""), row[0]));
+    cell.appendChild(set(el("dd", ""), row[1]));
+    dl.appendChild(cell);
+  });
+  box.appendChild(dl);
+  box.appendChild(set(el("p", "nv-demonote"),
+    "Freshworks CRM är inte påslaget och Planhat har ingen klient, så de här " +
+    "fyra fälten är exempeldata. De får inte ligga till grund för ett beslut."));
   return box;
 }
 
@@ -3447,26 +3673,41 @@ function noteViewEl(r) {
   note.appendChild(el("div", "nv-rail" + (mode.cls ? " " + mode.cls : "")));
   var inner = el("div", "nv-inner");
 
+  // ── EN beslutsrad, högst upp ──
+  // Chipet bär ikon + text (färg är förstärkning), grundningen som bisats, och
+  // mätaren har en tooltip eftersom "4 av 5 staplar" annars inte betyder något.
   var head = el("div", "nv-head");
-  head.appendChild(set(el("span", "nv-mode" + (mode.cls ? " " + mode.cls : "")), mode.badge));
-  if (usedTraining(r)) head.appendChild(set(el("span", "nv-trained"), "★ trained"));
+  var chip = el("span", "nv-mode" + (mode.cls ? " " + mode.cls : ""));
+  chip.appendChild(document.createTextNode(mode.icon + " " + mode.badge));
+  head.appendChild(chip);
+
   var conf = el("span", "nv-conf");
-  conf.appendChild(document.createTextNode(confWord(r)));
+  conf.title = GROUNDING_HELP;
+  conf.appendChild(document.createTextNode(groundingPhrase(r)));
   var bars = el("span", "nv-bars" + (mode.cls ? " " + mode.cls : ""));
+  bars.setAttribute("role", "img");
+  bars.setAttribute("aria-label", "Grundning " + confBars(r) + " av 5. " + GROUNDING_HELP);
   var filled = confBars(r);
   for (var i = 0; i < 5; i++) bars.appendChild(el("i", i < filled ? "on" : ""));
   conf.appendChild(bars);
   head.appendChild(conf);
 
+  if (usedTraining(r)) head.appendChild(set(el("span", "nv-trained"), "★ tränad"));
+
   var stamp = [];
-  if (r.latency_ms) stamp.push("drafted in " + Math.round(r.latency_ms / 1000) + "s");
-  var nSrc = Array.isArray(r.sources) ? r.sources.length : 0;
-  stamp.push(nSrc + " source" + (nSrc === 1 ? "" : "s") + " checked");
+  if (r.latency_ms) stamp.push("skrivet på " + Math.round(r.latency_ms / 1000) + " s");
+  var nSrcAll = Array.isArray(r.sources) ? r.sources.length : 0;
+  stamp.push(nSrcAll + " källa" + (nSrcAll === 1 ? "" : "or") + " kontrollerade");
   head.appendChild(set(el("span", "nv-stamp"), stamp.join(" · ")));
   inner.appendChild(head);
 
-  // Header och kontextremsan går över hela bredden — de är kortets ram.
-  inner.appendChild(crmStripEl(r));
+  // ── Var uppmärksam på ──
+  // Hälsan var passiv: fyra siffror i en remsa som ingen agerar på. Är kontot
+  // gult/rött eller har öppna ärenden är det en UPPMANING, och den hör hemma
+  // ovanför svaret — inte i en remsa man läser efteråt.
+  var watch = watchOutEl(r);
+  if (watch) inner.appendChild(watch);
+
   if (r.coverage) inner.appendChild(renderCoverageEl(r.coverage));
 
   // Därefter två spalter: HANDLING till vänster, UNDERLAG till höger.
@@ -3521,10 +3762,23 @@ function noteViewEl(r) {
   side.appendChild(set(el("h4", "nv-h"), "What we know"));
   side.appendChild(sourceSystemsEl(r));
 
+  // Modellens läsning av situationen är bakgrund, inte beslut. Den låg tidigare
+  // i full längd direkt under källorna och konkurrerade med dem om blicken;
+  // hopfälld finns den kvar för den som vill kontrollera resonemanget.
   if (r.agent_analysis && r.agent_analysis.trim()) {
-    side.appendChild(set(el("h4", "nv-h"), "Read of the situation"));
-    side.appendChild(set(el("div", "nv-analysis"), r.agent_analysis));
+    var an = document.createElement("details");
+    an.className = "nv-secondary";
+    an.appendChild(set(document.createElement("summary"), "Read of the situation"));
+    an.appendChild(set(el("div", "nv-analysis"), r.agent_analysis));
+    side.appendChild(an);
   }
+
+  // Sekundärt, sist och hopfällt: kontexten man vill kunna slå upp men inte
+  // läsa varje gång.
+  var crm = crmStripEl(r);
+  if (crm) side.appendChild(crm);
+  var demo = demoContextEl(r);
+  if (demo) side.appendChild(demo);
 
   cols.appendChild(act);
   cols.appendChild(side);
@@ -3559,6 +3813,20 @@ function noteActionsEl(r, wrap) {
   var row = el("div", "nv-actions");
   var out = el("div", "nv-demoout");   // where a demo action reports back
 
+  // Två grupper. Vänster handlar om KUNDEN och är det enda som skulle lämna
+  // huset; höger handlar om att RAPPORTERA VIDARE internt. Att blanda dem gav
+  // sex likvärdiga knappar där bara en har verkliga konsekvenser.
+  function group(title) {
+    var g = el("div", "nv-grp");
+    g.appendChild(set(el("span", "nv-grp-h"), title));
+    var btns = el("div", "nv-grp-btns");
+    g.appendChild(btns);
+    row.appendChild(g);
+    return btns;
+  }
+  var toCust = group("Svara kund");
+  var onward = group("Rapportera vidare");
+
   function say(text, cls) {
     out.innerHTML = "";   // this app has no clear() helper
     var line = el("div", "nv-said" + (cls ? " " + cls : ""));
@@ -3571,18 +3839,20 @@ function noteActionsEl(r, wrap) {
   function inert(label, cls) {
     var b = document.createElement("button");
     b.className = "nv-btn" + (cls ? " " + cls : "");
-    b.textContent = label;
+    b.appendChild(document.createTextNode(label));
+    b.appendChild(set(el("span", "dm"), "förhandsvy"));
     b.disabled = true;
-    b.title = "Preview only — this app never sends anything to a customer.";
+    b.title = "Förhandsvy av widgeten i Freshdesk. Den här sidan skickar aldrig " +
+      "något till en kund.";
     return b;
   }
   // Send reply förblir inert: det är den enda riktiga externa skrivningen.
-  row.appendChild(inert("Send reply", "primary"));
+  toCust.appendChild(inert("Send reply", "primary"));
 
   // Edit first FÅR agera. Att redigera texten stannar på sidan, och då gäller
   // samma regel som för de andra demoknapparna. En knapp som inte gör något
   // alls är sämre än ingen knapp — det var därför den kändes trasig.
-  var editBtn = demoBtn("Edit first", function () {
+  var editBtn = demoBtn("Edit first", "på sidan", function () {
     var box = wrap.querySelector(".nv-draft");
     if (!box) { say("Det finns inget utkast att redigera i den här notisen."); return; }
     if (box.querySelector("textarea")) return;   // redan öppen
@@ -3621,18 +3891,18 @@ function noteActionsEl(r, wrap) {
     say("Utkastet är öppet för redigering. Ändringarna sparas inte här — " +
       "kopiera texten och klistra in den i Freshdesk, där svaret faktiskt skickas.");
   });
-  row.appendChild(editBtn);
+  toCust.appendChild(editBtn);
 
   // ── demo: Linear ──
   var lin = "LIN-" + (2100 + ((Number(r.ticket_id) || 0) % 140));
   var votes = 4 + ((Number(r.ticket_id) || 0) % 9);
-  row.appendChild(demoBtn("Bifoga till " + lin, function () {
+  onward.appendChild(demoBtn("Bifoga till " + lin, "demo", function () {
     say("Ärendet bifogat till " + lin + " · " + (votes + 1) +
       " röster. Kunden kan rösta via länken i svaret.", "ok");
   }));
 
   // ── demo: Planhat ──
-  row.appendChild(demoBtn("Kopiera CSM", function () {
+  onward.appendChild(demoBtn("Kopiera CSM", "demo", function () {
     var d = demoPlanhat(r.ticket_id);
     say("CSM " + d.csm + " kopierad. Aktivitet skapad på kontot.", "ok");
   }));
@@ -3641,7 +3911,7 @@ function noteActionsEl(r, wrap) {
   // Från genomgången: "Start Confluence draft" står på tre av scenarioslidesen.
   // Det är loopens första steg — luckan blir en uppgift i samma ögonblick den
   // hittas, i stället för att glömmas bort när ärendet stängs.
-  row.appendChild(demoBtn("Starta Confluence-utkast", function () {
+  onward.appendChild(demoBtn("Starta Confluence-utkast", "demo", function () {
     say("Utkast påbörjat i Confluence · Customer Care — \u201C" +
       (r.subject || "Ärendet") + "\u201D. Det ligger under 📝 Artiklar tills " +
       "någon granskar och godkänner det.", "ok");
@@ -3650,7 +3920,7 @@ function noteActionsEl(r, wrap) {
   // ── demo: Scribe ──
   // Placed with the others rather than hidden behind a gap check: the point of a
   // demo button is that it can be found.
-  row.appendChild(scribeBtn(r, say));
+  onward.appendChild(scribeBtn(r, say));
 
   var wrong = document.createElement("button");
   wrong.className = "nv-wrong";
@@ -3666,18 +3936,23 @@ function noteActionsEl(r, wrap) {
 
   box.appendChild(row);
   box.appendChild(out);
+  // EN rad kvar, inte fyra: etiketten sitter numera på knappen den gäller.
   box.appendChild(set(el("p", "nv-preview"),
-    "Send / Edit are a preview of the in-Freshdesk widget. Linear, Planhat (CSM), " +
-    "Confluence and Scribe are demo actions — none of those systems is connected, " +
-    "and nothing here leaves this page. \u201CWrong\u201D opens the ticket in To review."));
+    "Ingen av knapparna lämnar den här sidan."));
   return box;
 }
 
-function demoBtn(label, onClick) {
+// `tag` är knappens standardetikett — "demo" när systemet inte är anslutet,
+// "på sidan" när handlingen är verklig men stannar i webbläsaren. Den ersätter
+// fotnoten som räknade upp samma sak i löptext.
+function demoBtn(label, tag, onClick) {
   var b = document.createElement("button");
   b.className = "nv-btn";
-  b.textContent = label;
-  b.title = "Demo — not connected. Nothing leaves this page.";
+  b.appendChild(document.createTextNode(label));
+  if (tag) b.appendChild(set(el("span", "dm"), tag));
+  b.title = tag === "demo"
+    ? "Demo — systemet är inte anslutet. Ingenting lämnar den här sidan."
+    : "Sker i webbläsaren. Ingenting lämnar den här sidan.";
   b.onclick = function () { b.classList.add("used"); onClick(); };
   return b;
 }
@@ -3693,15 +3968,21 @@ function scribeBtn(r, say) {
   b.title = "Demo — no screen is recorded. Recording requires MBL consultation and a DPA first.";
   var timer = null, seconds = 0;
 
+  // Etiketten skrivs om varje sekund, så den standardiserade "demo"-brickan
+  // måste sättas tillbaka varje gång — annars försvinner den vid första ticket.
+  function label(text) {
+    b.textContent = text;
+    b.appendChild(set(el("span", "dm"), "demo"));
+  }
   function idle() {
     b.classList.remove("on");
-    b.textContent = "⏺ Spela in lösningen";
+    label("⏺ Spela in lösningen");
   }
   function tick() {
     seconds++;
     var m = String(Math.floor(seconds / 60)).padStart(2, "0");
     var ss = String(seconds % 60).padStart(2, "0");
-    b.textContent = "⏹ Spelar in " + m + ":" + ss + " — klicka för att avsluta";
+    label("⏹ Spelar in " + m + ":" + ss + " — klicka för att avsluta");
   }
 
   b.onclick = function () {
@@ -3785,7 +4066,100 @@ function renderAgentNotes() {
     lw.appendChild(set(el("div", "empty"), "Nothing matches."));
     return;
   }
-  list.forEach(function (r) { lw.appendChild(noteViewEl(r)); });
+
+  lw.appendChild(set(el("p", "nv-hint"),
+    "Ett ärende åt gången är öppet. Klicka på en rad för att öppna den — piltangenter " +
+    "(eller j/k) flyttar mellan raderna."));
+
+  // ETT KORT ÅT GÅNGEN. Hundra utfällda kort är inte en lista, det är hundra
+  // sidor på rad: man tappar överblicken över vilka ärenden som finns och kan
+  // inte jämföra dem. Hopfällt bär raden det som avgör om man vill öppna den —
+  // läget, kunden, ämnet, och en mening om vad AI:n rekommenderar.
+  var openIdx = -1;
+  list.forEach(function (r, i) {
+    var row = compactRowEl(r, function () { openAt(i); });
+    row._activate = function () { openAt(i); };
+    cardEls.push(row);
+    lw.appendChild(row);
+  });
+
+  function openAt(i) {
+    if (openIdx === i) return;
+    if (openIdx >= 0) {
+      var prev = cardEls[openIdx];
+      prev.classList.remove("open");
+      var body = prev.querySelector(".nv-rowbody");
+      if (body) prev.removeChild(body);
+      prev.querySelector(".nv-rowhead").setAttribute("aria-expanded", "false");
+    }
+    openIdx = i;
+    // Klick och piltangenter måste peka på SAMMA rad. Utan den här raden
+    // fortsatte tangentnavigeringen från den senast piltangent-valda raden,
+    // så första piltryckningen efter ett klick hoppade tillbaka.
+    if (activeIdx !== i) {
+      if (activeIdx >= 0 && cardEls[activeIdx]) cardEls[activeIdx].classList.remove("active");
+      activeIdx = i;
+      cardEls[i].classList.add("active");
+    }
+    var cur = cardEls[i];
+    cur.classList.add("open");
+    var wrapEl = el("div", "nv-rowbody");
+    wrapEl.appendChild(noteViewEl(list[i]));
+    cur.appendChild(wrapEl);
+    cur.querySelector(".nv-rowhead").setAttribute("aria-expanded", "true");
+  }
+
+  openAt(0);
+  activeIdx = 0;
+  cardEls[0].classList.add("active");
+}
+
+// Den hopfällda raden. Den ska svara på "är det här ärendet värt att öppna?"
+// och ingenting mer — därför läge, kund, ämne och EN mening, inte en
+// sammanfattning av notisen.
+function compactRowEl(r, onOpen) {
+  var mode = NOTE_MODE[r.coach_mode] || NOTE_MODE.COACH_AGENT;
+  var row = el("div", "nv-row" + (mode.cls ? " " + mode.cls : ""));
+
+  var head = document.createElement("button");
+  head.type = "button";
+  head.className = "nv-rowhead";
+  head.setAttribute("aria-expanded", "false");
+  head.onclick = onOpen;
+
+  head.appendChild(set(el("span", "nv-rowmode" + (mode.cls ? " " + mode.cls : "")),
+    mode.icon + " " + mode.badge));
+
+  var who = PLANHAT_DEMO ? demoRequester(r.ticket_id, r.draft).company : null;
+  head.appendChild(set(el("span", "nv-rowwho"), who || ("#" + r.ticket_id)));
+  head.appendChild(set(el("span", "nv-rowsubj"), r.subject || "(no subject)"));
+
+  // En mening om rekommendationen: första steget om det finns, annars första
+  // meningen i utkastet, annars att coachen avstod.
+  var steps = Array.isArray(r.resolution_steps) ? r.resolution_steps : [];
+  var line = steps.length ? steps[0]
+    : (r.draft && r.draft.trim()) ? firstSentence(r.draft)
+    : "Coachen avstod — bedömningen ligger hos dig.";
+  head.appendChild(set(el("span", "nv-rowrec"), line));
+
+  head.appendChild(set(el("span", "nv-caret"), "▸"));
+  row.appendChild(head);
+  return row;
+}
+
+// Första MENINGSBÄRANDE meningen. Nästan varje utkast öppnar med "Hej!" eller
+// "Hei," — som enradssammanfattning säger den ingenting, så korta inledningar
+// slås ihop med nästa mening tills raden faktiskt bär innehåll.
+function firstSentence(text) {
+  var t = String(text).replace(/\s+/g, " ").trim();
+  var out = "";
+  var re = /[^.!?]*[.!?]|[^.!?]+$/g, m;
+  while ((m = re.exec(t)) !== null) {
+    out = (out ? out + " " : "") + m[0].trim();
+    if (out.length >= 40) break;
+  }
+  if (!out) out = t;
+  return out.length > 150 ? out.slice(0, 147) + "…" : out;
 }
 
 // QA score → colour band: red < 60, amber 60-74, green 75+ (or red if flagged).
