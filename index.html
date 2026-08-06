@@ -70,22 +70,18 @@
     --nv-red:var(--crit);--nv-red-soft:var(--crit-soft);
     --nv-bar:var(--bar-off);
   }
-  @media(prefers-color-scheme:dark){:root{
-    --ink:#E8EDF1;--ink-2:#A5B2BD;--ink-3:#7C8B96;
-    --bg:#0E1319;--surface:#151C24;--surface-2:#1C252F;--border:#2A3540;
-    --accent:#4FD1C5;--accent-soft:#123A38;--accent-edge:#1C4C49;
-    --good:#4FD1C5;--good-soft:#123A38;
-    --warn:#E0A64B;--warn-soft:#33280F;
-    --crit:#E86B5C;--crit-soft:#38191A;
-    --info:#8AA0B5;
-    /* Warm-TINTED panel rather than the literal cream. A #FFFDF4 slab in dark
-       mode is a torch, not a note — the warmth carries the design across, not
-       the exact hex. */
-    --paper-warm:#1B1E1C;--paper-warm-edge:#3A3524;
-    --bar-off:#2A3540;
-    --on-solid:#0E1319;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 4px 16px rgba(0,0,0,.3);
-  }}
+  /* NO DARK MODE — removed 2026-08-06.
+     The design is the beige note on light paper (private_note_freshdesk_v5.html
+     and coach_review_coaching_tab.html). Following the reader's OS theme turned
+     the whole app dark navy, which is why it never matched the mockups no matter
+     how many tokens were corrected: the tokens were right and the theme was
+     overriding all of them.
+
+     A note is a piece of paper. It has one colour, and the room's lighting does
+     not change it. If dark mode is ever wanted it needs its own designed palette
+     rather than an inverted one — which is a design decision, not a media query. */
+  :root{color-scheme:light}
+
   *{box-sizing:border-box}
   body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.5;font-variant-numeric:tabular-nums}
   .wrap{max-width:920px;margin:0 auto;padding:24px 16px 80px}
@@ -340,11 +336,20 @@
   .nv-facts li{font-size:13.2px;line-height:1.5;color:var(--nv-ink);
     padding:0 0 7px;display:flex;gap:9px}
   .nv-facts li:last-child{padding-bottom:0}
-  .nv-src{flex:0 0 auto;font-size:10px;font-weight:700;letter-spacing:.05em;
-    text-transform:uppercase;color:var(--nv-ink-3);border:1px solid var(--nv-rule);
-    background:var(--nv-paper);border-radius:3px;padding:2px 6px;margin-top:2px;
-    height:fit-content;min-width:92px;text-align:center}
-  .nv-src.hit{color:var(--nv-teal);border-color:var(--nv-teal-edge);background:var(--nv-teal-soft)}
+  /* Källchips som i bild 2: breda, fyllda piller med luft — inte smala
+     outline-etiketter. Bredden är fast så att texten bredvid dem radar upp sig
+     i en kolumn, vilket är det som gör listan skannbar. */
+  .nv-src{flex:0 0 auto;font-size:10.5px;font-weight:700;letter-spacing:.07em;
+    text-transform:uppercase;color:var(--nv-ink-2);border:1px solid transparent;
+    background:#E7EDEF;border-radius:6px;padding:7px 12px;margin-top:0;
+    height:fit-content;min-width:118px;text-align:center;line-height:1.2}
+  /* Bild 2 färgar INTE träffarna. SLACK, JIRA och PLANHAT är neutralt blågrå;
+     bara CONFLUENCE — den som lästes utan att ha något — är röd. Det är rätt
+     prioritering: en källa som svarade är det normala och behöver ingen färg,
+     medan "vi tittade och hittade inget" är resultatet agenten måste agera på. */
+  .nv-src.hit{color:var(--nv-ink-2);background:#E7EDEF}
+  .nv-src.miss{color:var(--nv-red);background:var(--nv-red-soft)}
+  .nv-facts li{align-items:flex-start}
   .nv-fact{min-width:0}
   .nv-fact a{color:var(--nv-ink);text-decoration:none;border-bottom:1px solid var(--nv-rule)}
   .nv-fact a:hover{border-bottom-color:var(--nv-teal)}
@@ -355,6 +360,16 @@
   .nv-draft p{margin:0 0 9px;font-size:13.4px;line-height:1.6;color:var(--nv-ink)}
   .nv-draft p:last-child{margin-bottom:0}
   .nv-analysis{font-size:13px;line-height:1.55;color:var(--nv-ink-2);margin-bottom:4px}
+  /* "RECOMMENDED · …" i bild 2: en något djupare beige ruta med kant, så att
+     rekommendationen läses som slutsatsen och inte som ännu ett stycke. */
+  .nv-rec{background:#FBF3D8;border:1px solid var(--nv-note-edge);border-radius:8px;
+    padding:14px 16px;margin:4px 0 14px}
+  .nv-rec .rl{display:block;font-size:10.5px;font-weight:700;letter-spacing:.09em;
+    text-transform:uppercase;color:var(--nv-teal);margin-bottom:6px}
+  .nv-rec p{margin:0;font-size:13.4px;line-height:1.6;color:var(--nv-ink);font-weight:600}
+  /* Varningsbannern (churn/risk) — ljust röd med röd text, som i bild 2. */
+  .nv-alert{background:var(--nv-red-soft);color:var(--nv-red);border-radius:8px;
+    padding:11px 15px;margin-bottom:14px;font-size:13.2px;font-weight:600;line-height:1.5}
 
   /* The action row. PREVIEW ONLY — see noteActionsEl: the review app cannot send
      a reply or write to Linear, and a button that silently does nothing is worse
@@ -494,7 +509,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05k-note-palette";
+var APP_VERSION = "v2026-08-06a-light-only";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -3131,7 +3146,7 @@ function appendSampleSystemFacts(list, r) {
   ];
   rows.forEach(function (row) {
     var li = document.createElement("li");
-    var tag = el("span", "nv-src" + (row.hit ? " hit" : ""));
+    var tag = el("span", "nv-src " + (row.hit ? "hit" : "miss"));
     tag.appendChild(document.createTextNode(sourceTag(row.kind)));
     li.appendChild(tag);
     var txt = el("span", "nv-fact");
@@ -3227,6 +3242,8 @@ function noteViewEl(r) {
     r.sources.forEach(function (src) {
       var li = document.createElement("li");
       li.appendChild(set(el("span", "nv-src hit"), sourceTag(src.kind)));
+      // (en verklig källa gav alltid något — .miss används för de kontrollerade
+      //  systemen nedan som lästes utan träff)
       var txt = el("span", "nv-fact");
       var link = document.createElement("a");
       link.href = src.url || "#"; link.target = "_blank"; link.rel = "noopener";
@@ -3284,6 +3301,17 @@ function noteViewEl(r) {
   if (r.agent_analysis && r.agent_analysis.trim()) {
     inner.appendChild(set(el("h4", "nv-h"), "Read of the situation"));
     inner.appendChild(set(el("div", "nv-analysis"), r.agent_analysis));
+  }
+
+  // The recommendation, as its own conclusion block (image 2). Built from the
+  // first resolution step, because that IS the recommended action — it was
+  // previously buried as item one of a numbered list.
+  var recSteps = Array.isArray(r.resolution_steps) ? r.resolution_steps : [];
+  if (recSteps.length) {
+    var rec = el("div", "nv-rec");
+    rec.appendChild(set(el("span", "rl"), "Recommended · next step"));
+    rec.appendChild(set(el("p", ""), recSteps[0]));
+    inner.appendChild(rec);
   }
 
   inner.appendChild(noteActionsEl(r));
