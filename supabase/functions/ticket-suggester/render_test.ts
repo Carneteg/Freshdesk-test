@@ -1299,3 +1299,65 @@ Deno.test("renderNote: the note is beige paper, styled inline so Freshdesk keeps
   assertEquals(html.trimStart().startsWith("<div style=\"background:#FFF9E3"), true);
   assertEquals(html.trimEnd().endsWith("</div>"), true);
 });
+
+Deno.test("renderNote: an upsell renders only as an INTERNAL handover, never a pitch", () => {
+  const base = {
+    confidence: "high" as const,
+    draft: "Hej! Du byter lösenord under Profil.",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 1,
+    qaTotal: 1,
+  };
+  const opportunity = {
+    capability: "employee_survey",
+    product: "Simployer Survey",
+    evidence: "mäta engagemang varje kvartal",
+    owned: false,
+    agentNote: "Hand to the CSM.",
+  };
+
+  const shown = renderNote({
+    ...base,
+    upsell: {
+      status: "opportunity" as const,
+      requested: [opportunity],
+      opportunities: [opportunity],
+      version: "v",
+      model: "m",
+    },
+  });
+  assertEquals(shown.includes("Simployer Survey"), true);
+  // The customer's own words are what make it checkable rather than a guess.
+  assertEquals(shown.includes("mäta engagemang varje kvartal"), true);
+  // It must tell the agent to hand it on, and to keep it out of the reply.
+  assertEquals(shown.includes("Hand this to sales/CSM"), true);
+  assertEquals(shown.includes("do not turn the reply into a pitch"), true);
+
+  // Every non-opportunity status is stored for the scorecard but renders
+  // nothing: a block that appears on every note stops being read.
+  for (const status of ["none", "owned", "unknown_subscription", "unavailable"] as const) {
+    const quiet = renderNote({
+      ...base,
+      upsell: { status, requested: [], opportunities: [], version: "v", model: "m" },
+    });
+    assertEquals(quiet.includes("Possible fit"), false);
+  }
+
+  // "opportunity" with an empty list is a contradiction; render nothing rather
+  // than an empty heading promising something.
+  assertEquals(
+    renderNote({
+      ...base,
+      upsell: {
+        status: "opportunity" as const,
+        requested: [],
+        opportunities: [],
+        version: "v",
+        model: "m",
+      },
+    }).includes("Possible fit"),
+    false,
+  );
+});

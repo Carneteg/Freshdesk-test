@@ -16,6 +16,7 @@ import { FreshworksCRM } from "./freshworks-crm.ts";
 import { PROMPT_VERSION } from "./prompts.ts";
 import { deriveTags, isIgnorableTicket, latestCustomerMessage } from "./render.ts";
 import { loadIncidents, reconcileUsage, runPipeline, toRow } from "./pipeline.ts";
+import { loadCatalog } from "./upsell.ts";
 
 const SIMPLOYER_SUBSCRIPTIONS_PATH =
   "/custom_module/cm_subscription/view/31008500658?q[]=%7B%22name%22%3A%22cf_account_number%22%2C%22operator%22%3A4%2C%22value%22%3A%22{account_id}%22%2C%22domType%22%3A6%7D";
@@ -382,6 +383,10 @@ async function pollOnce(cfg: Config): Promise<Summary> {
   try {
     // Team-curated known-incidents playbook, loaded once per run.
     const incidents = await loadIncidents(db);
+    // Curated capability -> product map for upsell detection (migration 46).
+    // Seeded INACTIVE, so this is empty until a product owner has checked the
+    // wording — and an empty catalogue turns the detector off entirely.
+    const productCatalog = await loadCatalog(db);
 
     // Page from the durable cursor. The initial lookback is only a bootstrap;
     // subsequent runs always continue from the stored tuple.
@@ -511,6 +516,7 @@ async function pollOnce(cfg: Config): Promise<Summary> {
             withRetrieval: cfg.withRetrieval,
             excludeCategories: cfg.excludeCategories,
             incidents,
+            productCatalog,
             db,
             reviewUrl: cfg.reviewUrl || undefined,
             generationId,

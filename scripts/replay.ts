@@ -28,6 +28,7 @@ import {
   toRow,
 } from "../supabase/functions/ticket-suggester/pipeline.ts";
 import { PROMPT_VERSION } from "../supabase/functions/ticket-suggester/prompts.ts";
+import { loadCatalog } from "../supabase/functions/ticket-suggester/upsell.ts";
 
 function env(name: string): string {
   const v = Deno.env.get(name) ?? "";
@@ -311,6 +312,13 @@ if (incidents.length) {
   console.log(`(playbook: ${incidents.length} known incident(s) loaded)`);
 }
 
+// Upsell detection (§12, migration 46): needs the curated capability -> product
+// catalogue. Seeded inactive, so this is normally empty and the detector is off.
+const productCatalog = db ? await loadCatalog(db) : [];
+if (productCatalog.length) {
+  console.log(`(upsell: ${productCatalog.length} catalogue capabilit(ies) active)`);
+}
+
 // Learning loop (§12): feed reviewer-written ideal answers back into the draft as
 // style/approach exemplars. Opt-in with LEARNING_LOOP=true; stored under a
 // "+gold" prompt_version so gate1_scorecard compares it against the base run.
@@ -342,6 +350,7 @@ for (const t of kept) {
         withRetrieval,
         excludeCategories,
         incidents,
+        productCatalog,
         db: db ?? undefined,
         // No leakage: exclude past tickets resolved at/after the graded turn's time.
         retrievalBefore: turn.targetAt ?? undefined,

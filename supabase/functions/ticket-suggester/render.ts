@@ -3,6 +3,9 @@
 
 import type { Ticket } from "./clients.ts";
 import type { SourceDoc } from "./prompts.ts";
+// Type-only, so the cycle with upsell.ts (which imports this file's
+// CustomerSubscriptionContext) is erased at compile time.
+import type { UpsellResult } from "./upsell.ts";
 
 export type Confidence = "high" | "low" | "none";
 
@@ -522,6 +525,9 @@ export interface NoteData {
   // Read-only Freshworks CRM context. This is rendered directly into the
   // private note and is deliberately NOT part of the LLM prompt.
   customerSubscriptions?: CustomerSubscriptionContext;
+  // Upsell signal — capabilities the customer asked for that the account does
+  // not hold. Internal routing information for the agent, never a pitch.
+  upsell?: UpsellResult;
   // Preferred feedback path: the authenticated, RLS-gated review app. A generation
   // deep-link is safe to expose; no write token or verdict lives in the URL.
   reviewUrl?: string;
@@ -701,6 +707,36 @@ function subscriptionCell(value: string | null): string {
   return text ? esc(text) : "—";
 }
 
+/**
+ * The upsell block. INTERNAL — it tells the agent to hand the account on, and
+ * deliberately contains no wording anyone could paste to a customer. Drafting a
+ * pitch is not what this project does (CLAUDE.md §12, coach framing), and a
+ * ready-made sentence is exactly what would get sent by accident.
+ *
+ * Only `opportunity` renders. "They already own it" and "the CRM did not
+ * resolve" are stored for the scorecard but are not something the agent must act
+ * on mid-ticket, and a block that appears on every note stops being read.
+ */
+export function renderUpsell(upsell: UpsellResult): string {
+  if (upsell.status !== "opportunity" || !upsell.opportunities.length) return "";
+
+  const items = upsell.opportunities.map((o) => {
+    const note = o.agentNote?.trim() ? ` ${esc(o.agentNote)}` : "";
+    const quote = o.evidence?.trim()
+      ? ` <em>“${esc(o.evidence)}”</em>`
+      : "";
+    return `<li><strong>${esc(o.product)}</strong> —${quote}${note}</li>`;
+  }).join("");
+
+  return `<p><strong>💡 Possible fit the account does not hold</strong> — the customer asked ` +
+    `for something outside their current subscription. Hand this to sales/CSM after you have ` +
+    `answered the support question; do not turn the reply into a pitch.</p>` +
+    `<ul style="margin:4px 0 10px 18px;padding:0">${items}</ul>` +
+    `<p style="font-size:12px;color:#6b6b6b;margin:0 0 10px">` +
+    `Detected from the customer's own words and checked against the CRM subscriptions. ` +
+    `Confirm in the CRM before acting — an account can hold a product this check did not see.</p>`;
+}
+
 function renderCustomerSubscriptions(context: CustomerSubscriptionContext): string {
   if (context.status === "unavailable") {
     return "<p><strong>📦 Customer subscriptions (Freshworks CRM):</strong> " +
@@ -806,6 +842,11 @@ export function renderNote(r: NoteData): string {
   if (r.customerSubscriptions) {
     out.push(renderCustomerSubscriptions(r.customerSubscriptions));
   }
+
+  // Directly after the subscriptions, because that is the context that makes it
+  // mean anything — and above the draft, because it changes what the agent does
+  // with the ticket after replying, not what the reply says.
+  if (r.upsell) out.push(renderUpsell(r.upsell));
 
   // What the AI decided to do, and (briefly) why — so the agent can sanity-check
   // the strategy before reading the draft.
