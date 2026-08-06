@@ -1277,3 +1277,25 @@ Deno.test("renderNote: a single question renders no breakdown block", () => {
   assertEquals(html.includes("All 1 questions answered"), false);
   assertStringIncludes(html, "Q/A: answers 1 of 1 question(s)");
 });
+
+Deno.test("renderNote: the note is beige paper, styled inline so Freshdesk keeps it", () => {
+  const html = renderNote({
+    confidence: "high",
+    draft: "Hej!",
+    answerStrategy: "DIRECT_ANSWER",
+    promptVersion: "test",
+    searchQueries: [],
+    sources: [],
+    qaAnswered: 1,
+    qaTotal: 1,
+  });
+  // The paper itself, from private_note_freshdesk_v5.html (.fd).
+  assertStringIncludes(html, "background:#FFF9E3");
+  assertStringIncludes(html, "border:1px solid #EFE0B0");
+  assertStringIncludes(html, "color:#2B2B2B");
+  // Freshdesk strips <style> from note bodies, so nothing may depend on one.
+  assertEquals(html.includes("<style"), false, "a stylesheet would arrive as nothing");
+  // And the whole note has to be inside the paper, not beside it.
+  assertEquals(html.trimStart().startsWith("<div style=\"background:#FFF9E3"), true);
+  assertEquals(html.trimEnd().endsWith("</div>"), true);
+});

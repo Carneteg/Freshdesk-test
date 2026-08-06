@@ -949,5 +949,33 @@ export function renderNote(r: NoteData): string {
     );
   }
 
-  return out.join("\n");
+  // ── The beige paper ────────────────────────────────────────────────────────
+  //
+  // From private_note_freshdesk_v5.html (.fd). Until now the note went out as
+  // bare HTML fragments with no background at all, so it read as part of the
+  // ticket thread rather than as a note somebody had put there. The paper is
+  // what makes it a NOTE.
+  //
+  // INLINE, not a <style> block, and that is the whole trick: Freshdesk strips
+  // <style> from note bodies, so the mockup's CSS would arrive as nothing. Every
+  // rule that has to survive is therefore an attribute on the element it styles.
+  return wrapNotePaper(out.join("\n"));
+}
+
+/** The note's own colours, from the v5 mockup. Inline so Freshdesk keeps them. */
+const PAPER = "#FFF9E3";       // beige paper
+const PAPER_EDGE = "#EFE0B0";  // its border, and every rule inside it
+const PAPER_INK = "#2B2B2B";   // body text on beige
+const PAPER_MUTED = "#9A8B5F"; // the muted header line — a warm grey, not the app's
+
+function wrapNotePaper(inner: string): string {
+  // Freshdesk keeps inline styles on elements but drops a stylesheet, so <hr>
+  // and the header line are given theirs directly rather than inherited.
+  const styled = inner
+    .replace(/<hr\s*\/?>/g, `<hr style="border:none;border-top:1px solid ${PAPER_EDGE};margin:14px 0 12px">`);
+
+  return `<div style="background:${PAPER};border:1px solid ${PAPER_EDGE};` +
+    `border-radius:4px;padding:18px 22px 16px;` +
+    `font-family:'Segoe UI',-apple-system,Helvetica,Arial,sans-serif;` +
+    `font-size:14px;line-height:1.6;color:${PAPER_INK}">${styled}</div>`;
 }
