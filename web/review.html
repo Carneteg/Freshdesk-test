@@ -346,12 +346,16 @@
     text-transform:uppercase;color:var(--nv-ink-2);border:1px solid transparent;
     background:#E7EDEF;border-radius:6px;padding:7px 12px;margin-top:0;
     height:fit-content;min-width:118px;text-align:center;line-height:1.2}
-  /* Bild 2 färgar INTE träffarna. SLACK, JIRA och PLANHAT är neutralt blågrå;
-     bara CONFLUENCE — den som lästes utan att ha något — är röd. Det är rätt
-     prioritering: en källa som svarade är det normala och behöver ingen färg,
-     medan "vi tittade och hittade inget" är resultatet agenten måste agera på. */
-  .nv-src.hit{color:var(--nv-ink-2);background:#E7EDEF}
+  /* TRE lägen, inte två. Poängen är att kunna läsa av på en sekund hur mycket
+     vi faktiskt hittade:
+       grönt  — källan gav något att gå på (ett ärende-id att öppna, en artikel)
+       rött   — vi läste den och den hade inget
+       grått  — inte kontrollerad, eller inte ansluten
+     Skillnaden mellan "hittade inget" och "kollade inte" är den agenten agerar
+     olika på, och den fanns inte förut. */
+  .nv-src.hit{color:var(--nv-teal);background:var(--nv-teal-soft)}
   .nv-src.miss{color:var(--nv-red);background:var(--nv-red-soft)}
+  .nv-src.na{color:var(--nv-ink-3);background:#E7EDEF}
   .nv-facts li{align-items:flex-start}
   .nv-fact{min-width:0}
   .nv-fact a{color:var(--nv-ink);text-decoration:none;border-bottom:1px solid var(--nv-rule)}
@@ -402,10 +406,20 @@
     color:var(--nv-ink)}
   .nv-btn.primary{background:var(--nv-teal);border-color:var(--nv-teal);color:var(--on-solid)}
   .nv-btn[disabled]{cursor:default;opacity:.9}
+  /* En knapp som redan använts ska synas som använd — annars klickar man två
+     gånger och undrar om det hände något första gången. */
+  .nv-btn.used{background:var(--nv-teal-soft);border-color:var(--nv-teal-edge);
+    color:var(--nv-teal);font-weight:700}
+  .nv-btn.used::before{content:"✓ "}
   .nv-wrong{margin-left:auto;font-family:inherit;font-size:12.5px;color:var(--nv-ink-3);
     background:none;border:0;padding:0;cursor:pointer}
   .nv-wrong:hover{color:var(--nv-teal);text-decoration:underline}
   .nv-preview{font-size:11px;color:var(--nv-ink-3);margin:8px 0 0;line-height:1.5}
+  .nv-edit{width:100%;box-sizing:border-box;font-family:inherit;font-size:13.4px;
+    line-height:1.6;color:var(--nv-ink);background:transparent;border:0;
+    resize:vertical;outline:none;padding:0}
+  .nv-editbar{display:flex;gap:8px;margin-top:12px;padding-top:12px;
+    border-top:1px solid var(--nv-rule)}
   /* Where a demo action reports back. Deliberately in the flow rather than a
      toast: the point is that it stays on screen while you talk about it. */
   .nv-demoout:empty{display:none}
@@ -532,7 +546,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-06c-confluence-loop";
+var APP_VERSION = "v2026-08-06d-editable-draft";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -3372,7 +3386,7 @@ function noteViewEl(r) {
     var sl = el("ul", "nv-facts");
     recSteps.slice(1).forEach(function (st, i) {
       var li = document.createElement("li");
-      li.appendChild(set(el("span", "nv-src"), "Step " + (i + 2)));
+      li.appendChild(set(el("span", "nv-src na"), "Step " + (i + 2)));
       li.appendChild(set(el("span", "nv-fact"), st));
       sl.appendChild(li);
     });
@@ -3386,7 +3400,12 @@ function noteViewEl(r) {
     var facts = el("ul", "nv-facts");
     r.sources.forEach(function (src) {
       var li = document.createElement("li");
-      li.appendChild(set(el("span", "nv-src hit"), sourceTag(src.kind)));
+      // Grönt kräver något konkret att öppna: ett ärende-id eller en artikel med
+      // länk. En källa utan det är hittad men inte användbar, och ska inte se ut
+      // som en träff.
+      var usable = !!(src.id || src.url);
+      li.appendChild(set(el("span", "nv-src " + (usable ? "hit" : "na")),
+        sourceTag(src.kind)));
       var txt = el("span", "nv-fact");
       var link = document.createElement("a");
       link.href = src.url || "#"; link.target = "_blank"; link.rel = "noopener";
@@ -3425,7 +3444,7 @@ function noteViewEl(r) {
   cols.appendChild(side);
   inner.appendChild(cols);
 
-  inner.appendChild(noteActionsEl(r));
+  inner.appendChild(noteActionsEl(r, wrap));
 
   note.appendChild(inner);
   wrap.appendChild(note);
@@ -3449,7 +3468,7 @@ function noteViewEl(r) {
 // a single recording is made — the decision paper says so itself). The buttons
 // exist so the loop from the walkthrough can be shown end to end; they change
 // nothing outside this page, and each says "demo" when it acts.
-function noteActionsEl(r) {
+function noteActionsEl(r, wrap) {
   var box = el("div", "");
   var row = el("div", "nv-actions");
   var out = el("div", "nv-demoout");   // where a demo action reports back
@@ -3471,8 +3490,52 @@ function noteActionsEl(r) {
     b.title = "Preview only — this app never sends anything to a customer.";
     return b;
   }
+  // Send reply förblir inert: det är den enda riktiga externa skrivningen.
   row.appendChild(inert("Send reply", "primary"));
-  row.appendChild(inert("Edit first"));
+
+  // Edit first FÅR agera. Att redigera texten stannar på sidan, och då gäller
+  // samma regel som för de andra demoknapparna. En knapp som inte gör något
+  // alls är sämre än ingen knapp — det var därför den kändes trasig.
+  var editBtn = demoBtn("Edit first", function () {
+    var box = wrap.querySelector(".nv-draft");
+    if (!box) { say("Det finns inget utkast att redigera i den här notisen."); return; }
+    if (box.querySelector("textarea")) return;   // redan öppen
+
+    var current = box.innerText.replace(/\n{3,}/g, "\n\n").trim();
+    var ta = document.createElement("textarea");
+    ta.className = "nv-edit";
+    ta.value = current;
+    ta.setAttribute("aria-label", "Redigera utkastet");
+    box.innerHTML = "";
+    box.appendChild(ta);
+    ta.style.height = Math.max(120, ta.scrollHeight) + "px";
+    ta.focus();
+
+    var bar = el("div", "nv-editbar");
+    var copy = document.createElement("button");
+    copy.className = "nv-btn";
+    copy.textContent = "Kopiera texten";
+    copy.onclick = function () {
+      ta.select();
+      var done = false;
+      try { done = document.execCommand("copy"); } catch (_e) { done = false; }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(ta.value).then(function () {
+          say("Texten kopierad. Klistra in den i Freshdesk när du svarar.", "ok");
+        }, function () {
+          say(done ? "Texten kopierad." : "Kunde inte kopiera — markera och kopiera manuellt.");
+        });
+      } else {
+        say(done ? "Texten kopierad." : "Kunde inte kopiera — markera och kopiera manuellt.");
+      }
+    };
+    bar.appendChild(copy);
+    box.appendChild(bar);
+
+    say("Utkastet är öppet för redigering. Ändringarna sparas inte här — " +
+      "kopiera texten och klistra in den i Freshdesk, där svaret faktiskt skickas.");
+  });
+  row.appendChild(editBtn);
 
   // ── demo: Linear ──
   var lin = "LIN-" + (2100 + ((Number(r.ticket_id) || 0) % 140));
@@ -3529,7 +3592,7 @@ function demoBtn(label, onClick) {
   b.className = "nv-btn";
   b.textContent = label;
   b.title = "Demo — not connected. Nothing leaves this page.";
-  b.onclick = onClick;
+  b.onclick = function () { b.classList.add("used"); onClick(); };
   return b;
 }
 
