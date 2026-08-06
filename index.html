@@ -352,6 +352,13 @@
     background:none;border:0;padding:0;cursor:pointer}
   .nv-wrong:hover{color:var(--nv-teal);text-decoration:underline}
   .nv-preview{font-size:11px;color:var(--nv-ink-3);margin:8px 0 0;line-height:1.5}
+  /* Where a demo action reports back. Deliberately in the flow rather than a
+     toast: the point is that it stays on screen while you talk about it. */
+  .nv-demoout:empty{display:none}
+  .nv-said{margin-top:10px;font-size:12.5px;line-height:1.55;padding:9px 13px;
+    border-radius:7px;background:var(--nv-teal-soft);color:var(--nv-ink)}
+  .nv-said.rec{background:var(--nv-red-soft);color:var(--nv-red)}
+  .nv-rec.on{background:var(--nv-red);border-color:var(--nv-red);color:var(--on-solid)}
 
   @media (max-width:640px){
     .nv-cust div{border-right:none;border-bottom:1px solid var(--nv-rule);flex:1 1 100%}
@@ -469,7 +476,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-05h-trained-notes";
+var APP_VERSION = "v2026-08-05i-demo-actions";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -3276,39 +3283,132 @@ function noteViewEl(r) {
 //
 // "Wrong — tell us why" DOES act: judging a draft is a thing this app really
 // does, so it jumps to the ticket in To review, where the verdict is recorded.
+// The action row. Send / Edit stay INERT — this app is read-only + RLS, and
+// sending a customer reply would be a new external write that CLAUDE.md §3
+// deliberately does not have.
+//
+// The rest are DEMO ACTIONS, per Tobias. Scribe, Planhat and Linear have no
+// client in this codebase (Scribe also needs MBL consultation and a DPA before
+// a single recording is made — the decision paper says so itself). The buttons
+// exist so the loop from the walkthrough can be shown end to end; they change
+// nothing outside this page, and each says "demo" when it acts.
 function noteActionsEl(r) {
   var box = el("div", "");
   var row = el("div", "nv-actions");
+  var out = el("div", "nv-demoout");   // where a demo action reports back
 
-  function btn(label, cls) {
+  function say(text, cls) {
+    out.innerHTML = "";   // this app has no clear() helper
+    var line = el("div", "nv-said" + (cls ? " " + cls : ""));
+    line.appendChild(document.createTextNode(text));
+    line.appendChild(set(el("span", "nv-demotag"), "demo"));
+    out.appendChild(line);
+  }
+
+  // ── inert: a customer reply is a real external write ──
+  function inert(label, cls) {
     var b = document.createElement("button");
     b.className = "nv-btn" + (cls ? " " + cls : "");
     b.textContent = label;
     b.disabled = true;
-    b.title = "Preview only — this app never writes to Freshdesk or Linear.";
+    b.title = "Preview only — this app never sends anything to a customer.";
     return b;
   }
-  row.appendChild(btn("Send reply", "primary"));
-  row.appendChild(btn("Edit first"));
-  row.appendChild(btn("Add to Linear request"));
+  row.appendChild(inert("Send reply", "primary"));
+  row.appendChild(inert("Edit first"));
+
+  // ── demo: Linear ──
+  var lin = "LIN-" + (2100 + ((Number(r.ticket_id) || 0) % 140));
+  var votes = 4 + ((Number(r.ticket_id) || 0) % 9);
+  row.appendChild(demoBtn("Bifoga till " + lin, function () {
+    say("Ärendet bifogat till " + lin + " · " + (votes + 1) +
+      " röster. Kunden kan rösta via länken i svaret.", "ok");
+  }));
+
+  // ── demo: Planhat ──
+  row.appendChild(demoBtn("Kopiera CSM", function () {
+    var d = demoPlanhat(r.ticket_id);
+    say("CSM " + d.csm + " kopierad. Aktivitet skapad på kontot.", "ok");
+  }));
+
+  // ── demo: Scribe ──
+  // Placed with the others rather than hidden behind a gap check: the point of a
+  // demo button is that it can be found.
+  row.appendChild(scribeBtn(r, say));
 
   var wrong = document.createElement("button");
   wrong.className = "nv-wrong";
   wrong.textContent = "Wrong — tell us why";
   wrong.onclick = function () {
-    // The one real action: go and judge it.
+    // The one action that is not a demo: go and judge it.
     tab = "todo";
     search = String(r.ticket_id);
     render();
     window.scrollTo(0, 0);
   };
   row.appendChild(wrong);
-  box.appendChild(row);
 
+  box.appendChild(row);
+  box.appendChild(out);
   box.appendChild(set(el("p", "nv-preview"),
-    "Send / Edit / Linear are a preview of the in-Freshdesk widget — this review app " +
-    "never writes to Freshdesk or Linear. \u201CWrong\u201D opens the ticket in To review."));
+    "Send / Edit are a preview of the in-Freshdesk widget. Linear, Planhat (CSM) and " +
+    "Scribe are demo actions — none of those systems is connected, and nothing here " +
+    "leaves this page. \u201CWrong\u201D opens the ticket in To review."));
   return box;
+}
+
+function demoBtn(label, onClick) {
+  var b = document.createElement("button");
+  b.className = "nv-btn";
+  b.textContent = label;
+  b.title = "Demo — not connected. Nothing leaves this page.";
+  b.onclick = onClick;
+  return b;
+}
+
+// The documentation loop from the walkthrough: a gap is found, the agent solves
+// it while Scribe captures the steps, and the recording becomes a draft article.
+// Here it is a timer and a confirmation — enough to show the loop, and nothing
+// is captured, because recording an agent's screen needs MBL consultation and a
+// DPA with Scribe as a processor before it may start at all.
+function scribeBtn(r, say) {
+  var b = document.createElement("button");
+  b.className = "nv-btn nv-rec";
+  b.title = "Demo — no screen is recorded. Recording requires MBL consultation and a DPA first.";
+  var timer = null, seconds = 0;
+
+  function idle() {
+    b.classList.remove("on");
+    b.textContent = "⏺ Spela in lösningen";
+  }
+  function tick() {
+    seconds++;
+    var m = String(Math.floor(seconds / 60)).padStart(2, "0");
+    var ss = String(seconds % 60).padStart(2, "0");
+    b.textContent = "⏹ Spelar in " + m + ":" + ss + " — klicka för att avsluta";
+  }
+
+  b.onclick = function () {
+    if (timer) {
+      clearInterval(timer); timer = null;
+      var mins = Math.max(1, Math.round(seconds / 60));
+      idle();
+      say("Inspelning avslutad (" + seconds + " s). Utkast till artikel skapat i " +
+        "Confluence — \u201C" + (r.subject || "Ärendet") + "\u201D — väntar på granskning. " +
+        "Beräknad lästid " + mins + " min.", "ok");
+      seconds = 0;
+      return;
+    }
+    seconds = 0;
+    b.classList.add("on");
+    tick();
+    timer = setInterval(tick, 1000);
+    say("Inspelning startad. Scribe fångar varje steg och system medan du löser " +
+      "ärendet. Inget spelas faktiskt in här.", "rec");
+  };
+
+  idle();
+  return b;
 }
 
 var fTrained = "";
