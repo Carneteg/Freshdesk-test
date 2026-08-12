@@ -678,7 +678,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-06g-upsell-and-account";
+var APP_VERSION = "v2026-08-06h-degrade-on-missing-column";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -842,6 +842,28 @@ async function loadData() {
     var res = await api("/rest/v1/suggestions?select=" + COLS + "&order=created_at.desc&limit=300");
     if (res.status === 401) { signOut(); return; }
     var data = await res.json();
+
+    // THE APP AND THE DATABASE SHIP SEPARATELY. This page is published to
+    // gh-pages the moment it is merged; a migration is applied by hand
+    // afterwards. So there is always a window where the app selects a column
+    // the database does not have yet — and PostgREST fails the WHOLE query for
+    // one unknown column, which blanked the entire page over an optional field.
+    //
+    // A field that only decorates a card must never be able to do that. On
+    // "column X does not exist" we drop that column and retry once; the page
+    // loads without the decoration, which is the correct degradation. Anything
+    // else (permission denied, a bad filter) is still reported as before.
+    var missing = (data && data.message || "").match(/column \S*?\.?(\w+) does not exist/i);
+    if (!res.ok && missing) {
+      var dropped = missing[1];
+      COLS = COLS.split(",").filter(function (c) { return c !== dropped; }).join(",");
+      console.warn("column '" + dropped + "' is missing from the database — " +
+        "loading without it. Apply the migration that adds it.");
+      res = await api("/rest/v1/suggestions?select=" + COLS + "&order=created_at.desc&limit=300");
+      if (res.status === 401) { signOut(); return; }
+      data = await res.json();
+    }
+
     if (!res.ok) {
       app.innerHTML = '<div class="empty">Couldn\'t load (' + esc((data && data.message) || res.status) +
         ").<br>If this says permission denied, your email isn't on the reviewer allowlist yet.</div>";
