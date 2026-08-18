@@ -23,6 +23,7 @@ on:
         options:
           - score-history   # QA-score agents' historical replies (triage). Posts nothing.
           - csat-scan       # Sync Freshdesk CSAT ratings into Supabase. Read-only, no OpenAI.
+          - ticket-landscape # Probe ticket fields: company, product, group. Read-only, writes nothing.
           - replay          # Replay closed tickets through the pipeline (evaluation).
           - sync-tickets    # Refresh the semantic past-ticket precedent index.
           - assign-cohorts  # Lock tickets into learning/development/holdout sets (Supabase only).
@@ -117,6 +118,9 @@ jobs:
           # that does not need them.
           if [ "$IN_JOB" = "verify-api" ]; then
             required="FRESHDESK_DOMAIN FRESHDESK_API_KEY"
+          elif [ "$IN_JOB" = "ticket-landscape" ]; then
+            # Pure read probe: Freshdesk only, no Supabase write, no LLM.
+            required="FRESHDESK_DOMAIN FRESHDESK_API_KEY"
           elif [ "$IN_JOB" = "csat-scan" ]; then
             # CSAT is a read + a Supabase write. No LLM, so no OpenAI key needed.
             required="FRESHDESK_DOMAIN FRESHDESK_API_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY"
@@ -175,6 +179,7 @@ jobs:
               replay)         deno run --allow-env --allow-net scripts/replay.ts $IN_IDS ;;
               score-history)  deno run --allow-env --allow-net scripts/score_history.ts $IN_IDS ;;
               csat-scan)      deno run --allow-env --allow-net scripts/csat_scan.ts ;;
+              ticket-landscape) deno run --allow-env --allow-net scripts/ticket_landscape.ts ;;
               sync-tickets)   deno run --allow-env --allow-net scripts/sync_tickets.ts ;;
               assign-cohorts) deno run --allow-env --allow-net scripts/assign_cohorts.ts $IN_IDS ;;
               knowledge-gaps) deno run --allow-env --allow-net scripts/knowledge_gaps.ts ;;
