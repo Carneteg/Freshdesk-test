@@ -43,6 +43,11 @@ on:
         type: string
         required: false
         default: ""
+      since:
+        description: "csat-scan only — earliest rating date (YYYY-MM-DD). Empty = 2 years back."
+        type: string
+        required: false
+        default: ""
       cohort:
         description: "replay only — run one locked cohort. 'none' = pick by ids/agent."
         type: choice
@@ -94,6 +99,9 @@ jobs:
       REPLAY_APPROVED: ${{ inputs.approved_sample }}
       # csat-scan reuses the `agent` input to focus its report on one agent.
       CSAT_AGENT: ${{ inputs.agent }}
+      # csat-scan: how far back to look. Empty = the script's own wide default,
+      # never Freshdesk's silent 30-day one.
+      CSAT_SINCE: ${{ inputs.since }}
       # Never print subjects, customer/agent text, drafts, or source excerpts in
       # Actions logs/Summary. Local replay remains detailed by default.
       CLOUD_LOG_MODE: safe

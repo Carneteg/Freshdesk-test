@@ -31,7 +31,14 @@ function env(name: string): string {
 const fd = new Freshdesk(env("FRESHDESK_DOMAIN"), env("FRESHDESK_API_KEY"));
 const db = createClient(env("SUPABASE_URL"), env("SUPABASE_SERVICE_ROLE_KEY"));
 
-const since = Deno.env.get("CSAT_SINCE")?.trim() || undefined;
+// Freshdesk defaults this endpoint to the LAST 30 DAYS when created_since is
+// omitted. That default is a trap for exactly this question: "how many bad
+// ratings does this agent have" would silently become "…in the last month", and
+// an empty result would read as "none" rather than "outside the window". So the
+// scan always sends an explicit window and prints it.
+const DEFAULT_LOOKBACK_DAYS = 730;
+const since = Deno.env.get("CSAT_SINCE")?.trim() ||
+  new Date(Date.now() - DEFAULT_LOOKBACK_DAYS * 86_400_000).toISOString().slice(0, 10);
 const agentSel = (Deno.env.get("CSAT_AGENT") ?? "").trim();
 
 let focusAgentId: number | null = null;
@@ -49,7 +56,7 @@ if (agentSel) {
   }
 }
 
-console.log(`Fetching satisfaction ratings${since ? ` created since ${since}` : ""}…`);
+console.log(`Fetching satisfaction ratings created since ${since} (Freshdesk would default to 30 days).`);
 const ratings = await fd.listAllSatisfactionRatings({ createdSince: since });
 console.log(`Freshdesk returned ${ratings.length} rating(s).`);
 
@@ -80,6 +87,16 @@ if (rows.length) {
   }
 }
 console.log(`Stored ${rows.length} rating(s).`);
+if (!ratings.length) {
+  console.log(
+    "\nNOTE: the API returned zero ratings for EVERY agent. That is a retrieval\n" +
+    "result, not a finding about anyone's CSAT. Likely causes, in order:\n" +
+    "  1. the window — widen it with CSAT_SINCE=YYYY-MM-DD\n" +
+    "  2. the API key lacks survey scope (a restricted key returns [] not 403)\n" +
+    "  3. satisfaction surveys are not enabled on this Freshdesk plan\n" +
+    "Do not report 'no negative ratings' off this run.",
+  );
+}
 
 // ── Report ────────────────────────────────────────────────────────────────
 // Counts and ticket ids only. No customer words, no subjects.
