@@ -342,12 +342,24 @@ export class Freshdesk {
     throw new Error(`Freshdesk CSAT pagination exceeded the ${maxPages}-page safety limit`);
   }
 
-  // One page of tickets updated at/after an ISO timestamp, oldest first.
-  listUpdatedTickets(updatedSince: string, page = 1): Promise<TicketSummary[]> {
+  // One page of tickets updated at/after an ISO timestamp.
+  //
+  // ASCENDING BY DEFAULT, and that default is load-bearing: the poller walks
+  // forward from a durable cursor, so oldest-first is what lets it advance
+  // without losing tickets.
+  //
+  // Analysis callers want the opposite. A capped scan with the ascending
+  // default silently returns the OLDEST N tickets in the window — which reads
+  // as "recent activity" and is not. Pass "desc" to take the newest N.
+  listUpdatedTickets(
+    updatedSince: string,
+    page = 1,
+    order: "asc" | "desc" = "asc",
+  ): Promise<TicketSummary[]> {
     const q = new URLSearchParams({
       updated_since: updatedSince,
       order_by: "updated_at",
-      order_type: "asc",
+      order_type: order,
       per_page: "100",
       page: String(page),
     });

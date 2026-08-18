@@ -36,7 +36,9 @@ console.log(`Scanning up to ${want} ticket(s) updated since ${sinceIso.slice(0, 
 // deno-lint-ignore no-explicit-any
 const tickets: any[] = [];
 for (let page = 1; tickets.length < want && page <= 200; page++) {
-  const rows = await fd.listUpdatedTickets(sinceIso, page);
+  // NEWEST first. With the ascending default a capped run returns the oldest N
+  // tickets in the window, which would rank "who filed tickets a year ago".
+  const rows = await fd.listUpdatedTickets(sinceIso, page, "desc");
   tickets.push(...rows);
   if (rows.length < 100) break;
 }
@@ -91,6 +93,10 @@ for (let i = 0; i < rows.length; i += BATCH) {
   }
 }
 console.log(`  stored ${rows.length} row(s)`);
+const dates = rows.map((r) => r.created_at).filter(Boolean).sort() as string[];
+if (dates.length) {
+  console.log(`  window actually covered: ${dates[0]?.slice(0, 10)} -> ${dates[dates.length - 1]?.slice(0, 10)}`);
+}
 
 // ── Report: counts only ─────────────────────────────────────────────────────
 const by = (key: string) => {
