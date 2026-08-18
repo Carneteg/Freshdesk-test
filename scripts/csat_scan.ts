@@ -137,6 +137,35 @@ for (const r of rows) {
   if (!bySurvey.has(k)) bySurvey.set(k, []);
   bySurvey.get(k)!.push(r);
 }
+// THE TRAP THIS GUARD EXISTS FOR (verified live 2026-08-18).
+//
+// GET /surveys returns the CURRENT surveys with UUID ids:
+//     901cf9fe-… Test CSAT (inactive) · dc30ba3c-… CSAT Expert · bd7d69dc-… Basic CSAT Survey
+// GET /surveys/satisfaction_ratings returns ratings carrying NUMERIC survey ids:
+//     201000046125 · 201000026097 · 201000046120
+//
+// Two different id spaces means two different systems: the v2 ratings endpoint
+// exposes only the LEGACY surveys, which stopped collecting around ticket 65323.
+// Ratings from the currently active surveys are not reachable here at all.
+//
+// Left unflagged this reads as "this agent has no ratings" — a statement about a
+// person that is really a gap in our retrieval. Fail loudly instead.
+const ratingSurveyIds = new Set(rows.map((r) => String(r.survey_id)));
+const listedIds = surveys.map((s) => String(s.id));
+const overlap = listedIds.filter((id) => ratingSurveyIds.has(id));
+if (surveys.length && !overlap.length) {
+  console.log(
+    "\n⚠️  SURVEY ID MISMATCH — the ratings you just read are NOT from the surveys\n" +
+    "    that are currently configured.\n" +
+    `      /surveys returned:            ${listedIds.join(", ")}\n` +
+    `      ratings carry survey ids:     ${[...ratingSurveyIds].join(", ")}\n` +
+    "    The v2 satisfaction_ratings endpoint only exposes the LEGACY surveys.\n" +
+    "    Any per-agent count from this run covers the legacy corpus only, and an\n" +
+    "    agent who joined later will show zero ratings whatever their real CSAT is.\n" +
+    "    DO NOT report these counts as an agent's CSAT.",
+  );
+}
+
 console.log("\nCoverage per survey (newest rated ticket id is the number to check):");
 for (const [sid, set] of bySurvey) {
   const maxTicket = Math.max(...set.map((r) => r.ticket_id));
