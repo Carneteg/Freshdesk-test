@@ -7,6 +7,7 @@
     "score-history": "deno run --env-file=.env --allow-env --allow-net scripts/score_history.ts",
     "csat-scan": "deno run --env-file=.env --allow-env --allow-net scripts/csat_scan.ts",
     "ticket-landscape": "deno run --env-file=.env --allow-env --allow-net scripts/ticket_landscape.ts",
+    "ticket-facts": "deno run --env-file=.env --allow-env --allow-net scripts/ticket_facts_sync.ts",
     "assign-cohorts": "deno run --env-file=.env --allow-env --allow-net scripts/assign_cohorts.ts",
     "knowledge-gaps": "deno run --env-file=.env --allow-env --allow-net scripts/knowledge_gaps.ts",
     "write-articles": "deno run --env-file=.env --allow-env --allow-net scripts/write_articles.ts",
