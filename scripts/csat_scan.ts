@@ -56,6 +56,20 @@ if (agentSel) {
   }
 }
 
+// Which surveys exist at all. Without this, "this agent has no ratings" cannot
+// be distinguished from "we read the wrong survey" — and the second is the one
+// that produces a false accusation about a person.
+const surveys = await fd.listSurveys().catch((e) => {
+  console.log(`(could not list surveys: ${e instanceof Error ? e.name : "error"})`);
+  return [] as Array<{ id: number; title?: string; active?: boolean }>;
+});
+if (surveys.length) {
+  console.log(`Surveys configured: ${surveys.length}`);
+  for (const s of surveys) {
+    console.log(`  survey ${s.id} · active=${s.active} · ${s.title ?? "(untitled)"}`);
+  }
+}
+
 console.log(`Fetching satisfaction ratings created since ${since} (Freshdesk would default to 30 days).`);
 const ratings = await fd.listAllSatisfactionRatings({ createdSince: since });
 console.log(`Freshdesk returned ${ratings.length} rating(s).`);
@@ -66,6 +80,7 @@ const rows = ratings.map((r) => {
   const value = r.ratings?.default_question ?? Object.values(r.ratings ?? {})[0];
   return {
     id: r.id,
+    survey_id: r.survey_id ?? null,
     ticket_id: r.ticket_id,
     agent_id: r.agent_id ?? null,
     group_id: r.group_id ?? null,
@@ -112,6 +127,21 @@ function report(label: string, set: typeof rows) {
   }
   const withWords = set.filter((r) => r.band === "negative" && r.feedback).length;
   console.log(`  negative ratings carrying written feedback: ${withWords} (read them in Supabase)`);
+}
+
+// Per-survey coverage. A survey whose newest rated ticket is far below the
+// tickets you care about is a survey you are not actually reading.
+const bySurvey = new Map<number | null, typeof rows>();
+for (const r of rows) {
+  const k = r.survey_id as number | null;
+  if (!bySurvey.has(k)) bySurvey.set(k, []);
+  bySurvey.get(k)!.push(r);
+}
+console.log("\nCoverage per survey (newest rated ticket id is the number to check):");
+for (const [sid, set] of bySurvey) {
+  const maxTicket = Math.max(...set.map((r) => r.ticket_id));
+  const newest = set.map((r) => r.rated_at ?? "").sort().at(-1);
+  console.log(`  survey ${sid ?? "(none)"} · ${set.length} rating(s) · newest ticket ${maxTicket} · newest rating ${newest}`);
 }
 
 report("All agents", rows);

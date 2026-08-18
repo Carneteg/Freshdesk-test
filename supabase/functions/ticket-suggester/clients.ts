@@ -62,6 +62,14 @@ async function fetchWithRetry(
  * `ratings` is keyed by survey question; `default_question` is the overall one.
  * Freshdesk's scale is NOT 1-5 — see csatBand below.
  */
+export interface Survey {
+  id: number;
+  title?: string;
+  active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface SatisfactionRating {
   id: number;
   survey_id: number;
@@ -271,6 +279,14 @@ export class Freshdesk {
       const name = (a.contact?.name ?? "").toLowerCase();
       return words.every((w) => name.includes(w));
     }) ?? null;
+  }
+
+  // The configured satisfaction surveys. A Freshdesk account can hold more than
+  // one, and /surveys/satisfaction_ratings does not necessarily cover all of
+  // them — so "no ratings for this agent" is only meaningful once you know
+  // which survey you actually read.
+  listSurveys(): Promise<Survey[]> {
+    return this.get<Survey[]>("/surveys");
   }
 
   // ── Satisfaction ratings (CSAT) ─────────────────────────────────────────

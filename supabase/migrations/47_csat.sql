@@ -18,6 +18,12 @@
 
 create table if not exists csat_ratings (
   id            bigint primary key,              -- Freshdesk's own rating id
+  -- Which survey the rating belongs to. An account can hold several, and
+  -- /surveys/satisfaction_ratings does not necessarily cover all of them — so a
+  -- scan that reads one survey will report "no ratings" for agents covered only
+  -- by another. That distinction is the difference between a finding about a
+  -- person and a gap in our retrieval.
+  survey_id     bigint,
   ticket_id     bigint not null,
   agent_id      bigint,
   group_id      bigint,
