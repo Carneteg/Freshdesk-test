@@ -8,6 +8,18 @@
 //   deno task score-history 86144 86002              (explicit ticket ids)
 //   SCORE_AGENT=johanna.sofie.martinsen@simployer.com SCORE_COUNT=200 deno task score-history
 //
+// ⚠️ ATTRIBUTION: tickets are selected by ASSIGNED agent, but the reply that gets
+// graded is the first substantive PUBLIC reply on the ticket — from whoever wrote
+// it. On a shared queue a colleague often answers a ticket assigned to someone
+// else, so a per-agent reading of these rows is NOT safe without checking who
+// actually wrote each reply. Measured on one agent's 29 scanned tickets: 5 were
+// written by named colleagues and 5 were unsigned. Attributing those to the
+// assignee would have credited her with a colleague's best work and blamed her
+// for their signature.
+// `Conversation.user_id` is now captured so a real author filter can be added;
+// until it is, filter by signature or read the thread before drawing conclusions
+// about a person.
+//
 // Read the score as "where to look" (vague / non-answer / undocumented solution),
 // NOT as a grade of the agent — Accuracy is harsh on knowledge not written in the
 // ticket (§12). Real ticket text is sent to OpenAI for scoring (DPA cleared, §11).

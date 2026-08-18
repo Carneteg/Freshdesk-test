@@ -121,6 +121,9 @@ export interface Conversation {
   incoming: boolean; // true = from the customer
   private: boolean; // true = internal note
   created_at: string;
+  // WHO wrote it. Freshdesk returns this; it was not captured before, which made
+  // reply-level attribution impossible — see the warning in score_history.ts.
+  user_id?: number;
   attachments?: Attachment[];
 }
 
