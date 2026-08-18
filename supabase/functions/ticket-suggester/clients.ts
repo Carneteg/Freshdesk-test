@@ -273,12 +273,23 @@ export class Freshdesk {
       );
       return byEmail[0] ?? null;
     }
+    // PAGINATE. This used to read `?per_page=100` only — the FIRST page of the
+    // roster — so on an account with more than 100 agents it matched or missed
+    // depending on where a person happened to fall in the ordering. It reported
+    // that as "No agent matched", which reads as "this person does not exist"
+    // rather than "I only looked at some of them".
     const words = q.split(/\s+/).filter(Boolean);
-    const roster = await this.get<Agent[]>(`/agents?per_page=100`);
-    return roster.find((a) => {
+    const matches = (a: Agent) => {
       const name = (a.contact?.name ?? "").toLowerCase();
       return words.every((w) => name.includes(w));
-    }) ?? null;
+    };
+    for (let page = 1; page <= 20; page++) {
+      const roster = await this.get<Agent[]>(`/agents?per_page=100&page=${page}`);
+      const hit = roster.find(matches);
+      if (hit) return hit;
+      if (roster.length < 100) return null;   // last page, genuinely no match
+    }
+    throw new Error("Freshdesk agent pagination exceeded 20 pages — refusing to report 'no match' off a partial roster");
   }
 
   // The configured satisfaction surveys. A Freshdesk account can hold more than
