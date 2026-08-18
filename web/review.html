@@ -431,6 +431,78 @@
     .nv-rowsubj,.nv-rowrec{max-width:100%;flex:1 1 100%}
   }
 
+  /* ── Företagsfliken ──────────────────────────────────────────────────────
+     Samma formspråk som notisen: vänsterkant bär betydelse, teal är positivt,
+     bärnsten varnar. Produktfärgerna är konsekventa i hela fliken så att en
+     stapel och ett segment betyder samma sak. */
+  .fx-cov{border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:0 8px 8px 0;background:var(--surface);padding:14px 16px;margin-bottom:14px}
+  .fx-covh{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-3);margin-bottom:10px}
+  .fx-covgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+  .fx-covcell dt{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:650;margin:0 0 2px}
+  .fx-covcell dd{margin:0;font-size:16px;font-weight:700;color:var(--ink)}
+  .fx-covcell.warn dd{color:var(--warn)}
+  .fx-covnote{margin:11px 0 0;font-size:11.5px;line-height:1.55;color:var(--ink-3)}
+
+  .fx-card{border:1px solid var(--border);border-radius:8px;background:var(--surface);
+    padding:16px 18px;margin-bottom:14px}
+  .fx-h{margin:0 0 4px;font-size:15px;color:var(--ink)}
+  .fx-sub{margin:0 0 14px;font-size:12.5px;line-height:1.55;color:var(--ink-3)}
+  .fx-none{font-size:12.5px;color:var(--ink-3);margin:2px 0}
+
+  .fx-bars{display:grid;gap:8px;margin-bottom:16px}
+  .fx-bar{display:flex;align-items:center;gap:12px}
+  .fx-barlab{flex:0 0 150px;font-size:12.5px;color:var(--ink-2)}
+  .fx-track{flex:1 1 auto;height:18px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+  .fx-fill{height:100%;border-radius:4px}
+  .fx-fill.one{background:var(--accent)}
+  .fx-fill.classic{background:#7AA7B8}
+  .fx-fill.other{background:#C3CDD1}
+  /* "Ingen produkt satt" är inte en produkt — den ska inte se ut som en. */
+  .fx-fill.unk{background:repeating-linear-gradient(45deg,#E1E7E9,#E1E7E9 4px,#F0F3F4 4px,#F0F3F4 8px)}
+  .fx-barval{flex:0 0 118px;text-align:right;font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+
+  .fx-cmp{display:grid;grid-template-columns:1fr 1fr;gap:16px;
+    border-top:1px solid var(--border);padding-top:14px}
+  .fx-cmpcol h4{margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink-3)}
+  .fx-typelist{list-style:none;margin:0;padding:0}
+  .fx-typelist li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;
+    font-size:12.5px;border-bottom:1px solid var(--surface-2)}
+  .fx-tn{color:var(--ink-2);min-width:0}
+  .fx-tv{color:var(--ink-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+  .fx-firm{border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--surface)}
+  .fx-firmhead{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    font-family:inherit;background:none;border:0;padding:9px 12px;cursor:pointer}
+  .fx-firmhead:hover{background:var(--surface-2)}
+  .fx-rank{flex:0 0 22px;font-size:12px;font-weight:700;color:var(--ink-3);
+    font-variant-numeric:tabular-nums}
+  .fx-name{flex:0 0 auto;max-width:34%;font-size:13px;font-weight:650;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fx-stack{flex:1 1 auto;display:flex;height:10px;border-radius:3px;overflow:hidden;
+    background:var(--surface-2);min-width:60px}
+  .fx-seg{display:block;height:100%}
+  .fx-seg.one{background:var(--accent)}
+  .fx-seg.classic{background:#7AA7B8}
+  .fx-seg.other{background:#C3CDD1}
+  .fx-seg.unk{background:repeating-linear-gradient(45deg,#E1E7E9,#E1E7E9 3px,#F0F3F4 3px,#F0F3F4 6px)}
+  .fx-count{flex:0 0 auto;font-size:12px;color:var(--ink-3);white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  .fx-firmbody{padding:2px 12px 10px 46px}
+  .fx-topics{list-style:none;margin:0;padding:0}
+  .fx-topics li{display:flex;align-items:baseline;gap:10px;padding:3px 0;font-size:12.5px}
+  .fx-topic{flex:1 1 auto;color:var(--ink-2)}
+  .fx-ttype{flex:0 0 auto;font-size:11px;color:var(--ink-3)}
+  .fx-tcount{flex:0 0 34px;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
+
+  .fx-internal{font-size:12px;color:var(--ink-3);margin:0 0 10px;padding:8px 12px;
+    border:1px dashed var(--border);border-radius:6px}
+  .fx-foot{font-size:11.5px;line-height:1.55;color:var(--ink-3);margin:0}
+  @media (max-width:800px){ .fx-cmp{grid-template-columns:1fr} .fx-name{max-width:100%} }
+
   /* Sekundärt: finns kvar, men tar inte plats förrän man ber om det. */
   .nv-secondary{border:0;background:none;margin:2px 0 12px}
   .nv-secondary>summary{cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;
@@ -678,7 +750,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-06h-degrade-on-missing-column";
+var APP_VERSION = "v2026-08-18a-companies-tab";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -953,6 +1025,228 @@ function tabRows() {
 // render() lays out the stable chrome ONCE (header, help, tabs, controls, progress)
 // and leaves the card list to renderList(), so typing in search never rebuilds — and
 // so loses focus on — the controls.
+// ── Företag: vem skapar ärenden, på vilken produkt, om vad ──────────────────
+//
+// ALLT kommer från FÄLT i Freshdesk (cf_product152991, cf_category_1..3, type,
+// company_id) via ticket_facts — ingenting härleds ur ärendetext. Att gissa
+// produkt eller ämne ur nyckelord är Gate 1:s felläge, och görs inte här.
+var firms = { rows: [], topics: [], mix: [], coverage: [], loaded: false };
+
+async function loadCompanies() {
+  async function get(path) {
+    try {
+      var res = await api("/rest/v1/" + path);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (_e) { return null; }
+  }
+  var r = await Promise.all([
+    get("company_ticket_volume?select=*&limit=200"),
+    get("company_ticket_topics?select=*&limit=2000"),
+    get("product_topic_mix?select=*&limit=500"),
+    get("ticket_facts_coverage?select=*"),
+  ]);
+  firms = {
+    rows: r[0] || [], topics: r[1] || [], mix: r[2] || [],
+    coverage: r[3] || [], loaded: true,
+  };
+}
+
+// Simployer's own company files tickets too (48 in the current window — the
+// single largest "customer"). Those are internal, so they are shown but marked,
+// never silently mixed into a customer ranking.
+function isInternalFirm(name) {
+  return /^simployer\b/i.test(String(name || ""));
+}
+
+var firmProductLabel = { one: "Simployer One", classic: "Classic", other: "Andra produkter", unknown: "Ingen produkt satt" };
+var firmProductCls = { one: "one", classic: "classic", other: "other", unknown: "unk" };
+
+function renderCompanies() {
+  var lw = document.getElementById("listwrap");
+  lw.innerHTML = "";
+  if (!firms.loaded) {
+    lw.appendChild(set(el("div", "empty"), "Läser in…"));
+    loadCompanies().then(function () { if (tab === "companies") renderCompanies(); });
+    return;
+  }
+  if (!firms.rows.length) {
+    lw.appendChild(set(el("div", "empty"),
+      "Inga ärendefakta ännu. Kör batch-jobbet `ticket-facts` för att fylla på."));
+    return;
+  }
+
+  // ── Täckning FÖRST ────────────────────────────────────────────────────────
+  // En topplista byggd på ett fält som saknas på en tredjedel av raderna
+  // rangordnar de rader som råkade ha fältet. Det ska stå överst, inte i en
+  // fotnot.
+  var cov = firms.coverage[0] || {};
+  var totalTickets = Number(cov.tickets || 0);
+  var noProduct = Number(cov.product_unknown || 0);
+  var box = el("div", "fx-cov");
+  box.appendChild(set(el("div", "fx-covh"), "Så mycket täcker underlaget"));
+  var cg = el("div", "fx-covgrid");
+  [
+    ["Ärenden", String(totalTickets), ""],
+    ["Har företag", cov.company_pct + " %", Number(cov.company_pct) < 90 ? "warn" : ""],
+    ["Saknar produkt", noProduct + " (" + (totalTickets ? (100 * noProduct / totalTickets).toFixed(1) : "0") + " %)",
+      noProduct / Math.max(totalTickets, 1) > 0.15 ? "warn" : ""],
+    ["Period", String(cov.oldest || "").slice(0, 10) + " → " + String(cov.newest || "").slice(0, 10), ""],
+  ].forEach(function (c) {
+    var cell = el("div", "fx-covcell" + (c[2] ? " " + c[2] : ""));
+    cell.appendChild(set(el("dt", ""), c[0]));
+    cell.appendChild(set(el("dd", ""), c[1]));
+    cg.appendChild(cell);
+  });
+  box.appendChild(cg);
+  box.appendChild(set(el("p", "fx-covnote"),
+    "Rangordningen omfattar de ärenden som HAR ett företag — inte alla ärenden. " +
+    "Ärenden utan produktfält räknas inte som One eller Classic, de redovisas som " +
+    "\u201Cingen produkt satt\u201D, eftersom tomt inte betyder Classic."));
+  lw.appendChild(box);
+
+  // ── Produktjämförelse ────────────────────────────────────────────────────
+  var byGroup = {};
+  firms.mix.forEach(function (m) {
+    byGroup[m.product_group] = (byGroup[m.product_group] || 0) + Number(m.tickets || 0);
+  });
+  var order = ["one", "classic", "other", "unknown"];
+  var maxGroup = Math.max.apply(null, order.map(function (g) { return byGroup[g] || 0; }).concat([1]));
+
+  var pc = el("div", "fx-card");
+  pc.appendChild(set(el("h3", "fx-h"), "Simployer One mot Classic"));
+  pc.appendChild(set(el("p", "fx-sub"),
+    "Tre grupper, inte två: de flesta ärenden ligger på en annan produkt än " +
+    "både One och Classic — Expert, Employee Survey, Capitech, Learn, Talent. " +
+    "Att fördela ut dem hade gjort jämförelsen snyggare och fel."));
+  var bars = el("div", "fx-bars");
+  order.forEach(function (g) {
+    var n = byGroup[g] || 0;
+    var row = el("div", "fx-bar");
+    row.appendChild(set(el("span", "fx-barlab"), firmProductLabel[g] || g));
+    var track = el("div", "fx-track");
+    var fill = el("div", "fx-fill " + firmProductCls[g]);
+    fill.style.width = Math.max(2, 100 * n / maxGroup) + "%";
+    track.appendChild(fill);
+    row.appendChild(track);
+    row.appendChild(set(el("span", "fx-barval"),
+      n + (totalTickets ? "  ·  " + (100 * n / totalTickets).toFixed(1) + " %" : "")));
+    bars.appendChild(row);
+  });
+  pc.appendChild(bars);
+
+  // Ämnesmix per produkt, sida vid sida.
+  var cmp = el("div", "fx-cmp");
+  ["one", "classic"].forEach(function (g) {
+    var col = el("div", "fx-cmpcol");
+    col.appendChild(set(el("h4", "fx-cmph"), firmProductLabel[g]));
+    var types = {};
+    firms.mix.filter(function (m) { return m.product_group === g && m.ticket_type; })
+      .forEach(function (m) { types[m.ticket_type] = (types[m.ticket_type] || 0) + Number(m.tickets || 0); });
+    var tot = Object.keys(types).reduce(function (a, k) { return a + types[k]; }, 0);
+    var list = el("ul", "fx-typelist");
+    Object.keys(types).sort(function (a, b) { return types[b] - types[a]; }).slice(0, 6)
+      .forEach(function (k) {
+        var li = document.createElement("li");
+        li.appendChild(set(el("span", "fx-tn"), k));
+        li.appendChild(set(el("span", "fx-tv"),
+          types[k] + (tot ? " · " + (100 * types[k] / tot).toFixed(0) + " %" : "")));
+        list.appendChild(li);
+      });
+    if (!tot) col.appendChild(set(el("p", "fx-none"), "Inga ärenden med ärendetyp."));
+    col.appendChild(list);
+    cmp.appendChild(col);
+  });
+  pc.appendChild(cmp);
+  lw.appendChild(pc);
+
+  // ── Topp 10 företag ──────────────────────────────────────────────────────
+  var customers = firms.rows.filter(function (r) { return !isInternalFirm(r.company_name); });
+  var internal = firms.rows.filter(function (r) { return isInternalFirm(r.company_name); });
+  var top = customers.slice(0, 10);
+  var maxT = Math.max.apply(null, top.map(function (r) { return Number(r.tickets); }).concat([1]));
+
+  var tc = el("div", "fx-card");
+  tc.appendChild(set(el("h3", "fx-h"), "Topp 10 företag efter antal ärenden"));
+  tc.appendChild(set(el("p", "fx-sub"),
+    "Klicka på ett företag för att se vad deras ärenden gäller."));
+
+  top.forEach(function (r, i) {
+    var row = el("div", "fx-firm");
+    var head = document.createElement("button");
+    head.type = "button"; head.className = "fx-firmhead";
+    head.setAttribute("aria-expanded", "false");
+    head.appendChild(set(el("span", "fx-rank"), String(i + 1)));
+    head.appendChild(set(el("span", "fx-name"), r.company_name));
+    // Staplad andel per produkt — man ska se OM ett företag är One eller Classic.
+    var stack = el("span", "fx-stack");
+    // The remainder is tickets with NO product field set. Left out, the bar
+    // simply stops short and reads as broken; drawn as a fourth segment with
+    // the hatched "not a product" pattern, it reads as what it is — a gap in
+    // the data, not a gap in the customer's usage.
+    var known = Number(r.one_tickets || 0) + Number(r.classic_tickets || 0) + Number(r.other_tickets || 0);
+    var unset = Math.max(0, Number(r.tickets) - known);
+    [["one", r.one_tickets], ["classic", r.classic_tickets], ["other", r.other_tickets], ["unk", unset]].forEach(function (p) {
+      var n = Number(p[1] || 0);
+      if (!n) return;
+      var seg = el("span", "fx-seg " + p[0]);
+      seg.style.width = (100 * n / Number(r.tickets)) + "%";
+      seg.title = (p[0] === "unk" ? "Ingen produkt satt" : firmProductLabel[p[0]]) + ": " + n;
+      stack.appendChild(seg);
+    });
+    head.appendChild(stack);
+    head.appendChild(set(el("span", "fx-count"), r.tickets + " ärenden"));
+    head.appendChild(set(el("span", "nv-caret"), "▸"));
+    row.appendChild(head);
+
+    var body = null;
+    head.onclick = function () {
+      if (body) { row.removeChild(body); body = null; head.setAttribute("aria-expanded", "false"); return; }
+      body = el("div", "fx-firmbody");
+      var mine = firms.topics.filter(function (t) { return t.company_name === r.company_name; });
+      if (!mine.length) {
+        body.appendChild(set(el("p", "fx-none"), "Inga kategoriserade ärenden."));
+      } else {
+        var agg = {};
+        mine.forEach(function (t) {
+          var k = t.topic + "||" + (t.ticket_type || "—");
+          agg[k] = (agg[k] || 0) + Number(t.tickets || 0);
+        });
+        var ul = el("ul", "fx-topics");
+        Object.keys(agg).sort(function (a, b) { return agg[b] - agg[a]; }).slice(0, 10)
+          .forEach(function (k) {
+            var parts = k.split("||");
+            var li = document.createElement("li");
+            li.appendChild(set(el("span", "fx-topic"), parts[0]));
+            li.appendChild(set(el("span", "fx-ttype"), parts[1]));
+            li.appendChild(set(el("span", "fx-tcount"), String(agg[k])));
+            ul.appendChild(li);
+          });
+        body.appendChild(ul);
+      }
+      row.appendChild(body);
+      head.setAttribute("aria-expanded", "true");
+    };
+    tc.appendChild(row);
+  });
+  lw.appendChild(tc);
+
+  // Interna ärenden redovisas separat i stället för att tas bort tyst.
+  if (internal.length) {
+    var ib = el("div", "fx-internal");
+    var n = internal.reduce(function (a, r) { return a + Number(r.tickets || 0); }, 0);
+    ib.appendChild(set(el("span", ""),
+      "Undantaget från listan: " + internal.map(function (r) { return r.company_name; }).join(", ") +
+      " (" + n + " ärenden) — interna ärenden, inte en kund."));
+    lw.appendChild(ib);
+  }
+
+  lw.appendChild(set(el("p", "fx-foot"),
+    "Källa: fälten i Freshdesk via ticket_facts. Intercom är ännu inte synkat — " +
+    "eftersom Intercom ALLTID är S1/AlexisHR underskattas One här med hela " +
+    "Intercom-volymen. Läs One-siffran som \u201Cminst så mycket\u201D."));
+}
+
 function render() {
   app.innerHTML = "";
 
@@ -969,6 +1263,7 @@ function render() {
   bar.appendChild(tabEl("note", "🤝 Agent note", tabCount("note")));
   bar.appendChild(tabEl("articles", "📝 Artiklar", articles.length));
   bar.appendChild(tabEl("coaching", "🎯 Coaching", coach.steps.length));
+  bar.appendChild(tabEl("companies", "🏢 Företag", firms.rows.length));
   bar.appendChild(tabEl("all", "All", rows.length));
   var c = el("div", "count"); c.id = "loadcount"; c.textContent = rows.length + " loaded";
   bar.appendChild(c);
@@ -982,6 +1277,8 @@ function render() {
     app.appendChild(articleControlsEl());
   } else if (tab === "coaching") {
     // No ticket filters here — this tab summarises, it does not triage.
+  } else if (tab === "companies") {
+    // Same: a summary of who files tickets, not a triage queue.
   } else {
     app.appendChild(controlsEl());
     app.appendChild(progressEl());
@@ -1064,6 +1361,7 @@ function renderList() {
   if (tab === "note") return renderAgentNotes();
   if (tab === "articles") return renderArticleList();
   if (tab === "coaching") return renderCoaching();
+  if (tab === "companies") return renderCompanies();
   var base = tabRows();
   var q = search.trim().toLowerCase();
   shown = base.filter(function (r) {
