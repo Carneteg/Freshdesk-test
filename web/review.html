@@ -467,6 +467,42 @@
   .wf-step.code .wf-num{background:var(--accent);color:var(--on-solid);border-color:var(--accent)}
   .wf-step.human .wf-num{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-soft)}
 
+  /* Where the data comes from. Status is the only coloured thing, because the
+     panel exists to separate "connected" from "built but dark". */
+  .ds-phase{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-3);margin:14px 0 8px;padding-top:12px;border-top:1px solid var(--border)}
+  .ds-phase:first-of-type{border-top:0;padding-top:0}
+  .ds-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:9px;
+    margin-bottom:4px}
+  .ds-card{border:1px solid var(--border);border-left:3px solid var(--border);
+    border-radius:0 6px 6px 0;background:var(--surface-2);padding:10px 12px}
+  .ds-card.live{border-left-color:var(--accent)}
+  .ds-card.curated{border-left-color:var(--accent)}
+  .ds-card.partial{border-left-color:var(--warn)}
+  .ds-card.off{border-left-color:var(--warn)}
+  .ds-card.blocked{border-left-color:var(--crit)}
+  /* Not connected gets no colour at all — an absent source should not compete
+     with a working one for attention. */
+  .ds-card.planned,.ds-card.demo{border-left-color:var(--border);background:transparent;
+    border-style:dashed}
+  .ds-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+    flex-wrap:wrap;margin-bottom:5px}
+  .ds-name{font-size:12.5px;font-weight:650;color:var(--ink)}
+  .ds-status{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    padding:2px 6px;border-radius:3px;white-space:nowrap;
+    background:var(--surface);color:var(--ink-3);border:1px solid var(--border)}
+  .ds-status.live,.ds-status.curated{background:var(--accent-soft);color:var(--accent);
+    border-color:var(--accent-edge)}
+  .ds-status.partial,.ds-status.off{background:var(--warn-soft);color:var(--warn);
+    border-color:var(--warn-soft)}
+  .ds-status.blocked{background:var(--crit-soft);color:var(--crit);border-color:var(--crit-soft)}
+  .ds-metric{font-size:11px;font-variant-numeric:tabular-nums;color:var(--accent);
+    margin-bottom:5px;font-weight:650}
+  /* Zero is the number that matters most here, so it is not styled like a value. */
+  .ds-metric.zero{color:var(--warn)}
+  .ds-answers{margin:0 0 4px;font-size:12.2px;line-height:1.5;color:var(--ink-2)}
+  .ds-saves{margin:0;font-size:11.8px;line-height:1.5;color:var(--ink-3)}
+
   .wf-outcomes{border-top:1px solid var(--border);padding-top:14px;margin-bottom:12px}
   .wf-outh{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
     color:var(--ink-3);margin-bottom:9px}
@@ -799,7 +835,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-18b-english-coach-workflow";
+var APP_VERSION = "v2026-08-18c-data-sources";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -4149,6 +4185,197 @@ var WORKFLOW = [
 
 var WHO_LABEL = { model: "AI", code: "Code", system: "System", human: "You" };
 
+// ── Where the data comes from ──────────────────────────────────────────────
+//
+// The coach is only as good as what it can look up, so this panel is about
+// SOURCES rather than steps. Two rules shape it:
+//
+//  1. Status is honest. Several sources are BUILT BUT DARK — the product
+//     catalogue is seeded inactive, the CRM is opt-in and off, the learning loop
+//     is opt-in and off. Drawing those as "connected" would picture the
+//     intention rather than the system.
+//  2. No invented time savings. Each source says which LOOKUP it removes from
+//     the agent, because that is observable. Minutes saved are not measured, and
+//     a made-up number here would be the least defensible thing on the page.
+var DATA_SOURCES = [
+  {
+    key: "freshdesk", name: "Freshdesk — the ticket", phase: "now", status: "live",
+    answers: "What the customer actually asked, in full, plus the whole thread.",
+    saves: "The coach reads the entire history before you do, so a re-opened ticket does not start with you scrolling.",
+  },
+  {
+    key: "kb", name: "Customer help centre", phase: "now", status: "live",
+    answers: "What we have already documented publicly.",
+    saves: "Searches the KB in three languages and hands you the article link in the customer-facing form, ready to paste.",
+  },
+  {
+    key: "known_incidents", name: "Known-incident playbook", phase: "now", status: "curated",
+    metric: "known_incidents",
+    answers: "The operational knowledge that is not written down anywhere else — live incidents, the fix that is not in the KB, who a case should be routed to.",
+    saves: "This is the one that beats a generic KB match, and it outranks one on purpose. It only knows what the team puts in it.",
+  },
+  {
+    key: "past_tickets", name: "Past-ticket index", phase: "now", status: "curated",
+    metric: "past_tickets", stale: true,
+    answers: "How a similar case was actually resolved before.",
+    saves: "Precedent without asking a colleague. Does NOT refresh itself — run sync-tickets or it quietly ages.",
+  },
+  {
+    key: "openai", name: "OpenAI", phase: "now", status: "live",
+    answers: "Nothing on its own — it is the reasoning, not a source.",
+    saves: "Analyse, draft and verify. It may only use what the sources above returned.",
+  },
+  {
+    key: "supabase", name: "Supabase", phase: "now", status: "live",
+    answers: "Every generation, source list, status and verdict.",
+    saves: "Makes the coach measurable. Without it there is no way to tell whether any of this works.",
+  },
+  {
+    key: "gold", name: "Reviewer gold answers", phase: "now", status: "off",
+    metric: "gold_answers",
+    answers: "What a good reply looks like on this exact kind of ticket.",
+    saves: "Written and stored, but feeding them back into drafting is OPT-IN and currently off. The corpus exists; the loop is not running.",
+  },
+  {
+    key: "crm", name: "Freshworks CRM", phase: "now", status: "off",
+    metric: "crm_account_map",
+    answers: "Which products the account actually pays for, and when it renews.",
+    saves: "Removes a tab-switch before answering an entitlement question. Read-only, opt-in, currently off — and CRM data never enters a prompt.",
+  },
+  {
+    key: "catalog", name: "Product catalogue (upsell)", phase: "now", status: "off",
+    metric: "product_catalog",
+    answers: "Whether the customer asked for something the account does not have.",
+    saves: "Seeded inactive on purpose: the descriptions have not been checked by a product owner, and an invented product in front of a customer beats a missed upsell.",
+  },
+  {
+    key: "facts", name: "Ticket facts (company · product · topic)", phase: "now", status: "live",
+    metric: "ticket_facts",
+    answers: "Who files tickets, on One or Classic, about what.",
+    saves: "Powers the Företag tab. Read from Freshdesk fields, never inferred from text.",
+  },
+  {
+    key: "csat", name: "CSAT", phase: "now", status: "partial",
+    metric: "csat_ratings",
+    answers: "What the customer thought of the handling.",
+    saves: "The only signal the customer controls. The v2 API exposes the LEGACY surveys only, so it does not cover current tickets — per-agent CSAT still has to be read in the Freshdesk UI.",
+  },
+  {
+    key: "intercom", name: "Intercom (S1 / AlexisHR)", phase: "next", status: "planned",
+    answers: "The whole One support channel — always S1, and today entirely outside the coach.",
+    saves: "Would give One customers the same coaching Classic customers get, and make the One-vs-Classic numbers complete instead of understated.",
+  },
+  {
+    key: "jira", name: "Jira", phase: "next", status: "planned",
+    answers: "Is this a known bug, and is a fix on the way?",
+    saves: "Turns \u201CI will check with the team\u201D into an answer in the first reply — the single most common reason a ticket needs a second round.",
+  },
+  {
+    key: "confluence", name: "Confluence", phase: "later", status: "planned",
+    answers: "Internal engineering knowledge.",
+    saves: "Useful for agent guidance, but it is an INTERNAL space — there is no customer-facing content there, so it can never be the source of a customer reply.",
+  },
+  {
+    key: "planhat", name: "Planhat", phase: "later", status: "demo",
+    answers: "Account health, the CSM, renewal risk.",
+    saves: "Would turn the sample health box into real data, so \u201Cbrief the CSM first\u201D becomes an instruction you can act on.",
+  },
+  {
+    key: "linear", name: "Linear", phase: "later", status: "demo",
+    answers: "Product requests and how many customers are waiting on one.",
+    saves: "Lets feedback land somewhere countable instead of dying in the ticket.",
+  },
+  {
+    key: "scribe", name: "Scribe", phase: "later", status: "blocked",
+    answers: "The steps an agent took to solve something undocumented.",
+    saves: "The cheapest way to turn tacit fixes into articles — but recording an agent's screen needs MBL consultation and a DPA before a single capture may be made.",
+  },
+];
+
+var SRC_STATUS = {
+  live:    { label: "Live", cls: "live" },
+  curated: { label: "Curated by the team", cls: "curated" },
+  partial: { label: "Partial", cls: "partial" },
+  off:     { label: "Built, switched off", cls: "off" },
+  planned: { label: "Not connected", cls: "planned" },
+  demo:    { label: "Demo only", cls: "demo" },
+  blocked: { label: "Blocked — MBL + DPA", cls: "blocked" },
+};
+var SRC_PHASE = {
+  now:   "In the note today",
+  next:  "Next — the two that would change most",
+  later: "Later, or deliberately parked",
+};
+
+var dataStatus = { rows: [], loaded: false };
+
+async function loadDataStatus() {
+  try {
+    var res = await api("/rest/v1/data_source_status?select=*");
+    if (res.ok) dataStatus.rows = await res.json();
+  } catch (_e) { /* the panel is useful without the counts */ }
+  dataStatus.loaded = true;
+}
+
+function srcMetric(key) {
+  var m = dataStatus.rows.filter(function (r) { return r.source === key; })[0];
+  return m || null;
+}
+
+function sourcesEl() {
+  var box = el("details", "wf ds");
+  var sum = document.createElement("summary");
+  sum.appendChild(document.createTextNode("🔌 Where the data comes from"));
+  sum.appendChild(set(el("span", "wf-sub"),
+    "what each source answers · what it saves you · what is actually switched on"));
+  box.appendChild(sum);
+
+  box.appendChild(set(el("p", "wf-lede"),
+    "The coach is only as good as what it can look up. Every source below is a " +
+    "lookup you would otherwise do by hand — and the status is honest: several " +
+    "are built but switched off, and one is blocked on a legal step."));
+
+  ["now", "next", "later"].forEach(function (phase) {
+    var group = DATA_SOURCES.filter(function (d) { return d.phase === phase; });
+    if (!group.length) return;
+    box.appendChild(set(el("div", "ds-phase"), SRC_PHASE[phase]));
+    var grid = el("div", "ds-grid");
+    group.forEach(function (d) {
+      var st = SRC_STATUS[d.status] || SRC_STATUS.planned;
+      var card = el("div", "ds-card " + st.cls);
+      var head = el("div", "ds-head");
+      head.appendChild(set(el("span", "ds-name"), d.name));
+      head.appendChild(set(el("span", "ds-status " + st.cls), st.label));
+      card.appendChild(head);
+
+      // A live count turns "built but dark" from a claim into a fact.
+      if (d.metric) {
+        var m = srcMetric(d.metric);
+        if (m) {
+          var n = Number(m.items || 0);
+          var bits = [n + (n === 1 ? " item" : " items")];
+          if (m.freshest) bits.push("newest " + String(m.freshest).slice(0, 10));
+          card.appendChild(set(el("div", "ds-metric" + (n === 0 ? " zero" : "")),
+            n === 0 ? "empty — nothing for the coach to use" : bits.join(" · ")));
+        }
+      }
+
+      card.appendChild(set(el("p", "ds-answers"), d.answers));
+      card.appendChild(set(el("p", "ds-saves"), d.saves));
+      grid.appendChild(card);
+    });
+    box.appendChild(grid);
+  });
+
+  box.appendChild(set(el("p", "wf-foot"),
+    "What this is for: fewer tabs open before the first reply. The baselines it " +
+    "would have to move are already measured — customers came back after the first " +
+    "reply on 51% of coached tickets, 2 agent replies per ticket, and 37% of first " +
+    "replies took over an hour. Time saved is NOT measured yet, so no number here " +
+    "claims it."));
+  return box;
+}
+
 function workflowEl() {
   var box = el("details", "wf");
   var sum = document.createElement("summary");
@@ -4655,6 +4882,12 @@ function renderAgentNotes() {
   }
 
   lw.appendChild(workflowEl());
+  lw.appendChild(sourcesEl());
+  if (!dataStatus.loaded) {
+    // Counts arrive a beat later; re-render once so the panel is never wrong,
+    // only briefly less specific.
+    loadDataStatus().then(function () { if (tab === "note") renderAgentNotes(); });
+  }
 
   lw.appendChild(set(el("p", "nv-hint"),
     "One ticket is open at a time. Click a row to open it — arrow keys (or j/k) move " +
