@@ -920,6 +920,31 @@ weak tiers (name prefix, email domain) carry a verify nudge in the note, and an
 via `FRESHWORKS_CRM_ENABLED`; the replay harness never constructs the CRM
 client, so evaluation runs are unaffected.
 
+**Freshdesk CSAT — the v2 API exposes only the LEGACY surveys (verified live
+2026-08-18).** Asked why one agent had five bad CSAT ratings, the scan came back
+with **zero ratings for her** and a tidy 1184 across 33 other agents. That looked
+like an answer and was not one. Two facts settle it:
+- `GET /surveys` lists the CURRENT surveys with **UUID** ids — `Test CSAT`
+  (inactive), `CSAT Expert`, `Basic CSAT Survey`.
+- `GET /surveys/satisfaction_ratings` returns ratings carrying **numeric** survey
+  ids (`201000046125`, `201000026097`, `201000046120`), whose newest rated ticket
+  is **65323** — while current tickets are in the 87k–90k range.
+
+Two id spaces = two systems. The v2 ratings endpoint reads the legacy corpus
+only; ratings from the active surveys are not reachable through it. So **any
+per-agent CSAT count from this endpoint is legacy-only**, and an agent who joined
+after the cut-over shows zero regardless of their real CSAT. `csat_scan.ts` now
+fails loudly on that id mismatch rather than printing a per-agent zero.
+
+Also: the endpoint silently defaults to the **last 30 days** when `created_since`
+is omitted — the scan always sends an explicit window (2 years) and prints it.
+And the scale is **103/102/101 · 100 · -101/-102/-103**, not 1–5: `csatBand()`
+derives positive/neutral/negative and the views count bands, because averaging
+this scale is meaningless and reading it as 1–5 inverts every negative rating.
+Migration 47 (`csat_ratings`, `csat_by_agent`, `csat_negative_with_reply`).
+**Open:** where the active surveys' ratings actually live (Analytics export?) —
+until that is answered, per-agent CSAT has to come from the Freshdesk UI.
+
 **Freshworks API facts — VERIFIED live 2026-07-31 (they invalidated two
 assumptions).** A cron-secret-guarded probe against known-good records settled
 §7's open question and explained why every early run returned `no_match`:

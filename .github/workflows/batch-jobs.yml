@@ -22,6 +22,10 @@ on:
         default: score-history
         options:
           - score-history   # QA-score agents' historical replies (triage). Posts nothing.
+          - csat-scan       # Sync Freshdesk CSAT ratings into Supabase. Read-only, no OpenAI.
+          - ticket-landscape # Probe ticket fields: company, product, group. Read-only, writes nothing.
+          - ticket-facts    # Sync company/product/topic facts for the Companies tab.
+          - write-articles  # Draft KB articles a reviewer requested. Supabase only, no Freshdesk.
           - replay          # Replay closed tickets through the pipeline (evaluation).
           - sync-tickets    # Refresh the semantic past-ticket precedent index.
           - assign-cohorts  # Lock tickets into learning/development/holdout sets (Supabase only).
@@ -39,6 +43,11 @@ on:
         default: ""
       count:
         description: "How many closed tickets to auto-pick (replay/score-history). Empty = script default."
+        type: string
+        required: false
+        default: ""
+      since:
+        description: "csat-scan only — earliest rating date (YYYY-MM-DD). Empty = 2 years back."
         type: string
         required: false
         default: ""
@@ -91,6 +100,14 @@ jobs:
       LEARNING_LOOP: ${{ inputs.learning_loop }}
       QA_COACH: ${{ inputs.qa_coach }}
       REPLAY_APPROVED: ${{ inputs.approved_sample }}
+      # csat-scan reuses the `agent` input to focus its report on one agent.
+      CSAT_AGENT: ${{ inputs.agent }}
+      # csat-scan: how far back to look. Empty = the script's own wide default,
+      # never Freshdesk's silent 30-day one.
+      CSAT_SINCE: ${{ inputs.since }}
+      # write-articles reuses the replay approval gate: real ticket text goes to
+      # OpenAI, so the queue is previewed and nothing is drafted without it.
+      ARTICLES_APPROVED: ${{ inputs.approved_sample }}
       # Never print subjects, customer/agent text, drafts, or source excerpts in
       # Actions logs/Summary. Local replay remains detailed by default.
       CLOUD_LOG_MODE: safe
@@ -106,6 +123,17 @@ jobs:
           # that does not need them.
           if [ "$IN_JOB" = "verify-api" ]; then
             required="FRESHDESK_DOMAIN FRESHDESK_API_KEY"
+          elif [ "$IN_JOB" = "ticket-landscape" ]; then
+            # Pure read probe: Freshdesk only, no Supabase write, no LLM.
+            required="FRESHDESK_DOMAIN FRESHDESK_API_KEY"
+          elif [ "$IN_JOB" = "write-articles" ]; then
+            # Reads Supabase, calls OpenAI. Never touches Freshdesk.
+            required="OPENAI_API_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY"
+          elif [ "$IN_JOB" = "ticket-facts" ]; then
+            required="FRESHDESK_DOMAIN FRESHDESK_API_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY"
+          elif [ "$IN_JOB" = "csat-scan" ]; then
+            # CSAT is a read + a Supabase write. No LLM, so no OpenAI key needed.
+            required="FRESHDESK_DOMAIN FRESHDESK_API_KEY SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY"
           else
             required="FRESHDESK_DOMAIN FRESHDESK_API_KEY OPENAI_API_KEY MY_AGENT_ID SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY"
           fi
@@ -160,6 +188,10 @@ jobs:
             case "$IN_JOB" in
               replay)         deno run --allow-env --allow-net scripts/replay.ts $IN_IDS ;;
               score-history)  deno run --allow-env --allow-net scripts/score_history.ts $IN_IDS ;;
+              csat-scan)      deno run --allow-env --allow-net scripts/csat_scan.ts ;;
+              ticket-landscape) deno run --allow-env --allow-net scripts/ticket_landscape.ts ;;
+              ticket-facts)   deno run --allow-env --allow-net scripts/ticket_facts_sync.ts ;;
+              write-articles) deno run --allow-env --allow-net scripts/write_articles.ts ;;
               sync-tickets)   deno run --allow-env --allow-net scripts/sync_tickets.ts ;;
               assign-cohorts) deno run --allow-env --allow-net scripts/assign_cohorts.ts $IN_IDS ;;
               knowledge-gaps) deno run --allow-env --allow-net scripts/knowledge_gaps.ts ;;

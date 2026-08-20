@@ -431,6 +431,215 @@
     .nv-rowsubj,.nv-rowrec{max-width:100%;flex:1 1 100%}
   }
 
+  /* ── How the coach works ─────────────────────────────────────────────────
+     A vertical flow. The rail carries the step number and the connecting line;
+     the WHO chip is the point of the whole diagram, so it is the only coloured
+     element and the four roles never share a colour. */
+  .wf{border:1px solid var(--border);border-radius:8px;background:var(--surface);
+    margin:0 0 14px;padding:0 16px}
+  .wf>summary{cursor:pointer;list-style:none;padding:12px 0;font-size:13px;font-weight:700;
+    color:var(--ink);display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .wf>summary::-webkit-details-marker{display:none}
+  .wf>summary::before{content:"▸";color:var(--ink-3);font-weight:400}
+  .wf[open]>summary::before{content:"▾"}
+  .wf-sub{font-size:11.5px;font-weight:400;color:var(--ink-3)}
+  .wf-lede{margin:0 0 16px;font-size:12.8px;line-height:1.6;color:var(--ink-2);
+    max-width:72ch}
+  .wf-flow{display:grid;gap:0;margin-bottom:18px}
+  .wf-step{display:flex;gap:14px}
+  .wf-rail{flex:0 0 26px;display:flex;flex-direction:column;align-items:center}
+  .wf-num{flex:0 0 auto;width:24px;height:24px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;font-size:11.5px;font-weight:700;
+    background:var(--surface-2);color:var(--ink-2);border:1px solid var(--border)}
+  .wf-line{flex:1 1 auto;width:2px;background:var(--border);margin:3px 0}
+  .wf-body{flex:1 1 auto;padding-bottom:16px;min-width:0}
+  .wf-head{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap;margin-bottom:3px}
+  .wf-title{font-size:13px;font-weight:650;color:var(--ink)}
+  .wf-text{margin:0;font-size:12.5px;line-height:1.6;color:var(--ink-3);max-width:74ch}
+  /* Four roles, four colours. Code is the teal one because it is the step that
+     makes the badge trustworthy. */
+  .wf-who{font-size:9.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;
+    padding:2px 7px;border-radius:3px;white-space:nowrap;border:1px solid transparent}
+  .wf-who.model{background:var(--accent-soft);color:var(--accent);border-color:var(--accent-edge)}
+  .wf-who.code{background:var(--accent);color:var(--on-solid)}
+  .wf-who.system{background:var(--surface-2);color:var(--ink-3);border-color:var(--border)}
+  .wf-who.human{background:var(--warn-soft);color:var(--warn)}
+  .wf-step.code .wf-num{background:var(--accent);color:var(--on-solid);border-color:var(--accent)}
+  .wf-step.human .wf-num{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-soft)}
+
+  /* ── Future state (demo view) ────────────────────────────────────────────
+     Numbered stages, so the value chain reads as a chain rather than four
+     lists. The banner is not decoration: a future-state picture that does not
+     say so is just a false status report. */
+  .fs-switch{display:inline-flex;gap:0;border:1px solid var(--border);border-radius:6px;
+    overflow:hidden;margin:0 0 14px}
+  .fs-swbtn{font-family:inherit;font-size:11.5px;font-weight:650;padding:6px 14px;
+    border:0;background:var(--surface);color:var(--ink-3);cursor:pointer}
+  .fs-swbtn.on{background:var(--accent);color:var(--on-solid)}
+  .fs-banner{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+    background:var(--accent-soft);border:1px solid var(--accent-edge);border-radius:7px;
+    padding:10px 13px;margin-bottom:16px;font-size:12.2px;line-height:1.55;color:var(--ink-2)}
+  .fs-btag{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    background:var(--accent);color:var(--on-solid);padding:2px 7px;border-radius:3px;
+    white-space:nowrap}
+  .fs-stage{margin-bottom:20px}
+  .fs-head{display:flex;align-items:center;gap:11px;margin-bottom:5px}
+  .fs-num{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;font-size:12.5px;font-weight:700;
+    background:var(--accent);color:var(--on-solid)}
+  .fs-title{font-size:13.5px;font-weight:700;color:var(--ink)}
+  .fs-lede{margin:0 0 11px;padding-left:37px;font-size:12.5px;line-height:1.6;
+    color:var(--ink-3);max-width:78ch}
+  .fs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:8px;
+    padding-left:37px}
+  .fs-src{border:1px solid var(--border);border-radius:6px;background:var(--surface-2);
+    padding:9px 11px}
+  /* Live sources get the accent edge — in a future-state view the honest signal
+     is which parts are not hypothetical. */
+  .fs-src.on{border-left:3px solid var(--accent)}
+  .fs-srchead{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;margin-bottom:2px}
+  .fs-icon{flex:0 0 auto;font-size:12px}
+  .fs-srcname{font-size:12.2px;font-weight:650;color:var(--ink)}
+  .fs-now{font-size:8.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-edge);
+    padding:1px 5px;border-radius:3px;white-space:nowrap}
+  .fs-from{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);
+    margin-bottom:4px}
+  .fs-brings{margin:0;font-size:11.8px;line-height:1.5;color:var(--ink-2)}
+  .fs-points{margin:0;padding-left:37px;list-style:none}
+  .fs-points li{position:relative;padding:0 0 6px 18px;font-size:12.5px;line-height:1.6;
+    color:var(--ink-2);max-width:80ch}
+  .fs-points li::before{content:"";position:absolute;left:2px;top:8px;width:6px;height:6px;
+    border-radius:50%;background:var(--accent-edge)}
+  .fs-loop{display:flex;align-items:center;gap:11px;padding:11px 14px;margin-bottom:14px;
+    border:1px dashed var(--accent-edge);border-radius:7px;background:var(--accent-soft);
+    font-size:12.3px;line-height:1.55;color:var(--ink-2)}
+  .fs-looparrow{flex:0 0 auto;font-size:19px;color:var(--accent);line-height:1}
+  @media (max-width:700px){
+    .fs-lede,.fs-grid,.fs-points{padding-left:0}
+  }
+
+  /* Where the data comes from. Status is the only coloured thing, because the
+     panel exists to separate "connected" from "built but dark". */
+  .ds-phase{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-3);margin:14px 0 8px;padding-top:12px;border-top:1px solid var(--border)}
+  .ds-phase:first-of-type{border-top:0;padding-top:0}
+  .ds-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:9px;
+    margin-bottom:4px}
+  .ds-card{border:1px solid var(--border);border-left:3px solid var(--border);
+    border-radius:0 6px 6px 0;background:var(--surface-2);padding:10px 12px}
+  .ds-card.live{border-left-color:var(--accent)}
+  .ds-card.curated{border-left-color:var(--accent)}
+  .ds-card.partial{border-left-color:var(--warn)}
+  .ds-card.off{border-left-color:var(--warn)}
+  .ds-card.blocked{border-left-color:var(--crit)}
+  /* Not connected gets no colour at all — an absent source should not compete
+     with a working one for attention. */
+  .ds-card.planned,.ds-card.demo{border-left-color:var(--border);background:transparent;
+    border-style:dashed}
+  .ds-head{display:flex;align-items:baseline;justify-content:space-between;gap:8px;
+    flex-wrap:wrap;margin-bottom:5px}
+  .ds-name{font-size:12.5px;font-weight:650;color:var(--ink)}
+  .ds-status{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    padding:2px 6px;border-radius:3px;white-space:nowrap;
+    background:var(--surface);color:var(--ink-3);border:1px solid var(--border)}
+  .ds-status.live,.ds-status.curated{background:var(--accent-soft);color:var(--accent);
+    border-color:var(--accent-edge)}
+  .ds-status.partial,.ds-status.off{background:var(--warn-soft);color:var(--warn);
+    border-color:var(--warn-soft)}
+  .ds-status.blocked{background:var(--crit-soft);color:var(--crit);border-color:var(--crit-soft)}
+  .ds-metric{font-size:11px;font-variant-numeric:tabular-nums;color:var(--accent);
+    margin-bottom:5px;font-weight:650}
+  /* Zero is the number that matters most here, so it is not styled like a value. */
+  .ds-metric.zero{color:var(--warn)}
+  .ds-answers{margin:0 0 4px;font-size:12.2px;line-height:1.5;color:var(--ink-2)}
+  .ds-saves{margin:0;font-size:11.8px;line-height:1.5;color:var(--ink-3)}
+
+  .wf-outcomes{border-top:1px solid var(--border);padding-top:14px;margin-bottom:12px}
+  .wf-outh{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-3);margin-bottom:9px}
+  .wf-out{display:flex;align-items:baseline;gap:10px;padding:7px 11px;margin-bottom:5px;
+    border-radius:6px;border-left:3px solid var(--accent);background:var(--surface-2)}
+  .wf-out.amber{border-left-color:var(--warn)}
+  .wf-out.red{border-left-color:var(--crit)}
+  .wf-outicon{flex:0 0 auto;font-size:12px}
+  .wf-outname{flex:0 0 auto;font-size:12.5px;font-weight:700;color:var(--ink);min-width:150px}
+  .wf-outtext{flex:1 1 auto;font-size:12.2px;line-height:1.55;color:var(--ink-3);min-width:0}
+  .wf-foot{margin:0 0 14px;font-size:11.5px;line-height:1.55;color:var(--ink-3)}
+  @media (max-width:700px){ .wf-outname{min-width:0} .wf-out{flex-wrap:wrap} }
+
+  /* ── Företagsfliken ──────────────────────────────────────────────────────
+     Samma formspråk som notisen: vänsterkant bär betydelse, teal är positivt,
+     bärnsten varnar. Produktfärgerna är konsekventa i hela fliken så att en
+     stapel och ett segment betyder samma sak. */
+  .fx-cov{border:1px solid var(--border);border-left:3px solid var(--accent);
+    border-radius:0 8px 8px 0;background:var(--surface);padding:14px 16px;margin-bottom:14px}
+  .fx-covh{font-size:11px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--ink-3);margin-bottom:10px}
+  .fx-covgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px}
+  .fx-covcell dt{font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:650;margin:0 0 2px}
+  .fx-covcell dd{margin:0;font-size:16px;font-weight:700;color:var(--ink)}
+  .fx-covcell.warn dd{color:var(--warn)}
+  .fx-covnote{margin:11px 0 0;font-size:11.5px;line-height:1.55;color:var(--ink-3)}
+
+  .fx-card{border:1px solid var(--border);border-radius:8px;background:var(--surface);
+    padding:16px 18px;margin-bottom:14px}
+  .fx-h{margin:0 0 4px;font-size:15px;color:var(--ink)}
+  .fx-sub{margin:0 0 14px;font-size:12.5px;line-height:1.55;color:var(--ink-3)}
+  .fx-none{font-size:12.5px;color:var(--ink-3);margin:2px 0}
+
+  .fx-bars{display:grid;gap:8px;margin-bottom:16px}
+  .fx-bar{display:flex;align-items:center;gap:12px}
+  .fx-barlab{flex:0 0 150px;font-size:12.5px;color:var(--ink-2)}
+  .fx-track{flex:1 1 auto;height:18px;background:var(--surface-2);border-radius:4px;overflow:hidden}
+  .fx-fill{height:100%;border-radius:4px}
+  .fx-fill.one{background:var(--accent)}
+  .fx-fill.classic{background:#7AA7B8}
+  .fx-fill.other{background:#C3CDD1}
+  /* "Ingen produkt satt" är inte en produkt — den ska inte se ut som en. */
+  .fx-fill.unk{background:repeating-linear-gradient(45deg,#E1E7E9,#E1E7E9 4px,#F0F3F4 4px,#F0F3F4 8px)}
+  .fx-barval{flex:0 0 118px;text-align:right;font-size:12px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+
+  .fx-cmp{display:grid;grid-template-columns:1fr 1fr;gap:16px;
+    border-top:1px solid var(--border);padding-top:14px}
+  .fx-cmpcol h4{margin:0 0 8px;font-size:12px;font-weight:700;letter-spacing:.05em;
+    text-transform:uppercase;color:var(--ink-3)}
+  .fx-typelist{list-style:none;margin:0;padding:0}
+  .fx-typelist li{display:flex;justify-content:space-between;gap:10px;padding:4px 0;
+    font-size:12.5px;border-bottom:1px solid var(--surface-2)}
+  .fx-tn{color:var(--ink-2);min-width:0}
+  .fx-tv{color:var(--ink-3);white-space:nowrap;font-variant-numeric:tabular-nums}
+
+  .fx-firm{border:1px solid var(--border);border-radius:6px;margin-bottom:6px;background:var(--surface)}
+  .fx-firmhead{display:flex;align-items:center;gap:12px;width:100%;text-align:left;
+    font-family:inherit;background:none;border:0;padding:9px 12px;cursor:pointer}
+  .fx-firmhead:hover{background:var(--surface-2)}
+  .fx-rank{flex:0 0 22px;font-size:12px;font-weight:700;color:var(--ink-3);
+    font-variant-numeric:tabular-nums}
+  .fx-name{flex:0 0 auto;max-width:34%;font-size:13px;font-weight:650;color:var(--ink);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .fx-stack{flex:1 1 auto;display:flex;height:10px;border-radius:3px;overflow:hidden;
+    background:var(--surface-2);min-width:60px}
+  .fx-seg{display:block;height:100%}
+  .fx-seg.one{background:var(--accent)}
+  .fx-seg.classic{background:#7AA7B8}
+  .fx-seg.other{background:#C3CDD1}
+  .fx-seg.unk{background:repeating-linear-gradient(45deg,#E1E7E9,#E1E7E9 3px,#F0F3F4 3px,#F0F3F4 6px)}
+  .fx-count{flex:0 0 auto;font-size:12px;color:var(--ink-3);white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  .fx-firmbody{padding:2px 12px 10px 46px}
+  .fx-topics{list-style:none;margin:0;padding:0}
+  .fx-topics li{display:flex;align-items:baseline;gap:10px;padding:3px 0;font-size:12.5px}
+  .fx-topic{flex:1 1 auto;color:var(--ink-2)}
+  .fx-ttype{flex:0 0 auto;font-size:11px;color:var(--ink-3)}
+  .fx-tcount{flex:0 0 34px;text-align:right;color:var(--ink);font-variant-numeric:tabular-nums}
+
+  .fx-internal{font-size:12px;color:var(--ink-3);margin:0 0 10px;padding:8px 12px;
+    border:1px dashed var(--border);border-radius:6px}
+  .fx-foot{font-size:11.5px;line-height:1.55;color:var(--ink-3);margin:0}
+  @media (max-width:800px){ .fx-cmp{grid-template-columns:1fr} .fx-name{max-width:100%} }
+
   /* Sekundärt: finns kvar, men tar inte plats förrän man ber om det. */
   .nv-secondary{border:0;background:none;margin:2px 0 12px}
   .nv-secondary>summary{cursor:pointer;font-family:inherit;font-size:11.5px;font-weight:700;
@@ -678,7 +887,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-06h-degrade-on-missing-column";
+var APP_VERSION = "v2026-08-18d-future-state";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -953,6 +1162,228 @@ function tabRows() {
 // render() lays out the stable chrome ONCE (header, help, tabs, controls, progress)
 // and leaves the card list to renderList(), so typing in search never rebuilds — and
 // so loses focus on — the controls.
+// ── Företag: vem skapar ärenden, på vilken produkt, om vad ──────────────────
+//
+// ALLT kommer från FÄLT i Freshdesk (cf_product152991, cf_category_1..3, type,
+// company_id) via ticket_facts — ingenting härleds ur ärendetext. Att gissa
+// produkt eller ämne ur nyckelord är Gate 1:s felläge, och görs inte här.
+var firms = { rows: [], topics: [], mix: [], coverage: [], loaded: false };
+
+async function loadCompanies() {
+  async function get(path) {
+    try {
+      var res = await api("/rest/v1/" + path);
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (_e) { return null; }
+  }
+  var r = await Promise.all([
+    get("company_ticket_volume?select=*&limit=200"),
+    get("company_ticket_topics?select=*&limit=2000"),
+    get("product_topic_mix?select=*&limit=500"),
+    get("ticket_facts_coverage?select=*"),
+  ]);
+  firms = {
+    rows: r[0] || [], topics: r[1] || [], mix: r[2] || [],
+    coverage: r[3] || [], loaded: true,
+  };
+}
+
+// Simployer's own company files tickets too (48 in the current window — the
+// single largest "customer"). Those are internal, so they are shown but marked,
+// never silently mixed into a customer ranking.
+function isInternalFirm(name) {
+  return /^simployer\b/i.test(String(name || ""));
+}
+
+var firmProductLabel = { one: "Simployer One", classic: "Classic", other: "Andra produkter", unknown: "Ingen produkt satt" };
+var firmProductCls = { one: "one", classic: "classic", other: "other", unknown: "unk" };
+
+function renderCompanies() {
+  var lw = document.getElementById("listwrap");
+  lw.innerHTML = "";
+  if (!firms.loaded) {
+    lw.appendChild(set(el("div", "empty"), "Läser in…"));
+    loadCompanies().then(function () { if (tab === "companies") renderCompanies(); });
+    return;
+  }
+  if (!firms.rows.length) {
+    lw.appendChild(set(el("div", "empty"),
+      "Inga ärendefakta ännu. Kör batch-jobbet `ticket-facts` för att fylla på."));
+    return;
+  }
+
+  // ── Täckning FÖRST ────────────────────────────────────────────────────────
+  // En topplista byggd på ett fält som saknas på en tredjedel av raderna
+  // rangordnar de rader som råkade ha fältet. Det ska stå överst, inte i en
+  // fotnot.
+  var cov = firms.coverage[0] || {};
+  var totalTickets = Number(cov.tickets || 0);
+  var noProduct = Number(cov.product_unknown || 0);
+  var box = el("div", "fx-cov");
+  box.appendChild(set(el("div", "fx-covh"), "Så mycket täcker underlaget"));
+  var cg = el("div", "fx-covgrid");
+  [
+    ["Ärenden", String(totalTickets), ""],
+    ["Har företag", cov.company_pct + " %", Number(cov.company_pct) < 90 ? "warn" : ""],
+    ["Saknar produkt", noProduct + " (" + (totalTickets ? (100 * noProduct / totalTickets).toFixed(1) : "0") + " %)",
+      noProduct / Math.max(totalTickets, 1) > 0.15 ? "warn" : ""],
+    ["Period", String(cov.oldest || "").slice(0, 10) + " → " + String(cov.newest || "").slice(0, 10), ""],
+  ].forEach(function (c) {
+    var cell = el("div", "fx-covcell" + (c[2] ? " " + c[2] : ""));
+    cell.appendChild(set(el("dt", ""), c[0]));
+    cell.appendChild(set(el("dd", ""), c[1]));
+    cg.appendChild(cell);
+  });
+  box.appendChild(cg);
+  box.appendChild(set(el("p", "fx-covnote"),
+    "Rangordningen omfattar de ärenden som HAR ett företag — inte alla ärenden. " +
+    "Ärenden utan produktfält räknas inte som One eller Classic, de redovisas som " +
+    "\u201Cingen produkt satt\u201D, eftersom tomt inte betyder Classic."));
+  lw.appendChild(box);
+
+  // ── Produktjämförelse ────────────────────────────────────────────────────
+  var byGroup = {};
+  firms.mix.forEach(function (m) {
+    byGroup[m.product_group] = (byGroup[m.product_group] || 0) + Number(m.tickets || 0);
+  });
+  var order = ["one", "classic", "other", "unknown"];
+  var maxGroup = Math.max.apply(null, order.map(function (g) { return byGroup[g] || 0; }).concat([1]));
+
+  var pc = el("div", "fx-card");
+  pc.appendChild(set(el("h3", "fx-h"), "Simployer One mot Classic"));
+  pc.appendChild(set(el("p", "fx-sub"),
+    "Tre grupper, inte två: de flesta ärenden ligger på en annan produkt än " +
+    "både One och Classic — Expert, Employee Survey, Capitech, Learn, Talent. " +
+    "Att fördela ut dem hade gjort jämförelsen snyggare och fel."));
+  var bars = el("div", "fx-bars");
+  order.forEach(function (g) {
+    var n = byGroup[g] || 0;
+    var row = el("div", "fx-bar");
+    row.appendChild(set(el("span", "fx-barlab"), firmProductLabel[g] || g));
+    var track = el("div", "fx-track");
+    var fill = el("div", "fx-fill " + firmProductCls[g]);
+    fill.style.width = Math.max(2, 100 * n / maxGroup) + "%";
+    track.appendChild(fill);
+    row.appendChild(track);
+    row.appendChild(set(el("span", "fx-barval"),
+      n + (totalTickets ? "  ·  " + (100 * n / totalTickets).toFixed(1) + " %" : "")));
+    bars.appendChild(row);
+  });
+  pc.appendChild(bars);
+
+  // Ämnesmix per produkt, sida vid sida.
+  var cmp = el("div", "fx-cmp");
+  ["one", "classic"].forEach(function (g) {
+    var col = el("div", "fx-cmpcol");
+    col.appendChild(set(el("h4", "fx-cmph"), firmProductLabel[g]));
+    var types = {};
+    firms.mix.filter(function (m) { return m.product_group === g && m.ticket_type; })
+      .forEach(function (m) { types[m.ticket_type] = (types[m.ticket_type] || 0) + Number(m.tickets || 0); });
+    var tot = Object.keys(types).reduce(function (a, k) { return a + types[k]; }, 0);
+    var list = el("ul", "fx-typelist");
+    Object.keys(types).sort(function (a, b) { return types[b] - types[a]; }).slice(0, 6)
+      .forEach(function (k) {
+        var li = document.createElement("li");
+        li.appendChild(set(el("span", "fx-tn"), k));
+        li.appendChild(set(el("span", "fx-tv"),
+          types[k] + (tot ? " · " + (100 * types[k] / tot).toFixed(0) + " %" : "")));
+        list.appendChild(li);
+      });
+    if (!tot) col.appendChild(set(el("p", "fx-none"), "Inga ärenden med ärendetyp."));
+    col.appendChild(list);
+    cmp.appendChild(col);
+  });
+  pc.appendChild(cmp);
+  lw.appendChild(pc);
+
+  // ── Topp 10 företag ──────────────────────────────────────────────────────
+  var customers = firms.rows.filter(function (r) { return !isInternalFirm(r.company_name); });
+  var internal = firms.rows.filter(function (r) { return isInternalFirm(r.company_name); });
+  var top = customers.slice(0, 10);
+  var maxT = Math.max.apply(null, top.map(function (r) { return Number(r.tickets); }).concat([1]));
+
+  var tc = el("div", "fx-card");
+  tc.appendChild(set(el("h3", "fx-h"), "Topp 10 företag efter antal ärenden"));
+  tc.appendChild(set(el("p", "fx-sub"),
+    "Klicka på ett företag för att se vad deras ärenden gäller."));
+
+  top.forEach(function (r, i) {
+    var row = el("div", "fx-firm");
+    var head = document.createElement("button");
+    head.type = "button"; head.className = "fx-firmhead";
+    head.setAttribute("aria-expanded", "false");
+    head.appendChild(set(el("span", "fx-rank"), String(i + 1)));
+    head.appendChild(set(el("span", "fx-name"), r.company_name));
+    // Staplad andel per produkt — man ska se OM ett företag är One eller Classic.
+    var stack = el("span", "fx-stack");
+    // The remainder is tickets with NO product field set. Left out, the bar
+    // simply stops short and reads as broken; drawn as a fourth segment with
+    // the hatched "not a product" pattern, it reads as what it is — a gap in
+    // the data, not a gap in the customer's usage.
+    var known = Number(r.one_tickets || 0) + Number(r.classic_tickets || 0) + Number(r.other_tickets || 0);
+    var unset = Math.max(0, Number(r.tickets) - known);
+    [["one", r.one_tickets], ["classic", r.classic_tickets], ["other", r.other_tickets], ["unk", unset]].forEach(function (p) {
+      var n = Number(p[1] || 0);
+      if (!n) return;
+      var seg = el("span", "fx-seg " + p[0]);
+      seg.style.width = (100 * n / Number(r.tickets)) + "%";
+      seg.title = (p[0] === "unk" ? "Ingen produkt satt" : firmProductLabel[p[0]]) + ": " + n;
+      stack.appendChild(seg);
+    });
+    head.appendChild(stack);
+    head.appendChild(set(el("span", "fx-count"), r.tickets + " ärenden"));
+    head.appendChild(set(el("span", "nv-caret"), "▸"));
+    row.appendChild(head);
+
+    var body = null;
+    head.onclick = function () {
+      if (body) { row.removeChild(body); body = null; head.setAttribute("aria-expanded", "false"); return; }
+      body = el("div", "fx-firmbody");
+      var mine = firms.topics.filter(function (t) { return t.company_name === r.company_name; });
+      if (!mine.length) {
+        body.appendChild(set(el("p", "fx-none"), "Inga kategoriserade ärenden."));
+      } else {
+        var agg = {};
+        mine.forEach(function (t) {
+          var k = t.topic + "||" + (t.ticket_type || "—");
+          agg[k] = (agg[k] || 0) + Number(t.tickets || 0);
+        });
+        var ul = el("ul", "fx-topics");
+        Object.keys(agg).sort(function (a, b) { return agg[b] - agg[a]; }).slice(0, 10)
+          .forEach(function (k) {
+            var parts = k.split("||");
+            var li = document.createElement("li");
+            li.appendChild(set(el("span", "fx-topic"), parts[0]));
+            li.appendChild(set(el("span", "fx-ttype"), parts[1]));
+            li.appendChild(set(el("span", "fx-tcount"), String(agg[k])));
+            ul.appendChild(li);
+          });
+        body.appendChild(ul);
+      }
+      row.appendChild(body);
+      head.setAttribute("aria-expanded", "true");
+    };
+    tc.appendChild(row);
+  });
+  lw.appendChild(tc);
+
+  // Interna ärenden redovisas separat i stället för att tas bort tyst.
+  if (internal.length) {
+    var ib = el("div", "fx-internal");
+    var n = internal.reduce(function (a, r) { return a + Number(r.tickets || 0); }, 0);
+    ib.appendChild(set(el("span", ""),
+      "Undantaget från listan: " + internal.map(function (r) { return r.company_name; }).join(", ") +
+      " (" + n + " ärenden) — interna ärenden, inte en kund."));
+    lw.appendChild(ib);
+  }
+
+  lw.appendChild(set(el("p", "fx-foot"),
+    "Källa: fälten i Freshdesk via ticket_facts. Intercom är ännu inte synkat — " +
+    "eftersom Intercom ALLTID är S1/AlexisHR underskattas One här med hela " +
+    "Intercom-volymen. Läs One-siffran som \u201Cminst så mycket\u201D."));
+}
+
 function render() {
   app.innerHTML = "";
 
@@ -969,6 +1400,7 @@ function render() {
   bar.appendChild(tabEl("note", "🤝 Agent note", tabCount("note")));
   bar.appendChild(tabEl("articles", "📝 Artiklar", articles.length));
   bar.appendChild(tabEl("coaching", "🎯 Coaching", coach.steps.length));
+  bar.appendChild(tabEl("companies", "🏢 Företag", firms.rows.length));
   bar.appendChild(tabEl("all", "All", rows.length));
   var c = el("div", "count"); c.id = "loadcount"; c.textContent = rows.length + " loaded";
   bar.appendChild(c);
@@ -982,6 +1414,8 @@ function render() {
     app.appendChild(articleControlsEl());
   } else if (tab === "coaching") {
     // No ticket filters here — this tab summarises, it does not triage.
+  } else if (tab === "companies") {
+    // Same: a summary of who files tickets, not a triage queue.
   } else {
     app.appendChild(controlsEl());
     app.appendChild(progressEl());
@@ -1064,6 +1498,7 @@ function renderList() {
   if (tab === "note") return renderAgentNotes();
   if (tab === "articles") return renderArticleList();
   if (tab === "coaching") return renderCoaching();
+  if (tab === "companies") return renderCompanies();
   var base = tabRows();
   var q = search.trim().toLowerCase();
   shown = base.filter(function (r) {
@@ -3188,27 +3623,27 @@ var ART_LABEL = {
 // Ikon + text bär hela innebörden. Färgen är förstärkning, aldrig ensam bärare
 // (WCAG 1.4.1) — chipet är begripligt i gråskala.
 var NOTE_MODE = {
-  REPLY_READY: { cls: "", icon: "🟢", badge: "Klart att skicka" },
-  COACH_AGENT: { cls: "amber", icon: "🟡", badge: "Granska först" },
-  AGENT_ACTION_REQUIRED: { cls: "red", icon: "🔴", badge: "Åtgärd krävs innan svar" },
+  REPLY_READY: { cls: "", icon: "🟢", badge: "Ready to send" },
+  COACH_AGENT: { cls: "amber", icon: "🟡", badge: "Review before sending" },
+  AGENT_ACTION_REQUIRED: { cls: "red", icon: "🔴", badge: "Action needed before replying" },
 };
 
 // Grundningen är en EGENSKAP hos beslutet, inte ett konkurrerande tillstånd —
 // därför en kort bisats i chipet i stället för en egen bricka. Formuleringarna
 // är entydiga: ingen av dem påstår både styrka och svaghet samtidigt.
 function groundingPhrase(r) {
-  if (r.grounding_verified === true) return "belagt i källor";
-  if (r.grounding_verified === false) return "utan belägg i källorna";
-  if (r.confidence === "high") return "belägg ej kontrollerat";
-  if (r.confidence === "low") return "delvis belagt";
-  return "inget belägg hittat";
+  if (r.grounding_verified === true) return "backed by sources";
+  if (r.grounding_verified === false) return "not backed by the sources";
+  if (r.confidence === "high") return "sourcing not verified";
+  if (r.confidence === "low") return "partly backed by sources";
+  return "no supporting source found";
 }
 
 // Vad mätaren faktiskt mäter — som tooltip, för det är inte självklart.
 var GROUNDING_HELP =
-  "Mätaren visar hur mycket av svaret som gick att spåra till en källa vi " +
-  "faktiskt lämnade in. Den räknas fram i koden ur pipelinens signaler — " +
-  "modellen kan inte höja sin egen siffra.";
+  "The meter shows how much of the reply could be traced back to a source we " +
+  "actually supplied. It is computed in code from the pipeline's own signals — " +
+  "the model cannot raise its own score.";
 
 // Confidence as a five-bar meter. Grounding verification counts against it: an
 // asserting draft that never resolved a source is not a confident answer, it is
@@ -3543,9 +3978,9 @@ function sourceSystemsEl(r) {
     // Sammanfattningen på huvudraden, så skillnaden syns utan att fälla ut.
     if (has && !g.sample && !g.notConnected) {
       head.appendChild(set(el("span", "nv-use" + (use.recorded ? (nUsed ? " on" : "") : " unk")),
-        !use.recorded ? "användning ej registrerad"
-          : nUsed ? nUsed + " använd" + (nUsed === 1 ? "" : "a") + " i svaret"
-          : "ingen använd i svaret"));
+        !use.recorded ? "use not recorded"
+          : nUsed ? nUsed + " used in the reply"
+          : "none used in the reply"));
     }
     if (has) head.appendChild(set(el("span", "nv-caret"), "▸"));
     row.appendChild(head);
@@ -3576,9 +4011,9 @@ function sourceSystemsEl(r) {
         if (!g.sample && !g.notConnected) {
           var u = use.used(src, i + 1);
           txt.appendChild(set(el("span", "nv-use" + (u === true ? " on" : u === false ? " off" : " unk")),
-            u === true ? "använd i svaret"
-              : u === false ? "inte använd"
-              : "ej registrerat"));
+            u === true ? "used in the reply"
+              : u === false ? "not used"
+              : "not recorded"));
         }
         li.appendChild(txt);
         list.appendChild(li);
@@ -3613,18 +4048,18 @@ function watchOutEl(r) {
 
   var box = el("div", "nv-watch" + (d.health === "Red" ? " red" : ""));
   var h = el("div", "nv-watchh");
-  h.appendChild(document.createTextNode("⚠️ Var uppmärksam på"));
+  h.appendChild(document.createTextNode("⚠️ Watch out for"));
   h.appendChild(set(el("span", "nv-demotag"), "sample"));
   box.appendChild(h);
 
   var says = [];
   if (bad) {
-    says.push("Kontots hälsa är " + d.health.toLowerCase() + " och CSM " + d.csm +
-      " bör informeras innan svaret går ut. Förnyelse " + a.renewal + ".");
+    says.push("Account health is " + d.health.toLowerCase() + " — brief CSM " + d.csm +
+      " before this reply goes out. Renewal " + a.renewal + ".");
   }
   if (d.alsoOpen) {
-    says.push(d.alsoOpen + " annat ärende" + (d.alsoOpen === 1 ? "" : "n") +
-      " är öppna på kunden — kolla om de hänger ihop innan du svarar på det här.");
+    says.push(d.alsoOpen + " other ticket" + (d.alsoOpen === 1 ? " is" : "s are") +
+      " open for this customer — check whether they are related before you reply.");
   }
   box.appendChild(set(el("p", ""), says.join(" ")));
   return box;
@@ -3665,20 +4100,20 @@ function demoContextEl(r) {
   var sum = document.createElement("summary");
   var line = el("span", "nv-demoline");
   line.appendChild(el("span", "nv-dot " + d.health.toLowerCase()));
-  line.appendChild(set(el("b", ""), "Hälsa " + d.health));
+  line.appendChild(set(el("b", ""), "Health " + d.health));
   line.appendChild(set(el("span", ""), "CSM " + d.csm));
   line.appendChild(set(el("span", ""), plan));
-  line.appendChild(set(el("span", ""), "förnyas " + renewal));
+  line.appendChild(set(el("span", ""), "renews " + renewal));
   line.appendChild(set(el("span", ""),
-    d.alsoOpen ? d.alsoOpen + " öppna ärenden" : "inga andra ärenden"));
-  line.appendChild(set(el("span", "nv-demotag"), planIsReal ? "delvis sample" : "sample"));
+    d.alsoOpen ? d.alsoOpen + " open tickets" : "no other tickets"));
+  line.appendChild(set(el("span", "nv-demotag"), planIsReal ? "part sample" : "sample"));
   sum.appendChild(line);
   box.appendChild(sum);
 
   var dl = el("div", "nv-demogrid");
-  [["Konto", plan, planIsReal], ["Förnyelse", renewal, planIsReal],
-   ["Hälsa", d.health + " · CSM " + d.csm, false],
-   ["Öppna ärenden", d.alsoOpen ? String(d.alsoOpen) : "inga", false]].forEach(function (row) {
+  [["Account", plan, planIsReal], ["Renewal", renewal, planIsReal],
+   ["Health", d.health + " · CSM " + d.csm, false],
+   ["Open tickets", d.alsoOpen ? String(d.alsoOpen) : "none", false]].forEach(function (row) {
     var cell = document.createElement("div");
     var dt = el("dt", "");
     dt.appendChild(document.createTextNode(row[0]));
@@ -3691,10 +4126,10 @@ function demoContextEl(r) {
   });
   box.appendChild(dl);
   box.appendChild(set(el("p", "nv-demonote"), planIsReal
-    ? "Konto och förnyelse kommer från Freshworks CRM. Hälsa och CSM är exempeldata — " +
-      "Planhat har ingen klient här — och får inte ligga till grund för ett beslut."
-    : "Freshworks CRM är inte påslaget och Planhat har ingen klient, så de här " +
-      "fyra fälten är exempeldata. De får inte ligga till grund för ett beslut."));
+    ? "Account and renewal come from Freshworks CRM. Health and CSM are sample data — " +
+      "Planhat has no client here — and must not be the basis for a decision."
+    : "Freshworks CRM is not enabled and Planhat has no client, so these four " +
+      "fields are sample data. They must not be the basis for a decision."));
   return box;
 }
 
@@ -3716,7 +4151,7 @@ function upsellEl(r) {
   if (!opps.length) return null;
 
   var box = el("div", "nv-upsell");
-  box.appendChild(set(el("div", "nv-upsellh"), "💡 Kunden frågar efter något kontot inte har"));
+  box.appendChild(set(el("div", "nv-upsellh"), "💡 The customer asked for something the account does not have"));
   var ul = el("ul", "nv-upsellist");
   opps.forEach(function (o) {
     var li = document.createElement("li");
@@ -3729,9 +4164,488 @@ function upsellEl(r) {
   });
   box.appendChild(ul);
   box.appendChild(set(el("p", "nv-upfoot"),
-    "Lämna vidare till sälj/CSM EFTER att du besvarat supportfrågan — gör inte svaret " +
-    "till ett säljbrev. Bekräfta i CRM först; ett konto kan ha en produkt den här " +
-    "kontrollen inte såg."));
+    "Hand this to sales/CSM AFTER you have answered the support question — do not " +
+    "turn the reply into a pitch. Confirm in the CRM first: an account can hold a " +
+    "product this check did not see."));
+  return box;
+}
+
+// ── How the coach works ────────────────────────────────────────────────────
+//
+// Shown at the top of the Agent note tab, collapsed. An agent who does not
+// trust the badge will not use the note, and the reason to trust it is that the
+// GATES ARE CODE, not the model's own opinion — so the diagram says which steps
+// the model performs and which steps decide.
+var WORKFLOW = [
+  {
+    n: "1", key: "trigger", who: "system",
+    title: "A ticket is assigned",
+    body: "Polled once a minute. Only tickets assigned to a monitored agent are picked up, " +
+      "and the responder is re-checked on the reloaded ticket before anything is written.",
+  },
+  {
+    n: "2", key: "analyse", who: "model",
+    title: "Analyse",
+    body: "Reads the conversation and reports the language, every question the customer " +
+      "asked, the ticket type, and what to search for. No answer is attempted yet.",
+  },
+  {
+    n: "3", key: "retrieve", who: "system",
+    title: "Retrieve",
+    body: "Searches the customer help centre, the team's known-incident playbook and the " +
+      "past-ticket index. Whatever comes back is the ONLY material the draft may use.",
+  },
+  {
+    n: "4", key: "draft", who: "model",
+    title: "Draft",
+    body: "Writes a reply grounded in those sources, and must cite which source each " +
+      "assertion rests on. A claim with no source behind it is not allowed to stand.",
+  },
+  {
+    n: "5", key: "verify", who: "model",
+    title: "Verify",
+    body: "A separate pass checks every claim against the same sources, and reports which " +
+      "of the customer's questions the reply actually answers. Verify can only LOWER " +
+      "confidence, never raise it.",
+  },
+  {
+    n: "6", key: "gate", who: "code",
+    title: "The gates — decided in code",
+    body: "Cited sources must resolve to material we really supplied. Any unanswered " +
+      "question blocks the green band. The status is computed from these signals, so the " +
+      "model cannot talk its way into \u201Cready to send\u201D.",
+  },
+  {
+    n: "7", key: "note", who: "system",
+    title: "The private note is posted",
+    body: "Internal only — the customer never sees it. One status, the reasoning, the " +
+      "sources, and a draft reply when the coach can genuinely stand behind one.",
+  },
+  {
+    n: "8", key: "human", who: "human",
+    title: "You decide",
+    body: "Send, edit, or ignore it. Nothing reaches a customer unless you send it: this " +
+      "app cannot reply to anyone.",
+  },
+  {
+    n: "9", key: "learn", who: "human",
+    title: "Your verdict trains it",
+    body: "\u201CWould I have sent this?\u201D plus the ideal answer where the coach was " +
+      "wrong. That corpus is what improves the next draft.",
+  },
+];
+
+var WHO_LABEL = { model: "AI", code: "Code", system: "System", human: "You" };
+
+// ── Where the data comes from ──────────────────────────────────────────────
+//
+// The coach is only as good as what it can look up, so this panel is about
+// SOURCES rather than steps. Two rules shape it:
+//
+//  1. Status is honest. Several sources are BUILT BUT DARK — the product
+//     catalogue is seeded inactive, the CRM is opt-in and off, the learning loop
+//     is opt-in and off. Drawing those as "connected" would picture the
+//     intention rather than the system.
+//  2. No invented time savings. Each source says which LOOKUP it removes from
+//     the agent, because that is observable. Minutes saved are not measured, and
+//     a made-up number here would be the least defensible thing on the page.
+var DATA_SOURCES = [
+  {
+    key: "freshdesk", name: "Freshdesk — the ticket", phase: "now", status: "live",
+    answers: "What the customer actually asked, in full, plus the whole thread.",
+    saves: "The coach reads the entire history before you do, so a re-opened ticket does not start with you scrolling.",
+  },
+  {
+    key: "kb", name: "Customer help centre", phase: "now", status: "live",
+    answers: "What we have already documented publicly.",
+    saves: "Searches the KB in three languages and hands you the article link in the customer-facing form, ready to paste.",
+  },
+  {
+    key: "known_incidents", name: "Known-incident playbook", phase: "now", status: "curated",
+    metric: "known_incidents",
+    answers: "The operational knowledge that is not written down anywhere else — live incidents, the fix that is not in the KB, who a case should be routed to.",
+    saves: "This is the one that beats a generic KB match, and it outranks one on purpose. It only knows what the team puts in it.",
+  },
+  {
+    key: "past_tickets", name: "Past-ticket index", phase: "now", status: "curated",
+    metric: "past_tickets", stale: true,
+    answers: "How a similar case was actually resolved before.",
+    saves: "Precedent without asking a colleague. Does NOT refresh itself — run sync-tickets or it quietly ages.",
+  },
+  {
+    key: "openai", name: "OpenAI", phase: "now", status: "live",
+    answers: "Nothing on its own — it is the reasoning, not a source.",
+    saves: "Analyse, draft and verify. It may only use what the sources above returned.",
+  },
+  {
+    key: "supabase", name: "Supabase", phase: "now", status: "live",
+    answers: "Every generation, source list, status and verdict.",
+    saves: "Makes the coach measurable. Without it there is no way to tell whether any of this works.",
+  },
+  {
+    key: "gold", name: "Reviewer gold answers", phase: "now", status: "off",
+    metric: "gold_answers",
+    answers: "What a good reply looks like on this exact kind of ticket.",
+    saves: "Written and stored, but feeding them back into drafting is OPT-IN and currently off. The corpus exists; the loop is not running.",
+  },
+  {
+    key: "crm", name: "Freshworks CRM", phase: "now", status: "off",
+    metric: "crm_account_map",
+    answers: "Which products the account actually pays for, and when it renews.",
+    saves: "Removes a tab-switch before answering an entitlement question. Read-only, opt-in, currently off — and CRM data never enters a prompt.",
+  },
+  {
+    key: "catalog", name: "Product catalogue (upsell)", phase: "now", status: "off",
+    metric: "product_catalog",
+    answers: "Whether the customer asked for something the account does not have.",
+    saves: "Seeded inactive on purpose: the descriptions have not been checked by a product owner, and an invented product in front of a customer beats a missed upsell.",
+  },
+  {
+    key: "facts", name: "Ticket facts (company · product · topic)", phase: "now", status: "live",
+    metric: "ticket_facts",
+    answers: "Who files tickets, on One or Classic, about what.",
+    saves: "Powers the Företag tab. Read from Freshdesk fields, never inferred from text.",
+  },
+  {
+    key: "csat", name: "CSAT", phase: "now", status: "partial",
+    metric: "csat_ratings",
+    answers: "What the customer thought of the handling.",
+    saves: "The only signal the customer controls. The v2 API exposes the LEGACY surveys only, so it does not cover current tickets — per-agent CSAT still has to be read in the Freshdesk UI.",
+  },
+  {
+    key: "intercom", name: "Intercom (S1 / AlexisHR)", phase: "next", status: "planned",
+    answers: "The whole One support channel — always S1, and today entirely outside the coach.",
+    saves: "Would give One customers the same coaching Classic customers get, and make the One-vs-Classic numbers complete instead of understated.",
+  },
+  {
+    key: "jira", name: "Jira", phase: "next", status: "planned",
+    answers: "Is this a known bug, and is a fix on the way?",
+    saves: "Turns \u201CI will check with the team\u201D into an answer in the first reply — the single most common reason a ticket needs a second round.",
+  },
+  {
+    key: "confluence", name: "Confluence", phase: "later", status: "planned",
+    answers: "Internal engineering knowledge.",
+    saves: "Useful for agent guidance, but it is an INTERNAL space — there is no customer-facing content there, so it can never be the source of a customer reply.",
+  },
+  {
+    key: "planhat", name: "Planhat", phase: "later", status: "demo",
+    answers: "Account health, the CSM, renewal risk.",
+    saves: "Would turn the sample health box into real data, so \u201Cbrief the CSM first\u201D becomes an instruction you can act on.",
+  },
+  {
+    key: "linear", name: "Linear", phase: "later", status: "demo",
+    answers: "Product requests and how many customers are waiting on one.",
+    saves: "Lets feedback land somewhere countable instead of dying in the ticket.",
+  },
+  {
+    key: "scribe", name: "Scribe", phase: "later", status: "blocked",
+    answers: "The steps an agent took to solve something undocumented.",
+    saves: "The cheapest way to turn tacit fixes into articles — but recording an agent's screen needs MBL consultation and a DPA before a single capture may be made.",
+  },
+];
+
+var SRC_STATUS = {
+  live:    { label: "Live", cls: "live" },
+  curated: { label: "Curated by the team", cls: "curated" },
+  partial: { label: "Partial", cls: "partial" },
+  off:     { label: "Built, switched off", cls: "off" },
+  planned: { label: "Not connected", cls: "planned" },
+  demo:    { label: "Demo only", cls: "demo" },
+  blocked: { label: "Blocked — MBL + DPA", cls: "blocked" },
+};
+var SRC_PHASE = {
+  now:   "In the note today",
+  next:  "Next — the two that would change most",
+  later: "Later, or deliberately parked",
+};
+
+var dataStatus = { rows: [], loaded: false };
+
+async function loadDataStatus() {
+  try {
+    var res = await api("/rest/v1/data_source_status?select=*");
+    if (res.ok) dataStatus.rows = await res.json();
+  } catch (_e) { /* the panel is useful without the counts */ }
+  dataStatus.loaded = true;
+}
+
+function srcMetric(key) {
+  var m = dataStatus.rows.filter(function (r) { return r.source === key; })[0];
+  return m || null;
+}
+
+// ── Future state: everything connected ─────────────────────────────────────
+//
+// A DEMO view, and labelled as one. It shows the value chain end to end —
+// fetch, decide, document, learn — as it would run with every source switched
+// on, which is the thing that is hard to picture from a status list.
+//
+// It REPLACES the honest current-state panel rather than mixing with it, the
+// same rule the Coaching tab already follows: a blended view produces figures
+// that are neither today nor tomorrow. The toggle keeps both one click apart,
+// so nobody has to take the future state on trust — "Today" is right there.
+var FUTURE_FETCH = [
+  { icon: "🎫", name: "Ticket & thread", from: "Freshdesk",
+    brings: "Every question asked, the full history, attachments, language.", live: true },
+  { icon: "📚", name: "Customer help centre", from: "Freshdesk KB",
+    brings: "What is already documented — with the link in customer-facing form.", live: true },
+  { icon: "📓", name: "Known-incident playbook", from: "Curated by the team",
+    brings: "Live incidents and the fixes that were never written down.", live: true },
+  { icon: "🗂️", name: "Past-ticket precedent", from: "Semantic index",
+    brings: "How this exact case was solved last time, and by whom.", live: true },
+  { icon: "🐛", name: "Known bugs & fix status", from: "Jira",
+    brings: "Is it a known defect, is a fix on the way, which release." },
+  { icon: "📗", name: "Internal engineering knowledge", from: "Confluence",
+    brings: "The deeper technical answer behind a symptom — agent-facing only." },
+  { icon: "💳", name: "Entitlements & renewal", from: "Freshworks CRM",
+    brings: "What the account actually pays for, and when it renews." },
+  { icon: "❤️", name: "Account health & CSM", from: "Planhat",
+    brings: "Risk, owner, and whether this ticket is the third strike." },
+  { icon: "💡", name: "Product demand", from: "Linear",
+    brings: "Whether others asked for the same thing, and how many." },
+  { icon: "⭐", name: "Customer verdict", from: "CSAT",
+    brings: "What customers thought of how it was handled." },
+  { icon: "🏅", name: "What good looks like", from: "Reviewer gold answers",
+    brings: "Real replies the team stood behind, on this kind of ticket." },
+];
+
+var FUTURE_STAGES = [
+  {
+    n: "2", key: "decide", title: "Decide — the agent's first minute",
+    lede: "One screen instead of six tabs. The agent opens the ticket and the answer to " +
+      "\u201Cwhat do I need to know before I reply\u201D is already assembled.",
+    points: [
+      "One status — send-ready, review first, or act before replying — computed in code, not claimed by the model.",
+      "A grounded draft, or an explicit abstain when nothing supports one.",
+      "Watch-outs surfaced ABOVE the reply: amber account, third open ticket, brief the CSM first.",
+      "Routing decided: legal to Expert, commercial to sales, defect to the Jira issue that already exists.",
+      "A known bug answered in the FIRST reply instead of \u201CI will check with the team\u201D.",
+    ],
+  },
+  {
+    n: "3", key: "document", title: "Document — knowledge that outlives the ticket",
+    lede: "The Gate 1 review found the real gap was never the model — it was operational " +
+      "knowledge nobody wrote down. This is the step that fixes that, and it is the one " +
+      "that compounds.",
+    points: [
+      "The coach flags when an answer would generalise, and drafts the article on request.",
+      "Articles are only ever generalised from a resolution a HUMAN stood behind — a gold answer or the reply actually sent.",
+      "Scribe captures the click-path for a fix that exists nowhere in writing.",
+      "Every unanswered question is logged, so the missing pages have names and a ranking.",
+      "A reviewer approves before anything becomes knowledge. The AI proposes; it never decides.",
+    ],
+  },
+  {
+    n: "4", key: "learn", title: "Learn — the AI journey",
+    lede: "Each judged ticket makes the next draft better, and the measurement is the same " +
+      "one every time so improvement is visible rather than asserted.",
+    points: [
+      "\u201CWould I have sent this?\u201D plus the ideal answer where the coach was wrong.",
+      "Those answers feed the next draft as style and approach exemplars — never as facts to copy.",
+      "A locked holdout set keeps the evaluation honest: training data can never leak into the test.",
+      "Newly written articles become retrievable, so the next similar ticket is grounded rather than abstained.",
+      "The loop closes: fewer knowledge gaps -> more grounded drafts -> a higher share the agent would have sent.",
+    ],
+  },
+];
+
+function futureStateEl() {
+  var wrap = el("div", "fs");
+
+  var banner = el("div", "fs-banner");
+  banner.appendChild(set(el("span", "fs-btag"), "Future state"));
+  banner.appendChild(set(el("span", ""),
+    "Everything connected. This is the target picture, not today \u2014 four of the eleven " +
+    "sources are live now. Switch to Today for the real status."));
+  wrap.appendChild(banner);
+
+  // ── 1. Fetch ──
+  var f = el("div", "fs-stage");
+  var fh = el("div", "fs-head");
+  fh.appendChild(set(el("span", "fs-num"), "1"));
+  fh.appendChild(set(el("span", "fs-title"), "Fetch — eleven sources, gathered before the agent looks"));
+  f.appendChild(fh);
+  f.appendChild(set(el("p", "fs-lede"),
+    "Each one is a lookup an agent does by hand today, in a different tab, on every ticket."));
+  var grid = el("div", "fs-grid");
+  FUTURE_FETCH.forEach(function (d) {
+    var c = el("div", "fs-src" + (d.live ? " on" : ""));
+    var h = el("div", "fs-srchead");
+    h.appendChild(set(el("span", "fs-icon"), d.icon));
+    h.appendChild(set(el("span", "fs-srcname"), d.name));
+    if (d.live) h.appendChild(set(el("span", "fs-now"), "live today"));
+    c.appendChild(h);
+    c.appendChild(set(el("div", "fs-from"), d.from));
+    c.appendChild(set(el("p", "fs-brings"), d.brings));
+    grid.appendChild(c);
+  });
+  f.appendChild(grid);
+  wrap.appendChild(f);
+
+  // ── 2-4. Decide, document, learn ──
+  FUTURE_STAGES.forEach(function (st) {
+    var box = el("div", "fs-stage " + st.key);
+    var h = el("div", "fs-head");
+    h.appendChild(set(el("span", "fs-num"), st.n));
+    h.appendChild(set(el("span", "fs-title"), st.title));
+    box.appendChild(h);
+    box.appendChild(set(el("p", "fs-lede"), st.lede));
+    var ul = el("ul", "fs-points");
+    st.points.forEach(function (t) {
+      var li = document.createElement("li");
+      li.appendChild(document.createTextNode(t));
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    wrap.appendChild(box);
+  });
+
+  // The loop back to step 1 — without it this reads as a pipeline that ends,
+  // and the whole argument is that it does not.
+  var loop = el("div", "fs-loop");
+  loop.appendChild(set(el("span", "fs-looparrow"), "\u21BA"));
+  loop.appendChild(set(el("span", ""),
+    "Every approved article and gold answer goes back into step 1. The knowledge base " +
+    "the coach searches next month is the one this month's tickets wrote."));
+  wrap.appendChild(loop);
+
+  wrap.appendChild(set(el("p", "wf-foot"),
+    "What would have to move, and is already measured on coached tickets: customers came " +
+    "back after the first reply on 51%, 2 agent replies per ticket, 37% of first replies " +
+    "over an hour. Time saved is not measured yet \u2014 no figure here claims it."));
+  return wrap;
+}
+
+// Demo-first: the future state is what this panel opens on, because that is the
+// picture people need. "Today" is one click away and never more than one click
+// away — a demo that cannot show its own real status is a sales slide.
+var sourcesView = "future";
+
+function sourcesEl() {
+  var box = el("details", "wf ds");
+  box.open = true;
+  var sum = document.createElement("summary");
+  sum.appendChild(document.createTextNode("🔌 Where the data comes from"));
+  sum.appendChild(set(el("span", "wf-sub"),
+    "what we fetch · how it speeds up the decision · how it becomes knowledge"));
+  box.appendChild(sum);
+
+  var sw = el("div", "fs-switch");
+  [["future", "Future state"], ["today", "Today"]].forEach(function (o) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "fs-swbtn" + (sourcesView === o[0] ? " on" : "");
+    b.textContent = o[1];
+    b.onclick = function (e) {
+      e.preventDefault();
+      sourcesView = o[0];
+      if (tab === "note") renderAgentNotes();
+    };
+    sw.appendChild(b);
+  });
+  box.appendChild(sw);
+
+  if (sourcesView === "future") {
+    box.appendChild(futureStateEl());
+    return box;
+  }
+
+  box.appendChild(set(el("p", "wf-lede"),
+    "The coach is only as good as what it can look up. Every source below is a " +
+    "lookup you would otherwise do by hand — and the status is honest: several " +
+    "are built but switched off, and one is blocked on a legal step."));
+
+  ["now", "next", "later"].forEach(function (phase) {
+    var group = DATA_SOURCES.filter(function (d) { return d.phase === phase; });
+    if (!group.length) return;
+    box.appendChild(set(el("div", "ds-phase"), SRC_PHASE[phase]));
+    var grid = el("div", "ds-grid");
+    group.forEach(function (d) {
+      var st = SRC_STATUS[d.status] || SRC_STATUS.planned;
+      var card = el("div", "ds-card " + st.cls);
+      var head = el("div", "ds-head");
+      head.appendChild(set(el("span", "ds-name"), d.name));
+      head.appendChild(set(el("span", "ds-status " + st.cls), st.label));
+      card.appendChild(head);
+
+      // A live count turns "built but dark" from a claim into a fact.
+      if (d.metric) {
+        var m = srcMetric(d.metric);
+        if (m) {
+          var n = Number(m.items || 0);
+          var bits = [n + (n === 1 ? " item" : " items")];
+          if (m.freshest) bits.push("newest " + String(m.freshest).slice(0, 10));
+          card.appendChild(set(el("div", "ds-metric" + (n === 0 ? " zero" : "")),
+            n === 0 ? "empty — nothing for the coach to use" : bits.join(" · ")));
+        }
+      }
+
+      card.appendChild(set(el("p", "ds-answers"), d.answers));
+      card.appendChild(set(el("p", "ds-saves"), d.saves));
+      grid.appendChild(card);
+    });
+    box.appendChild(grid);
+  });
+
+  box.appendChild(set(el("p", "wf-foot"),
+    "What this is for: fewer tabs open before the first reply. The baselines it " +
+    "would have to move are already measured — customers came back after the first " +
+    "reply on 51% of coached tickets, 2 agent replies per ticket, and 37% of first " +
+    "replies took over an hour. Time saved is NOT measured yet, so no number here " +
+    "claims it."));
+  return box;
+}
+
+function workflowEl() {
+  var box = el("details", "wf");
+  var sum = document.createElement("summary");
+  sum.appendChild(document.createTextNode("⚙️ How the coach works"));
+  sum.appendChild(set(el("span", "wf-sub"), "9 steps · what the AI does, and what it is not allowed to decide"));
+  box.appendChild(sum);
+
+  box.appendChild(set(el("p", "wf-lede"),
+    "The AI drafts and checks. It does not decide whether its own answer is good enough " +
+    "— that is computed in code from the pipeline's signals. Which is why a green badge " +
+    "means something."));
+
+  var flow = el("div", "wf-flow");
+  WORKFLOW.forEach(function (st, i) {
+    var row = el("div", "wf-step " + st.who);
+    var rail = el("div", "wf-rail");
+    rail.appendChild(set(el("span", "wf-num"), st.n));
+    if (i < WORKFLOW.length - 1) rail.appendChild(el("span", "wf-line"));
+    row.appendChild(rail);
+
+    var body = el("div", "wf-body");
+    var h = el("div", "wf-head");
+    h.appendChild(set(el("span", "wf-title"), st.title));
+    h.appendChild(set(el("span", "wf-who " + st.who), WHO_LABEL[st.who]));
+    body.appendChild(h);
+    body.appendChild(set(el("p", "wf-text"), st.body));
+    row.appendChild(body);
+    flow.appendChild(row);
+  });
+  box.appendChild(flow);
+
+  // The three outcomes, so the badge on every card below is already explained.
+  var out = el("div", "wf-outcomes");
+  out.appendChild(set(el("div", "wf-outh"), "What the status on each note means"));
+  [
+    ["", "🟢", "Ready to send", "Grounded, high confidence, and every question answered. Read it, then send it."],
+    ["amber", "🟡", "Review before sending", "Useful, but not send-ready — a routing message, a partial answer, or thin sourcing."],
+    ["red", "🔴", "Action needed before replying", "Check the system, verify identity, open the attachment or escalate FIRST. Do not send a reply yet."],
+  ].forEach(function (o) {
+    var r = el("div", "wf-out " + o[0]);
+    r.appendChild(set(el("span", "wf-outicon"), o[1]));
+    r.appendChild(set(el("span", "wf-outname"), o[2]));
+    r.appendChild(set(el("span", "wf-outtext"), o[3]));
+    out.appendChild(r);
+  });
+  box.appendChild(out);
+
+  box.appendChild(set(el("p", "wf-foot"),
+    "Two writes ever reach Freshdesk: this private note, and up to three keyword tags on " +
+    "the same ticket. Nothing else in any system is touched."));
   return box;
 }
 
@@ -3809,12 +4723,12 @@ function noteViewEl(r) {
   conf.appendChild(bars);
   head.appendChild(conf);
 
-  if (usedTraining(r)) head.appendChild(set(el("span", "nv-trained"), "★ tränad"));
+  if (usedTraining(r)) head.appendChild(set(el("span", "nv-trained"), "★ trained"));
 
   var stamp = [];
-  if (r.latency_ms) stamp.push("skrivet på " + Math.round(r.latency_ms / 1000) + " s");
+  if (r.latency_ms) stamp.push("written in " + Math.round(r.latency_ms / 1000) + " s");
   var nSrcAll = Array.isArray(r.sources) ? r.sources.length : 0;
-  stamp.push(nSrcAll + " källa" + (nSrcAll === 1 ? "" : "or") + " kontrollerade");
+  stamp.push(nSrcAll + " source" + (nSrcAll === 1 ? "" : "s") + " checked");
   head.appendChild(set(el("span", "nv-stamp"), stamp.join(" · ")));
   inner.appendChild(head);
 
@@ -3944,8 +4858,8 @@ function noteActionsEl(r, wrap) {
     row.appendChild(g);
     return btns;
   }
-  var toCust = group("Svara kund");
-  var onward = group("Rapportera vidare");
+  var toCust = group("Reply to customer");
+  var onward = group("Report onward");
 
   function say(text, cls) {
     out.innerHTML = "";   // this app has no clear() helper
@@ -3960,10 +4874,10 @@ function noteActionsEl(r, wrap) {
     var b = document.createElement("button");
     b.className = "nv-btn" + (cls ? " " + cls : "");
     b.appendChild(document.createTextNode(label));
-    b.appendChild(set(el("span", "dm"), "förhandsvy"));
+    b.appendChild(set(el("span", "dm"), "preview"));
     b.disabled = true;
-    b.title = "Förhandsvy av widgeten i Freshdesk. Den här sidan skickar aldrig " +
-      "något till en kund.";
+    b.title = "Preview of the in-Freshdesk widget. This page never sends anything " +
+      "to a customer.";
     return b;
   }
   // Send reply förblir inert: det är den enda riktiga externa skrivningen.
@@ -3972,16 +4886,16 @@ function noteActionsEl(r, wrap) {
   // Edit first FÅR agera. Att redigera texten stannar på sidan, och då gäller
   // samma regel som för de andra demoknapparna. En knapp som inte gör något
   // alls är sämre än ingen knapp — det var därför den kändes trasig.
-  var editBtn = demoBtn("Edit first", "på sidan", function () {
+  var editBtn = demoBtn("Edit first", "on this page", function () {
     var box = wrap.querySelector(".nv-draft");
-    if (!box) { say("Det finns inget utkast att redigera i den här notisen."); return; }
+    if (!box) { say("There is no draft to edit in this note."); return; }
     if (box.querySelector("textarea")) return;   // redan öppen
 
     var current = box.innerText.replace(/\n{3,}/g, "\n\n").trim();
     var ta = document.createElement("textarea");
     ta.className = "nv-edit";
     ta.value = current;
-    ta.setAttribute("aria-label", "Redigera utkastet");
+    ta.setAttribute("aria-label", "Edit the draft");
     box.innerHTML = "";
     box.appendChild(ta);
     ta.style.height = Math.max(120, ta.scrollHeight) + "px";
@@ -3990,16 +4904,16 @@ function noteActionsEl(r, wrap) {
     var bar = el("div", "nv-editbar");
     var copy = document.createElement("button");
     copy.className = "nv-btn";
-    copy.textContent = "Kopiera texten";
+    copy.textContent = "Copy the text";
     copy.onclick = function () {
       ta.select();
       var done = false;
       try { done = document.execCommand("copy"); } catch (_e) { done = false; }
       if (navigator.clipboard && navigator.clipboard.writeText) {
         navigator.clipboard.writeText(ta.value).then(function () {
-          say("Texten kopierad. Klistra in den i Freshdesk när du svarar.", "ok");
+          say("Text copied. Paste it into Freshdesk when you reply.", "ok");
         }, function () {
-          say(done ? "Texten kopierad." : "Kunde inte kopiera — markera och kopiera manuellt.");
+          say(done ? "Text copied." : "Could not copy — select and copy manually.");
         });
       } else {
         say(done ? "Texten kopierad." : "Kunde inte kopiera — markera och kopiera manuellt.");
@@ -4008,33 +4922,33 @@ function noteActionsEl(r, wrap) {
     bar.appendChild(copy);
     box.appendChild(bar);
 
-    say("Utkastet är öppet för redigering. Ändringarna sparas inte här — " +
-      "kopiera texten och klistra in den i Freshdesk, där svaret faktiskt skickas.");
+    say("The draft is open for editing. Changes are not saved here — copy the text " +
+      "and paste it into Freshdesk, where the reply is actually sent.");
   });
   toCust.appendChild(editBtn);
 
   // ── demo: Linear ──
   var lin = "LIN-" + (2100 + ((Number(r.ticket_id) || 0) % 140));
   var votes = 4 + ((Number(r.ticket_id) || 0) % 9);
-  onward.appendChild(demoBtn("Bifoga till " + lin, "demo", function () {
-    say("Ärendet bifogat till " + lin + " · " + (votes + 1) +
-      " röster. Kunden kan rösta via länken i svaret.", "ok");
+  onward.appendChild(demoBtn("Attach to " + lin, "demo", function () {
+    say("Ticket attached to " + lin + " · " + (votes + 1) +
+      " votes. The customer can vote via the link in the reply.", "ok");
   }));
 
   // ── demo: Planhat ──
-  onward.appendChild(demoBtn("Kopiera CSM", "demo", function () {
+  onward.appendChild(demoBtn("Copy in CSM", "demo", function () {
     var d = demoPlanhat(r.ticket_id);
-    say("CSM " + d.csm + " kopierad. Aktivitet skapad på kontot.", "ok");
+    say("CSM " + d.csm + " copied in. Activity created on the account.", "ok");
   }));
 
   // ── demo: Confluence ──
   // Från genomgången: "Start Confluence draft" står på tre av scenarioslidesen.
   // Det är loopens första steg — luckan blir en uppgift i samma ögonblick den
   // hittas, i stället för att glömmas bort när ärendet stängs.
-  onward.appendChild(demoBtn("Starta Confluence-utkast", "demo", function () {
-    say("Utkast påbörjat i Confluence · Customer Care — \u201C" +
-      (r.subject || "Ärendet") + "\u201D. Det ligger under 📝 Artiklar tills " +
-      "någon granskar och godkänner det.", "ok");
+  onward.appendChild(demoBtn("Start Confluence draft", "demo", function () {
+    say("Draft started in Confluence · Customer Care — \u201C" +
+      (r.subject || "The ticket") + "\u201D. It sits under 📝 Artiklar until " +
+      "someone reviews and approves it.", "ok");
   }));
 
   // ── demo: Scribe ──
@@ -4058,7 +4972,7 @@ function noteActionsEl(r, wrap) {
   box.appendChild(out);
   // EN rad kvar, inte fyra: etiketten sitter numera på knappen den gäller.
   box.appendChild(set(el("p", "nv-preview"),
-    "Ingen av knapparna lämnar den här sidan."));
+    "None of these buttons leave this page."));
   return box;
 }
 
@@ -4071,8 +4985,8 @@ function demoBtn(label, tag, onClick) {
   b.appendChild(document.createTextNode(label));
   if (tag) b.appendChild(set(el("span", "dm"), tag));
   b.title = tag === "demo"
-    ? "Demo — systemet är inte anslutet. Ingenting lämnar den här sidan."
-    : "Sker i webbläsaren. Ingenting lämnar den här sidan.";
+    ? "Demo — the system is not connected. Nothing leaves this page."
+    : "Happens in the browser. Nothing leaves this page.";
   b.onclick = function () { b.classList.add("used"); onClick(); };
   return b;
 }
@@ -4096,13 +5010,13 @@ function scribeBtn(r, say) {
   }
   function idle() {
     b.classList.remove("on");
-    label("⏺ Spela in lösningen");
+    label("⏺ Record the solution");
   }
   function tick() {
     seconds++;
     var m = String(Math.floor(seconds / 60)).padStart(2, "0");
     var ss = String(seconds % 60).padStart(2, "0");
-    label("⏹ Spelar in " + m + ":" + ss + " — klicka för att avsluta");
+    label("⏹ Recording " + m + ":" + ss + " — click to stop");
   }
 
   b.onclick = function () {
@@ -4110,9 +5024,9 @@ function scribeBtn(r, say) {
       clearInterval(timer); timer = null;
       var mins = Math.max(1, Math.round(seconds / 60));
       idle();
-      say("Inspelning avslutad (" + seconds + " s). Utkast till artikel skapat i " +
-        "Confluence — \u201C" + (r.subject || "Ärendet") + "\u201D — väntar på granskning. " +
-        "Beräknad lästid " + mins + " min.", "ok");
+      say("Recording stopped (" + seconds + " s). Draft article created in " +
+        "Confluence — \u201C" + (r.subject || "The ticket") + "\u201D — awaiting review. " +
+        "Estimated reading time " + mins + " min.", "ok");
       seconds = 0;
       return;
     }
@@ -4120,8 +5034,8 @@ function scribeBtn(r, say) {
     b.classList.add("on");
     tick();
     timer = setInterval(tick, 1000);
-    say("Inspelning startad. Scribe fångar varje steg och system medan du löser " +
-      "ärendet. Inget spelas faktiskt in här.", "rec");
+    say("Recording started. Scribe captures every step and system while you solve " +
+      "the ticket. Nothing is actually recorded here.", "rec");
   };
 
   idle();
@@ -4145,7 +5059,7 @@ function noteControlsEl() {
 
   var inp = document.createElement("input");
   inp.type = "search"; inp.className = "search";
-  inp.placeholder = "Sök ticket, ämne eller svar…";
+  inp.placeholder = "Search ticket, subject or reply…";
   inp.setAttribute("aria-label", "Search notes");
   inp.value = search;
   inp.oninput = function () { search = inp.value; renderList(); };
@@ -4187,9 +5101,17 @@ function renderAgentNotes() {
     return;
   }
 
+  lw.appendChild(workflowEl());
+  lw.appendChild(sourcesEl());
+  if (!dataStatus.loaded) {
+    // Counts arrive a beat later; re-render once so the panel is never wrong,
+    // only briefly less specific.
+    loadDataStatus().then(function () { if (tab === "note") renderAgentNotes(); });
+  }
+
   lw.appendChild(set(el("p", "nv-hint"),
-    "Ett ärende åt gången är öppet. Klicka på en rad för att öppna den — piltangenter " +
-    "(eller j/k) flyttar mellan raderna."));
+    "One ticket is open at a time. Click a row to open it — arrow keys (or j/k) move " +
+    "between rows."));
 
   // ETT KORT ÅT GÅNGEN. Hundra utfällda kort är inte en lista, det är hundra
   // sidor på rad: man tappar överblicken över vilka ärenden som finns och kan
@@ -4259,7 +5181,7 @@ function compactRowEl(r, onOpen) {
   var steps = Array.isArray(r.resolution_steps) ? r.resolution_steps : [];
   var line = steps.length ? steps[0]
     : (r.draft && r.draft.trim()) ? firstSentence(r.draft)
-    : "Coachen avstod — bedömningen ligger hos dig.";
+    : "The coach abstained — the judgement is yours.";
   head.appendChild(set(el("span", "nv-rowrec"), line));
 
   head.appendChild(set(el("span", "nv-caret"), "▸"));

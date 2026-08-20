@@ -56,6 +56,47 @@ async function fetchWithRetry(
 
 // ── Freshdesk ─────────────────────────────────────────────────────────────────
 
+/**
+ * One customer satisfaction rating on a handled ticket.
+ *
+ * `ratings` is keyed by survey question; `default_question` is the overall one.
+ * Freshdesk's scale is NOT 1-5 — see csatBand below.
+ */
+export interface Survey {
+  id: number;
+  title?: string;
+  active?: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface SatisfactionRating {
+  id: number;
+  survey_id: number;
+  user_id: number;      // the customer who rated
+  agent_id: number;     // who handled it — the field callers filter on
+  group_id?: number;
+  ticket_id: number;
+  feedback?: string | null;  // the customer's own words. Customer content.
+  ratings: Record<string, number>;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Freshdesk CSAT value -> a band you can count.
+ *
+ * The raw numbers are 103/102/101 (happy), 100 (neutral) and -101/-102/-103
+ * (unhappy). Reading them as a 1-5 score inverts the meaning of every negative
+ * rating, which is exactly the mistake that would turn "5 unhappy customers"
+ * into a healthy-looking average.
+ */
+export function csatBand(value: number): "positive" | "neutral" | "negative" {
+  if (value > 100) return "positive";
+  if (value < 100) return "negative";
+  return "neutral";
+}
+
 export interface Agent {
   id: number;
   contact: { name: string; email: string };
@@ -80,6 +121,9 @@ export interface Conversation {
   incoming: boolean; // true = from the customer
   private: boolean; // true = internal note
   created_at: string;
+  // WHO wrote it. Freshdesk returns this; it was not captured before, which made
+  // reply-level attribution impossible — see the warning in score_history.ts.
+  user_id?: number;
   attachments?: Attachment[];
 }
 
@@ -232,20 +276,90 @@ export class Freshdesk {
       );
       return byEmail[0] ?? null;
     }
+    // PAGINATE. This used to read `?per_page=100` only — the FIRST page of the
+    // roster — so on an account with more than 100 agents it matched or missed
+    // depending on where a person happened to fall in the ordering. It reported
+    // that as "No agent matched", which reads as "this person does not exist"
+    // rather than "I only looked at some of them".
     const words = q.split(/\s+/).filter(Boolean);
-    const roster = await this.get<Agent[]>(`/agents?per_page=100`);
-    return roster.find((a) => {
+    const matches = (a: Agent) => {
       const name = (a.contact?.name ?? "").toLowerCase();
       return words.every((w) => name.includes(w));
-    }) ?? null;
+    };
+    for (let page = 1; page <= 20; page++) {
+      const roster = await this.get<Agent[]>(`/agents?per_page=100&page=${page}`);
+      const hit = roster.find(matches);
+      if (hit) return hit;
+      if (roster.length < 100) return null;   // last page, genuinely no match
+    }
+    throw new Error("Freshdesk agent pagination exceeded 20 pages — refusing to report 'no match' off a partial roster");
   }
 
-  // One page of tickets updated at/after an ISO timestamp, oldest first.
-  listUpdatedTickets(updatedSince: string, page = 1): Promise<TicketSummary[]> {
+  // The configured satisfaction surveys. A Freshdesk account can hold more than
+  // one, and /surveys/satisfaction_ratings does not necessarily cover all of
+  // them — so "no ratings for this agent" is only meaningful once you know
+  // which survey you actually read.
+  listSurveys(): Promise<Survey[]> {
+    return this.get<Survey[]>("/surveys");
+  }
+
+  // ── Satisfaction ratings (CSAT) ─────────────────────────────────────────
+  //
+  // GET /surveys/satisfaction_ratings returns the customer's own verdict on a
+  // handled ticket. This is the ONLY place in this codebase where the customer
+  // grades the answer directly — everything else (QA rubric, similarity, the
+  // reviewer verdict) is us grading ourselves.
+  //
+  // The endpoint has no agent filter, so callers page through and filter on
+  // `agent_id` client-side. `created_since` bounds the scan.
+  //
+  // Shape note: `ratings` is an object keyed by question, e.g.
+  //   { "default_question": 103 }
+  // where Freshdesk's scale is 103 = extremely happy, 102 = very happy,
+  // 101 = happy, 100 = neutral, -101 = unhappy, -102 = very unhappy,
+  // -103 = extremely unhappy. Positive is good, negative is bad, 100 is neutral
+  // — see `csatBand`. Do NOT read the number as a 1-5 score.
+  listSatisfactionRatings(
+    opts: { createdSince?: string; page?: number } = {},
+  ): Promise<SatisfactionRating[]> {
+    const q = new URLSearchParams({ per_page: "100", page: String(opts.page ?? 1) });
+    if (opts.createdSince) q.set("created_since", opts.createdSince);
+    return this.get<SatisfactionRating[]>(`/surveys/satisfaction_ratings?${q}`);
+  }
+
+  // Every rating page, oldest first. Throws rather than returning a partial
+  // scan: "she has no good ratings" must never be an artefact of stopping early.
+  async listAllSatisfactionRatings(
+    opts: { createdSince?: string; maxPages?: number } = {},
+  ): Promise<SatisfactionRating[]> {
+    const maxPages = opts.maxPages ?? 50;
+    const all: SatisfactionRating[] = [];
+    for (let page = 1; page <= maxPages; page++) {
+      const rows = await this.listSatisfactionRatings({ ...opts, page });
+      all.push(...rows);
+      if (rows.length < 100) return all;
+    }
+    throw new Error(`Freshdesk CSAT pagination exceeded the ${maxPages}-page safety limit`);
+  }
+
+  // One page of tickets updated at/after an ISO timestamp.
+  //
+  // ASCENDING BY DEFAULT, and that default is load-bearing: the poller walks
+  // forward from a durable cursor, so oldest-first is what lets it advance
+  // without losing tickets.
+  //
+  // Analysis callers want the opposite. A capped scan with the ascending
+  // default silently returns the OLDEST N tickets in the window — which reads
+  // as "recent activity" and is not. Pass "desc" to take the newest N.
+  listUpdatedTickets(
+    updatedSince: string,
+    page = 1,
+    order: "asc" | "desc" = "asc",
+  ): Promise<TicketSummary[]> {
     const q = new URLSearchParams({
       updated_since: updatedSince,
       order_by: "updated_at",
-      order_type: "asc",
+      order_type: order,
       per_page: "100",
       page: String(page),
     });
