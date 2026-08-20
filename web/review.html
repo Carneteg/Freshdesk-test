@@ -467,6 +467,58 @@
   .wf-step.code .wf-num{background:var(--accent);color:var(--on-solid);border-color:var(--accent)}
   .wf-step.human .wf-num{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-soft)}
 
+  /* ── Future state (demo view) ────────────────────────────────────────────
+     Numbered stages, so the value chain reads as a chain rather than four
+     lists. The banner is not decoration: a future-state picture that does not
+     say so is just a false status report. */
+  .fs-switch{display:inline-flex;gap:0;border:1px solid var(--border);border-radius:6px;
+    overflow:hidden;margin:0 0 14px}
+  .fs-swbtn{font-family:inherit;font-size:11.5px;font-weight:650;padding:6px 14px;
+    border:0;background:var(--surface);color:var(--ink-3);cursor:pointer}
+  .fs-swbtn.on{background:var(--accent);color:var(--on-solid)}
+  .fs-banner{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+    background:var(--accent-soft);border:1px solid var(--accent-edge);border-radius:7px;
+    padding:10px 13px;margin-bottom:16px;font-size:12.2px;line-height:1.55;color:var(--ink-2)}
+  .fs-btag{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+    background:var(--accent);color:var(--on-solid);padding:2px 7px;border-radius:3px;
+    white-space:nowrap}
+  .fs-stage{margin-bottom:20px}
+  .fs-head{display:flex;align-items:center;gap:11px;margin-bottom:5px}
+  .fs-num{flex:0 0 auto;width:26px;height:26px;border-radius:50%;display:flex;
+    align-items:center;justify-content:center;font-size:12.5px;font-weight:700;
+    background:var(--accent);color:var(--on-solid)}
+  .fs-title{font-size:13.5px;font-weight:700;color:var(--ink)}
+  .fs-lede{margin:0 0 11px;padding-left:37px;font-size:12.5px;line-height:1.6;
+    color:var(--ink-3);max-width:78ch}
+  .fs-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:8px;
+    padding-left:37px}
+  .fs-src{border:1px solid var(--border);border-radius:6px;background:var(--surface-2);
+    padding:9px 11px}
+  /* Live sources get the accent edge — in a future-state view the honest signal
+     is which parts are not hypothetical. */
+  .fs-src.on{border-left:3px solid var(--accent)}
+  .fs-srchead{display:flex;align-items:baseline;gap:7px;flex-wrap:wrap;margin-bottom:2px}
+  .fs-icon{flex:0 0 auto;font-size:12px}
+  .fs-srcname{font-size:12.2px;font-weight:650;color:var(--ink)}
+  .fs-now{font-size:8.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+    background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent-edge);
+    padding:1px 5px;border-radius:3px;white-space:nowrap}
+  .fs-from{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);
+    margin-bottom:4px}
+  .fs-brings{margin:0;font-size:11.8px;line-height:1.5;color:var(--ink-2)}
+  .fs-points{margin:0;padding-left:37px;list-style:none}
+  .fs-points li{position:relative;padding:0 0 6px 18px;font-size:12.5px;line-height:1.6;
+    color:var(--ink-2);max-width:80ch}
+  .fs-points li::before{content:"";position:absolute;left:2px;top:8px;width:6px;height:6px;
+    border-radius:50%;background:var(--accent-edge)}
+  .fs-loop{display:flex;align-items:center;gap:11px;padding:11px 14px;margin-bottom:14px;
+    border:1px dashed var(--accent-edge);border-radius:7px;background:var(--accent-soft);
+    font-size:12.3px;line-height:1.55;color:var(--ink-2)}
+  .fs-looparrow{flex:0 0 auto;font-size:19px;color:var(--accent);line-height:1}
+  @media (max-width:700px){
+    .fs-lede,.fs-grid,.fs-points{padding-left:0}
+  }
+
   /* Where the data comes from. Status is the only coloured thing, because the
      panel exists to separate "connected" from "built but dark". */
   .ds-phase{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
@@ -835,7 +887,7 @@ var SB_URL = "https://pqwnpcibymtmcpnqlkle.supabase.co";
 var SB_ANON = "sb_publishable_EfplAQ5QfMOuu1Y5PWPf6g_psU9lNGA";
 var TOKEN_KEY = "coach_review_token";
 // Bump on each deploy so we can tell from the page which build is loaded (cache check).
-var APP_VERSION = "v2026-08-18c-data-sources";
+var APP_VERSION = "v2026-08-18d-future-state";
 
 var app = document.getElementById("app");
 var esc = function (s) { return (s == null ? "" : String(s)); };
@@ -4322,13 +4374,181 @@ function srcMetric(key) {
   return m || null;
 }
 
+// ── Future state: everything connected ─────────────────────────────────────
+//
+// A DEMO view, and labelled as one. It shows the value chain end to end —
+// fetch, decide, document, learn — as it would run with every source switched
+// on, which is the thing that is hard to picture from a status list.
+//
+// It REPLACES the honest current-state panel rather than mixing with it, the
+// same rule the Coaching tab already follows: a blended view produces figures
+// that are neither today nor tomorrow. The toggle keeps both one click apart,
+// so nobody has to take the future state on trust — "Today" is right there.
+var FUTURE_FETCH = [
+  { icon: "🎫", name: "Ticket & thread", from: "Freshdesk",
+    brings: "Every question asked, the full history, attachments, language.", live: true },
+  { icon: "📚", name: "Customer help centre", from: "Freshdesk KB",
+    brings: "What is already documented — with the link in customer-facing form.", live: true },
+  { icon: "📓", name: "Known-incident playbook", from: "Curated by the team",
+    brings: "Live incidents and the fixes that were never written down.", live: true },
+  { icon: "🗂️", name: "Past-ticket precedent", from: "Semantic index",
+    brings: "How this exact case was solved last time, and by whom.", live: true },
+  { icon: "🐛", name: "Known bugs & fix status", from: "Jira",
+    brings: "Is it a known defect, is a fix on the way, which release." },
+  { icon: "📗", name: "Internal engineering knowledge", from: "Confluence",
+    brings: "The deeper technical answer behind a symptom — agent-facing only." },
+  { icon: "💳", name: "Entitlements & renewal", from: "Freshworks CRM",
+    brings: "What the account actually pays for, and when it renews." },
+  { icon: "❤️", name: "Account health & CSM", from: "Planhat",
+    brings: "Risk, owner, and whether this ticket is the third strike." },
+  { icon: "💡", name: "Product demand", from: "Linear",
+    brings: "Whether others asked for the same thing, and how many." },
+  { icon: "⭐", name: "Customer verdict", from: "CSAT",
+    brings: "What customers thought of how it was handled." },
+  { icon: "🏅", name: "What good looks like", from: "Reviewer gold answers",
+    brings: "Real replies the team stood behind, on this kind of ticket." },
+];
+
+var FUTURE_STAGES = [
+  {
+    n: "2", key: "decide", title: "Decide — the agent's first minute",
+    lede: "One screen instead of six tabs. The agent opens the ticket and the answer to " +
+      "\u201Cwhat do I need to know before I reply\u201D is already assembled.",
+    points: [
+      "One status — send-ready, review first, or act before replying — computed in code, not claimed by the model.",
+      "A grounded draft, or an explicit abstain when nothing supports one.",
+      "Watch-outs surfaced ABOVE the reply: amber account, third open ticket, brief the CSM first.",
+      "Routing decided: legal to Expert, commercial to sales, defect to the Jira issue that already exists.",
+      "A known bug answered in the FIRST reply instead of \u201CI will check with the team\u201D.",
+    ],
+  },
+  {
+    n: "3", key: "document", title: "Document — knowledge that outlives the ticket",
+    lede: "The Gate 1 review found the real gap was never the model — it was operational " +
+      "knowledge nobody wrote down. This is the step that fixes that, and it is the one " +
+      "that compounds.",
+    points: [
+      "The coach flags when an answer would generalise, and drafts the article on request.",
+      "Articles are only ever generalised from a resolution a HUMAN stood behind — a gold answer or the reply actually sent.",
+      "Scribe captures the click-path for a fix that exists nowhere in writing.",
+      "Every unanswered question is logged, so the missing pages have names and a ranking.",
+      "A reviewer approves before anything becomes knowledge. The AI proposes; it never decides.",
+    ],
+  },
+  {
+    n: "4", key: "learn", title: "Learn — the AI journey",
+    lede: "Each judged ticket makes the next draft better, and the measurement is the same " +
+      "one every time so improvement is visible rather than asserted.",
+    points: [
+      "\u201CWould I have sent this?\u201D plus the ideal answer where the coach was wrong.",
+      "Those answers feed the next draft as style and approach exemplars — never as facts to copy.",
+      "A locked holdout set keeps the evaluation honest: training data can never leak into the test.",
+      "Newly written articles become retrievable, so the next similar ticket is grounded rather than abstained.",
+      "The loop closes: fewer knowledge gaps -> more grounded drafts -> a higher share the agent would have sent.",
+    ],
+  },
+];
+
+function futureStateEl() {
+  var wrap = el("div", "fs");
+
+  var banner = el("div", "fs-banner");
+  banner.appendChild(set(el("span", "fs-btag"), "Future state"));
+  banner.appendChild(set(el("span", ""),
+    "Everything connected. This is the target picture, not today \u2014 four of the eleven " +
+    "sources are live now. Switch to Today for the real status."));
+  wrap.appendChild(banner);
+
+  // ── 1. Fetch ──
+  var f = el("div", "fs-stage");
+  var fh = el("div", "fs-head");
+  fh.appendChild(set(el("span", "fs-num"), "1"));
+  fh.appendChild(set(el("span", "fs-title"), "Fetch — eleven sources, gathered before the agent looks"));
+  f.appendChild(fh);
+  f.appendChild(set(el("p", "fs-lede"),
+    "Each one is a lookup an agent does by hand today, in a different tab, on every ticket."));
+  var grid = el("div", "fs-grid");
+  FUTURE_FETCH.forEach(function (d) {
+    var c = el("div", "fs-src" + (d.live ? " on" : ""));
+    var h = el("div", "fs-srchead");
+    h.appendChild(set(el("span", "fs-icon"), d.icon));
+    h.appendChild(set(el("span", "fs-srcname"), d.name));
+    if (d.live) h.appendChild(set(el("span", "fs-now"), "live today"));
+    c.appendChild(h);
+    c.appendChild(set(el("div", "fs-from"), d.from));
+    c.appendChild(set(el("p", "fs-brings"), d.brings));
+    grid.appendChild(c);
+  });
+  f.appendChild(grid);
+  wrap.appendChild(f);
+
+  // ── 2-4. Decide, document, learn ──
+  FUTURE_STAGES.forEach(function (st) {
+    var box = el("div", "fs-stage " + st.key);
+    var h = el("div", "fs-head");
+    h.appendChild(set(el("span", "fs-num"), st.n));
+    h.appendChild(set(el("span", "fs-title"), st.title));
+    box.appendChild(h);
+    box.appendChild(set(el("p", "fs-lede"), st.lede));
+    var ul = el("ul", "fs-points");
+    st.points.forEach(function (t) {
+      var li = document.createElement("li");
+      li.appendChild(document.createTextNode(t));
+      ul.appendChild(li);
+    });
+    box.appendChild(ul);
+    wrap.appendChild(box);
+  });
+
+  // The loop back to step 1 — without it this reads as a pipeline that ends,
+  // and the whole argument is that it does not.
+  var loop = el("div", "fs-loop");
+  loop.appendChild(set(el("span", "fs-looparrow"), "\u21BA"));
+  loop.appendChild(set(el("span", ""),
+    "Every approved article and gold answer goes back into step 1. The knowledge base " +
+    "the coach searches next month is the one this month's tickets wrote."));
+  wrap.appendChild(loop);
+
+  wrap.appendChild(set(el("p", "wf-foot"),
+    "What would have to move, and is already measured on coached tickets: customers came " +
+    "back after the first reply on 51%, 2 agent replies per ticket, 37% of first replies " +
+    "over an hour. Time saved is not measured yet \u2014 no figure here claims it."));
+  return wrap;
+}
+
+// Demo-first: the future state is what this panel opens on, because that is the
+// picture people need. "Today" is one click away and never more than one click
+// away — a demo that cannot show its own real status is a sales slide.
+var sourcesView = "future";
+
 function sourcesEl() {
   var box = el("details", "wf ds");
+  box.open = true;
   var sum = document.createElement("summary");
   sum.appendChild(document.createTextNode("🔌 Where the data comes from"));
   sum.appendChild(set(el("span", "wf-sub"),
-    "what each source answers · what it saves you · what is actually switched on"));
+    "what we fetch · how it speeds up the decision · how it becomes knowledge"));
   box.appendChild(sum);
+
+  var sw = el("div", "fs-switch");
+  [["future", "Future state"], ["today", "Today"]].forEach(function (o) {
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = "fs-swbtn" + (sourcesView === o[0] ? " on" : "");
+    b.textContent = o[1];
+    b.onclick = function (e) {
+      e.preventDefault();
+      sourcesView = o[0];
+      if (tab === "note") renderAgentNotes();
+    };
+    sw.appendChild(b);
+  });
+  box.appendChild(sw);
+
+  if (sourcesView === "future") {
+    box.appendChild(futureStateEl());
+    return box;
+  }
 
   box.appendChild(set(el("p", "wf-lede"),
     "The coach is only as good as what it can look up. Every source below is a " +
